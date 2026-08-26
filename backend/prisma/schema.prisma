@@ -1,0 +1,42 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+model Patient {
+  id           String        @id @default(uuid())
+  phoneNumber  String        @unique
+  fullName     String?
+  fileNumber   String?       @unique
+  isVerified   Boolean       @default(false)
+  chatStatus   String        @default("BOT") // "BOT", "PENDING_AGENT", "AGENT_ACTIVE"
+  assignedTo   String?       // Doctor or Agent name/ID
+  createdAt    DateTime      @default(now())
+  appointments Appointment[]
+  messages     MessageLog[]
+
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  doctorName  String
+  specialty   String
+  slotTime    DateTime
+  status      String   @default("CONFIRMED")
+  createdAt   DateTime @default(now())
+}
+
+model MessageLog {
+  id        String   @id @default(uuid())
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id])
+  sender    String   
+  body      String
+  timestamp DateTime @default(now())
+}
