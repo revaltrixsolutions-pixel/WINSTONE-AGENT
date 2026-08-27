@@ -35,18 +35,21 @@ if (Number.isNaN(PORT) || PORT <= 0) {
 
 /* =========================================================
    CORS CONFIGURATION
-   =========================================================
-   
-   Production frontend:
-   https://phadam-whats-app.vercel.app
-
-   Production backend:
-   https://phadamwhatsapp.onrender.com
-
-   Render environment variables can also provide:
-   FRONTEND_URL
-   FRONTEND_URLS
    ========================================================= */
+
+/**
+ * Production frontend:
+ * https://phadam-whats-app.vercel.app
+ *
+ * Production backend:
+ * https://phadamwhatsapp.onrender.com
+ *
+ * Render environment variables supported:
+ *
+ * FRONTEND_URL=https://phadam-whats-app.vercel.app
+ *
+ * FRONTEND_URLS=https://example1.com,https://example2.com
+ */
 
 const defaultAllowedOrigins = [
   'http://localhost:5173',
@@ -59,37 +62,45 @@ const environmentOrigins = [
   ...(process.env.FRONTEND_URLS?.split(',') ?? []),
 ];
 
+const normalizeOrigin = (origin: string): string =>
+  origin.trim().replace(/\/+$/, '');
+
 const allowedOrigins = [
   ...defaultAllowedOrigins,
   ...environmentOrigins,
 ]
-  .map((origin) => origin?.trim().replace(/\/$/, ''))
-  .filter((origin): origin is string => Boolean(origin));
+  .filter((origin): origin is string => Boolean(origin))
+  .map(normalizeOrigin)
+  .filter(
+    (origin, index, origins) =>
+      origins.indexOf(origin) === index,
+  );
 
 console.info('[CORS] Allowed origins:', allowedOrigins);
 
 const corsOptions: CorsOptions = {
   origin(origin, callback) {
     /*
-     * Server-to-server requests do not normally contain
-     * an Origin header.
+     * Requests without Origin include:
      *
-     * This includes:
      * - Meta WhatsApp webhooks
      * - cURL
-     * - Render health checks
      * - Postman
+     * - Render health checks
+     * - Server-to-server requests
      */
     if (!origin) {
-      callback(null, true);
-      return;
+      return callback(null, true);
     }
 
-    const normalizedOrigin = origin.trim().replace(/\/$/, '');
+    const normalizedOrigin = normalizeOrigin(origin);
 
     if (allowedOrigins.includes(normalizedOrigin)) {
-      callback(null, true);
-      return;
+      console.info('[CORS Allowed]', {
+        origin: normalizedOrigin,
+      });
+
+      return callback(null, true);
     }
 
     console.warn('[CORS Blocked]', {
@@ -98,11 +109,14 @@ const corsOptions: CorsOptions = {
     });
 
     /*
-     * Do not throw an error here.
-     * Returning false prevents the CORS middleware from
-     * adding the Access-Control-Allow-Origin header.
+     * Return an error so the application does not silently
+     * allow an unknown browser origin.
      */
-    callback(null, false);
+    return callback(
+      new Error(
+        `Origin "${normalizedOrigin}" is not allowed by CORS.`,
+      ),
+    );
   },
 
   credentials: true,
@@ -131,10 +145,13 @@ const corsOptions: CorsOptions = {
   optionsSuccessStatus: 204,
 };
 
+/*
+ * CORS middleware must be registered before the routes.
+ */
 app.use(cors(corsOptions));
 
 /*
- * Explicitly handle browser preflight requests.
+ * Explicit OPTIONS/preflight handling.
  */
 app.options('*', cors(corsOptions));
 
@@ -157,6 +174,7 @@ app.use((req, _res, next) => {
     method: req.method,
     path: req.path,
     origin: req.headers.origin || 'none',
+    userAgent: req.headers['user-agent'] || 'unknown',
   });
 
   next();
@@ -167,13 +185,13 @@ app.use((req, _res, next) => {
    ========================================================= */
 
 /*
- * Meta WhatsApp webhook
+ * WhatsApp / Meta webhook
  *
  * GET:
  * Meta webhook verification
  *
  * POST:
- * Incoming WhatsApp messages/status updates
+ * Incoming WhatsApp messages and status updates
  */
 app.use('/webhook', webhookRouter);
 
@@ -183,9 +201,7 @@ app.use('/webhook', webhookRouter);
 app.use('/api/v1', publicApiRouter);
 
 /*
- * Agent dashboard
- *
- * Examples:
+ * Agent dashboard API
  *
  * GET  /api/agent/chats
  * POST /api/agent/assign
@@ -202,7 +218,8 @@ app.get('/', (_req, res) => {
     success: true,
     service: APP_NAME,
     status: 'running',
-    environment: process.env.NODE_ENV || 'development',
+    environment:
+      process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString(),
   });
 });
@@ -225,7 +242,9 @@ app.get('/health', async (_req, res) => {
   } catch (error) {
     console.error(
       '[Health Check Error]',
-      error instanceof Error ? error.message : error,
+      error instanceof Error
+        ? error.message
+        : error,
     );
 
     return res.status(503).json({
@@ -233,16 +252,21 @@ app.get('/health', async (_req, res) => {
       service: APP_NAME,
       status: 'unhealthy',
       database: 'unavailable',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
 /* =========================================================
    DAILY APPOINTMENT REMINDERS
-   =========================================================
-   
-   Runs every day at 8:00 AM Nairobi time.
    ========================================================= */
+
+/**
+ * Runs every day at 8:00 AM Nairobi time.
+ *
+ * Cron:
+ * 0 8 * * *
+ */
 
 cron.schedule(
   '0 8 * * *',
@@ -260,9 +284,16 @@ cron.schedule(
 
       startOfTomorrow.setHours(0, 0, 0, 0);
 
-      const endOfTomorrow = new Date(startOfTomorrow);
+      const endOfTomorrow = new Date(
+        startOfTomorrow,
+      );
 
-      endOfTomorrow.setHours(23, 59, 59, 999);
+      endOfTomorrow.setHours(
+        23,
+        59,
+        59,
+        999,
+      );
 
       const appointments =
         await prisma.appointment.findMany({
@@ -273,6 +304,7 @@ cron.schedule(
             },
             status: 'CONFIRMED',
           },
+
           include: {
             patient: true,
           },
@@ -345,22 +377,32 @@ cron.schedule(
               appointmentId: appointment.id,
               patientId: appointment.patientId,
               recipientPhone: patientPhone,
-              messageId: whatsappResult.messageId,
-              simulated: whatsappResult.simulated,
+              messageId:
+                whatsappResult.messageId,
+              simulated:
+                whatsappResult.simulated,
             },
           );
         } catch (error) {
-          if (error instanceof WhatsAppApiError) {
+          if (
+            error instanceof WhatsAppApiError
+          ) {
             console.error(
               '[Cron Job] WhatsApp reminder rejected.',
               {
-                appointmentId: appointment.id,
-                patientId: appointment.patientId,
-                recipientPhone: patientPhone,
+                appointmentId:
+                  appointment.id,
+                patientId:
+                  appointment.patientId,
+                recipientPhone:
+                  patientPhone,
                 status: error.status,
-                metaCode: error.metaCode,
-                metaDetails: error.metaDetails,
-                fbTraceId: error.fbTraceId,
+                metaCode:
+                  error.metaCode,
+                metaDetails:
+                  error.metaDetails,
+                fbTraceId:
+                  error.fbTraceId,
                 error: error.message,
               },
             );
@@ -368,9 +410,12 @@ cron.schedule(
             console.error(
               '[Cron Job] Failed to send appointment reminder.',
               {
-                appointmentId: appointment.id,
-                patientId: appointment.patientId,
-                recipientPhone: patientPhone,
+                appointmentId:
+                  appointment.id,
+                patientId:
+                  appointment.patientId,
+                recipientPhone:
+                  patientPhone,
                 error:
                   error instanceof Error
                     ? error.message
@@ -388,7 +433,8 @@ cron.schedule(
       console.error(
         '[Cron Job] Failed to query or process appointment reminders.',
         error instanceof Error
-          ? error.stack || error.message
+          ? error.stack ||
+            error.message
           : error,
       );
     }
@@ -445,12 +491,15 @@ app.use(
     }
 
     /*
-     * CORS-related error
+     * CORS error
      */
     if (
       error.message
         .toLowerCase()
-        .includes('cors')
+        .includes('cors') ||
+      error.message
+        .toLowerCase()
+        .includes('origin')
     ) {
       return res.status(403).json({
         success: false,
@@ -458,6 +507,9 @@ app.use(
       });
     }
 
+    /*
+     * General server error
+     */
     return res.status(500).json({
       success: false,
       error: 'Internal server error.',
@@ -469,25 +521,44 @@ app.use(
    START SERVER
    ========================================================= */
 
-const server = app.listen(PORT, () => {
-  console.info('========================================');
-  console.info(`🚀 ${APP_NAME} is running.`);
-  console.info(`📍 Port: ${PORT}`);
-  console.info(
-    `🌍 Environment: ${
-      process.env.NODE_ENV || 'development'
-    }`,
-  );
-  console.info(
-    `🕗 Reminder Cron Timezone: ${CRON_TIMEZONE}`,
-  );
-  console.info(
-    `🌐 Frontend origins configured: ${allowedOrigins.join(
-      ', ',
-    )}`,
-  );
-  console.info('========================================');
-});
+const server = app.listen(
+  PORT,
+  '0.0.0.0',
+  () => {
+    console.info(
+      '========================================',
+    );
+
+    console.info(
+      `🚀 ${APP_NAME} is running.`,
+    );
+
+    console.info(
+      `📍 Port: ${PORT}`,
+    );
+
+    console.info(
+      `🌍 Environment: ${
+        process.env.NODE_ENV ||
+        'development'
+      }`,
+    );
+
+    console.info(
+      `🕗 Reminder Cron Timezone: ${CRON_TIMEZONE}`,
+    );
+
+    console.info(
+      `🌐 Frontend origins configured: ${allowedOrigins.join(
+        ', ',
+      )}`,
+    );
+
+    console.info(
+      '========================================',
+    );
+  },
+);
 
 /* =========================================================
    GRACEFUL SHUTDOWN
