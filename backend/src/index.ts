@@ -23,59 +23,98 @@ const PORT = Number(process.env.PORT || 5000);
 const APP_NAME = 'Phadam Medical Automation Engine';
 const CRON_TIMEZONE = 'Africa/Nairobi';
 
+/* =========================================================
+   STARTUP VALIDATION
+   ========================================================= */
+
 if (Number.isNaN(PORT) || PORT <= 0) {
   throw new Error(
     `[Startup Error]: Invalid PORT value "${process.env.PORT}".`,
   );
 }
 
-/**
- * Allowed frontend origins.
- *
- * Example .env:
- *
- * FRONTEND_URL=https://app.phadamhospital.co.ke
- *
- * For multiple frontend URLs:
- *
- * FRONTEND_URLS=https://app.phadamhospital.co.ke,https://admin.phadamhospital.co.ke
- */
-const allowedOrigins = [
+/* =========================================================
+   CORS CONFIGURATION
+   =========================================================
+   
+   Production frontend:
+   https://phadam-whats-app.vercel.app
+
+   Production backend:
+   https://phadamwhatsapp.onrender.com
+
+   Render environment variables can also provide:
+   FRONTEND_URL
+   FRONTEND_URLS
+   ========================================================= */
+
+const defaultAllowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'https://phadam-whats-app.vercel.app',
+];
+
+const environmentOrigins = [
   process.env.FRONTEND_URL,
   ...(process.env.FRONTEND_URLS?.split(',') ?? []),
+];
+
+const allowedOrigins = [
+  ...defaultAllowedOrigins,
+  ...environmentOrigins,
 ]
-  .map((origin) => origin?.trim())
+  .map((origin) => origin?.trim().replace(/\/$/, ''))
   .filter((origin): origin is string => Boolean(origin));
+
+console.info('[CORS] Allowed origins:', allowedOrigins);
 
 const corsOptions: CorsOptions = {
   origin(origin, callback) {
     /*
-     * Requests without Origin are commonly server-to-server requests,
-     * cURL requests, uptime checks, Meta webhook callbacks, and Postman.
+     * Server-to-server requests do not normally contain
+     * an Origin header.
+     *
+     * This includes:
+     * - Meta WhatsApp webhooks
+     * - cURL
+     * - Render health checks
+     * - Postman
      */
     if (!origin) {
       callback(null, true);
       return;
     }
 
-    if (allowedOrigins.includes(origin)) {
+    const normalizedOrigin = origin.trim().replace(/\/$/, '');
+
+    if (allowedOrigins.includes(normalizedOrigin)) {
       callback(null, true);
       return;
     }
 
     console.warn('[CORS Blocked]', {
-      origin,
+      origin: normalizedOrigin,
       allowedOrigins,
     });
 
-    callback(new Error(`Origin "${origin}" is not allowed by CORS.`));
+    /*
+     * Do not throw an error here.
+     * Returning false prevents the CORS middleware from
+     * adding the Access-Control-Allow-Origin header.
+     */
+    callback(null, false);
   },
 
   credentials: true,
 
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  methods: [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+  ],
 
   allowedHeaders: [
     'Content-Type',
@@ -83,45 +122,81 @@ const corsOptions: CorsOptions = {
     'x-api-key',
     'x-hub-signature-256',
   ],
+
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Type',
+  ],
+
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
 
-/**
- * Meta WhatsApp webhook requests are normal JSON payloads in the
- * current controller implementation.
- *
- * Keep express.json() before the routes only if your webhook controller
- * does not validate Meta's x-hub-signature-256 against the raw request body.
- *
- * If you later add raw Meta webhook signature validation, mount the
- * webhook router BEFORE express.json() and use express.raw() only on
- * the POST webhook route.
+/*
+ * Explicitly handle browser preflight requests.
  */
-app.use(express.json({ limit: '1mb' }));
+app.options('*', cors(corsOptions));
 
-/**
- * Application routes
+/* =========================================================
+   BODY PARSER
+   ========================================================= */
+
+app.use(
+  express.json({
+    limit: '1mb',
+  }),
+);
+
+/* =========================================================
+   REQUEST LOGGING
+   ========================================================= */
+
+app.use((req, _res, next) => {
+  console.info('[HTTP Request]', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin || 'none',
+  });
+
+  next();
+});
+
+/* =========================================================
+   ROUTES
+   ========================================================= */
+
+/*
+ * Meta WhatsApp webhook
  *
- * Meta callback endpoint:
- * GET/POST https://your-domain.com/webhook
+ * GET:
+ * Meta webhook verification
  *
- * Public notification endpoint:
- * POST https://your-domain.com/api/v1/send-notification
- *
- * Agent dashboard endpoints:
- * GET/POST https://your-domain.com/api/agent/...
+ * POST:
+ * Incoming WhatsApp messages/status updates
  */
 app.use('/webhook', webhookRouter);
+
+/*
+ * Public API
+ */
 app.use('/api/v1', publicApiRouter);
+
+/*
+ * Agent dashboard
+ *
+ * Examples:
+ *
+ * GET  /api/agent/chats
+ * POST /api/agent/assign
+ * POST /api/agent/reply
+ */
 app.use('/api/agent', agentRouter);
 
-/**
- * Basic health-check endpoint.
- *
- * Use this for load balancers, deployment health checks,
- * UptimeRobot, Render, Railway, Fly.io, or reverse proxies.
- */
+/* =========================================================
+   ROOT HEALTH CHECK
+   ========================================================= */
+
 app.get('/', (_req, res) => {
   return res.status(200).json({
     success: true,
@@ -131,6 +206,10 @@ app.get('/', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+/* =========================================================
+   DATABASE HEALTH CHECK
+   ========================================================= */
 
 app.get('/health', async (_req, res) => {
   try {
@@ -158,15 +237,13 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-/**
- * Daily appointment reminders.
- *
- * Schedule:
- * 0 8 * * *
- *
- * Meaning:
- * 8:00 AM every day in Africa/Nairobi timezone.
- */
+/* =========================================================
+   DAILY APPOINTMENT REMINDERS
+   =========================================================
+   
+   Runs every day at 8:00 AM Nairobi time.
+   ========================================================= */
+
 cron.schedule(
   '0 8 * * *',
   async () => {
@@ -177,32 +254,37 @@ cron.schedule(
     try {
       const startOfTomorrow = new Date();
 
-      startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+      startOfTomorrow.setDate(
+        startOfTomorrow.getDate() + 1,
+      );
+
       startOfTomorrow.setHours(0, 0, 0, 0);
 
       const endOfTomorrow = new Date(startOfTomorrow);
 
       endOfTomorrow.setHours(23, 59, 59, 999);
 
-      const appointments = await prisma.appointment.findMany({
-        where: {
-          slotTime: {
-            gte: startOfTomorrow,
-            lte: endOfTomorrow,
+      const appointments =
+        await prisma.appointment.findMany({
+          where: {
+            slotTime: {
+              gte: startOfTomorrow,
+              lte: endOfTomorrow,
+            },
+            status: 'CONFIRMED',
           },
-          status: 'CONFIRMED',
-        },
-        include: {
-          patient: true,
-        },
-      });
+          include: {
+            patient: true,
+          },
+        });
 
       console.info(
         `[Cron Job] Found ${appointments.length} confirmed appointment(s) scheduled for tomorrow.`,
       );
 
       for (const appointment of appointments) {
-        const patientPhone = appointment.patient?.phoneNumber?.trim();
+        const patientPhone =
+          appointment.patient?.phoneNumber?.trim();
 
         if (!patientPhone) {
           console.warn(
@@ -216,31 +298,33 @@ cron.schedule(
           continue;
         }
 
-        const appointmentDate = appointment.slotTime.toLocaleDateString(
-          'en-KE',
-          {
-            timeZone: CRON_TIMEZONE,
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          },
-        );
+        const appointmentDate =
+          appointment.slotTime.toLocaleDateString(
+            'en-KE',
+            {
+              timeZone: CRON_TIMEZONE,
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            },
+          );
 
-        const appointmentTime = appointment.slotTime.toLocaleTimeString(
-          'en-KE',
-          {
-            timeZone: CRON_TIMEZONE,
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          },
-        );
+        const appointmentTime =
+          appointment.slotTime.toLocaleTimeString(
+            'en-KE',
+            {
+              timeZone: CRON_TIMEZONE,
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            },
+          );
 
         const reminderMessage = [
           '🏥 *Phadam Hospital Appointment Reminder*',
           '',
-          `You have an upcoming appointment tomorrow.`,
+          'You have an upcoming appointment tomorrow.',
           `Specialty: ${appointment.specialty}`,
           `Date: ${appointmentDate}`,
           `Time: ${appointmentTime}`,
@@ -249,61 +333,63 @@ cron.schedule(
         ].join('\n');
 
         try {
-          /*
-           * Updated WhatsApp service signature.
-           *
-           * Old:
-           * sendWhatsAppMessage(patientPhone, reminderMessage)
-           *
-           * New:
-           * sendWhatsAppMessage({
-           *   recipientPhone: patientPhone,
-           *   messageText: reminderMessage,
-           * })
-           */
-          const whatsappResult = await sendWhatsAppMessage({
-            recipientPhone: patientPhone,
-            messageText: reminderMessage,
-          });
+          const whatsappResult =
+            await sendWhatsAppMessage({
+              recipientPhone: patientPhone,
+              messageText: reminderMessage,
+            });
 
-          console.info('[Cron Job] Reminder accepted by WhatsApp.', {
-            appointmentId: appointment.id,
-            patientId: appointment.patientId,
-            recipientPhone: patientPhone,
-            messageId: whatsappResult.messageId,
-            simulated: whatsappResult.simulated,
-          });
+          console.info(
+            '[Cron Job] Reminder accepted by WhatsApp.',
+            {
+              appointmentId: appointment.id,
+              patientId: appointment.patientId,
+              recipientPhone: patientPhone,
+              messageId: whatsappResult.messageId,
+              simulated: whatsappResult.simulated,
+            },
+          );
         } catch (error) {
           if (error instanceof WhatsAppApiError) {
-            console.error('[Cron Job] WhatsApp reminder rejected.', {
-              appointmentId: appointment.id,
-              patientId: appointment.patientId,
-              recipientPhone: patientPhone,
-              status: error.status,
-              metaCode: error.metaCode,
-              metaDetails: error.metaDetails,
-              fbTraceId: error.fbTraceId,
-              error: error.message,
-            });
+            console.error(
+              '[Cron Job] WhatsApp reminder rejected.',
+              {
+                appointmentId: appointment.id,
+                patientId: appointment.patientId,
+                recipientPhone: patientPhone,
+                status: error.status,
+                metaCode: error.metaCode,
+                metaDetails: error.metaDetails,
+                fbTraceId: error.fbTraceId,
+                error: error.message,
+              },
+            );
           } else {
-            console.error('[Cron Job] Failed to send appointment reminder.', {
-              appointmentId: appointment.id,
-              patientId: appointment.patientId,
-              recipientPhone: patientPhone,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : 'Unknown error',
-            });
+            console.error(
+              '[Cron Job] Failed to send appointment reminder.',
+              {
+                appointmentId: appointment.id,
+                patientId: appointment.patientId,
+                recipientPhone: patientPhone,
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : 'Unknown error',
+              },
+            );
           }
         }
       }
 
-      console.info('[Cron Job] Appointment reminder check completed.');
+      console.info(
+        '[Cron Job] Appointment reminder check completed.',
+      );
     } catch (error) {
       console.error(
         '[Cron Job] Failed to query or process appointment reminders.',
-        error instanceof Error ? error.stack || error.message : error,
+        error instanceof Error
+          ? error.stack || error.message
+          : error,
       );
     }
   },
@@ -312,14 +398,27 @@ cron.schedule(
   },
 );
 
-/**
- * Central Express error handler.
- *
- * This catches, among other things:
- * - Invalid JSON bodies
- * - CORS rejection errors
- * - Unexpected route errors passed through next(error)
- */
+/* =========================================================
+   404 HANDLER
+   ========================================================= */
+
+app.use((req, res) => {
+  console.warn('[404 Not Found]', {
+    method: req.method,
+    path: req.path,
+  });
+
+  return res.status(404).json({
+    success: false,
+    error: 'Route not found.',
+    path: req.path,
+  });
+});
+
+/* =========================================================
+   CENTRAL ERROR HANDLER
+   ========================================================= */
+
 app.use(
   (
     error: Error,
@@ -327,16 +426,32 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
-    console.error('[Express Error Handler]', error.message);
+    console.error(
+      '[Express Error Handler]',
+      error.message,
+    );
 
-    if (error instanceof SyntaxError && 'body' in error) {
+    /*
+     * Invalid JSON
+     */
+    if (
+      error instanceof SyntaxError &&
+      'body' in error
+    ) {
       return res.status(400).json({
         success: false,
         error: 'Invalid JSON request body.',
       });
     }
 
-    if (error.message.includes('not allowed by CORS')) {
+    /*
+     * CORS-related error
+     */
+    if (
+      error.message
+        .toLowerCase()
+        .includes('cors')
+    ) {
       return res.status(403).json({
         success: false,
         error: 'Request origin is not allowed.',
@@ -350,37 +465,60 @@ app.use(
   },
 );
 
+/* =========================================================
+   START SERVER
+   ========================================================= */
+
 const server = app.listen(PORT, () => {
   console.info('========================================');
   console.info(`🚀 ${APP_NAME} is running.`);
   console.info(`📍 Port: ${PORT}`);
-  console.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.info(`🕗 Reminder Cron Timezone: ${CRON_TIMEZONE}`);
+  console.info(
+    `🌍 Environment: ${
+      process.env.NODE_ENV || 'development'
+    }`,
+  );
+  console.info(
+    `🕗 Reminder Cron Timezone: ${CRON_TIMEZONE}`,
+  );
+  console.info(
+    `🌐 Frontend origins configured: ${allowedOrigins.join(
+      ', ',
+    )}`,
+  );
   console.info('========================================');
 });
 
-/**
- * Graceful shutdown.
- *
- * Stops Express from accepting new connections and disconnects Prisma
- * cleanly when the host, Docker container, PM2, Render, Railway, etc.
- * sends a termination signal.
- */
-async function shutdown(signal: string): Promise<void> {
-  console.info(`[Shutdown] ${signal} received. Closing server...`);
+/* =========================================================
+   GRACEFUL SHUTDOWN
+   ========================================================= */
+
+async function shutdown(
+  signal: string,
+): Promise<void> {
+  console.info(
+    `[Shutdown] ${signal} received. Closing server...`,
+  );
 
   server.close(async () => {
     try {
       await prisma.$disconnect();
 
-      console.info('[Shutdown] Prisma disconnected.');
-      console.info('[Shutdown] Server stopped successfully.');
+      console.info(
+        '[Shutdown] Prisma disconnected.',
+      );
+
+      console.info(
+        '[Shutdown] Server stopped successfully.',
+      );
 
       process.exit(0);
     } catch (error) {
       console.error(
         '[Shutdown] Failed to disconnect Prisma cleanly.',
-        error instanceof Error ? error.message : error,
+        error instanceof Error
+          ? error.message
+          : error,
       );
 
       process.exit(1);
