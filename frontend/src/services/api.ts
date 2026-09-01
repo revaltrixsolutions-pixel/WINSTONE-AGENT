@@ -4,14 +4,47 @@ import type { Chat, Message } from '../types/dashboard';
 
 export type { Chat, Message };
 
-// Backward-compatible alias for any existing imports
+// Backward-compatible alias for older imports.
 export type AgentChat = Chat;
+
+/* ==========================================================================
+   RESPONSE TYPES
+   ========================================================================== */
 
 export type ApiErrorPayload = {
   success?: boolean;
   error?: string;
   message?: string;
+  details?: string;
+  metaCode?: number | null;
+  metaDetails?: string | null;
   [key: string]: unknown;
+};
+
+export type AgentChatsResponse = {
+  success: boolean;
+  chats?: Chat[];
+  error?: string;
+  message?: string;
+};
+
+export type AssignChatResponse = {
+  success: boolean;
+  message?: string;
+  patient?: Chat;
+  error?: string;
+};
+
+export type SendAgentReplyResponse = {
+  success: boolean;
+  simulated?: boolean;
+  metaMessageId?: string;
+  message?: Message;
+  patient?: Chat;
+  error?: string;
+  details?: string;
+  metaCode?: number | null;
+  metaDetails?: string | null;
 };
 
 export type Appointment = {
@@ -29,26 +62,39 @@ export type Appointment = {
 type AppointmentResponse =
   | Appointment[]
   | {
+      success?: boolean;
       appointments?: Appointment[];
       data?: Appointment[];
+      error?: string;
+      message?: string;
     };
+
+/* ==========================================================================
+   REQUEST TYPES
+   ========================================================================== */
 
 export interface RequestOptions extends Omit<RequestInit, 'signal'> {
   signal?: AbortSignal | null;
   timeoutMs?: number;
 }
 
+/* ==========================================================================
+   CONFIGURATION
+   ========================================================================== */
+
 const API_BASE_URL = (
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
   'http://localhost:5000'
 ).replace(/\/$/, '');
 
-const API_KEY = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_PUBLIC_API_KEY : '';
-
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/* ==========================================================================
+   ERROR CLASS
+   ========================================================================== */
+
 /**
- * Production API Request Error carrying HTTP status and typed payload.
+ * API request error that contains the HTTP status and parsed backend payload.
  */
 export class ApiError extends Error {
   public readonly status: number;
@@ -59,9 +105,10 @@ export class ApiError extends Error {
     message: string,
     status: number,
     statusText: string,
-    payload?: ApiErrorPayload
+    payload?: ApiErrorPayload,
   ) {
     super(message);
+
     this.name = 'ApiError';
     this.status = status;
     this.statusText = statusText;
@@ -71,17 +118,36 @@ export class ApiError extends Error {
   }
 }
 
+/* ==========================================================================
+   INTERNAL HELPERS
+   ========================================================================== */
+
 /**
- * Normalizes error messages from various backend error payloads.
+ * Extracts a useful message from common API error response formats.
  */
-const parseErrorMessage = (payload: unknown, fallback: string): string => {
+function parseErrorMessage(payload: unknown, fallback: string): string {
   if (payload && typeof payload === 'object') {
     const errorPayload = payload as Record<string, unknown>;
-    if (typeof errorPayload.error === 'string' && errorPayload.error.trim()) {
+
+    if (
+      typeof errorPayload.error === 'string' &&
+      errorPayload.error.trim()
+    ) {
       return errorPayload.error;
     }
-    if (typeof errorPayload.message === 'string' && errorPayload.message.trim()) {
+
+    if (
+      typeof errorPayload.message === 'string' &&
+      errorPayload.message.trim()
+    ) {
       return errorPayload.message;
+    }
+
+    if (
+      typeof errorPayload.details === 'string' &&
+      errorPayload.details.trim()
+    ) {
+      return errorPayload.details;
     }
   }
 
@@ -90,13 +156,15 @@ const parseErrorMessage = (payload: unknown, fallback: string): string => {
   }
 
   return fallback;
-};
+}
 
 /**
- * Safely parses response body handling empty, text/plain, or JSON responses.
+ * Reads JSON, plain-text, empty, and 204 responses safely.
  */
-const readResponseBody = async (response: Response): Promise<unknown> => {
-  if (response.status === 204) return null;
+async function readResponseBody(response: Response): Promise<unknown> {
+  if (response.status === 204) {
+    return null;
+  }
 
   const contentType = response.headers.get('content-type') || '';
 
@@ -104,8 +172,12 @@ const readResponseBody = async (response: Response): Promise<unknown> => {
     if (contentType.includes('application/json')) {
       return await response.json();
     }
+
     const text = await response.text();
-    if (!text.trim()) return null;
+
+    if (!text.trim()) {
+      return null;
+    }
 
     try {
       return JSON.parse(text);
@@ -115,20 +187,22 @@ const readResponseBody = async (response: Response): Promise<unknown> => {
   } catch {
     return null;
   }
-};
+}
 
 /**
- * Combines an optional external AbortSignal (null | undefined safe) with an internal timeout controller.
+ * Combines an externally supplied AbortSignal with an internal timeout signal.
  */
-const combineTimeoutAndSignal = (
+function combineTimeoutAndSignal(
   externalSignal?: AbortSignal | null,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
-) => {
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+) {
   const controller = new AbortController();
   const safeExternalSignal = externalSignal ?? undefined;
 
   const timeoutId = window.setTimeout(() => {
-    controller.abort(new DOMException('Request timeout', 'TimeoutError'));
+    controller.abort(
+      new DOMException('Request timed out.', 'TimeoutError'),
+    );
   }, timeoutMs);
 
   const onExternalAbort = () => {
@@ -139,39 +213,70 @@ const combineTimeoutAndSignal = (
     if (safeExternalSignal.aborted) {
       controller.abort(safeExternalSignal.reason);
     } else {
-      safeExternalSignal.addEventListener('abort', onExternalAbort, { once: true });
+      safeExternalSignal.addEventListener(
+        'abort',
+        onExternalAbort,
+        { once: true },
+      );
     }
   }
 
   return {
     signal: controller.signal,
+
     cleanup: () => {
       window.clearTimeout(timeoutId);
+
       if (safeExternalSignal) {
-        safeExternalSignal.removeEventListener('abort', onExternalAbort);
+        safeExternalSignal.removeEventListener(
+          'abort',
+          onExternalAbort,
+        );
       }
     },
   };
-};
+}
 
 /**
- * Core type-safe request utility.
+ * Sends a request to the hospital API and returns a typed parsed response.
+ *
+ * Important:
+ * - No API key is included here.
+ * - Do not store secret API keys in VITE_* environment variables.
+ * - Staff endpoints should be protected by server-side authentication,
+ *   secure cookies, or an Authorization token.
  */
 async function request<T>(
   endpoint: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
 ): Promise<T> {
-  const { signal: externalSignal, timeoutMs, headers, body, ...restOptions } = options;
-  const { signal, cleanup } = combineTimeoutAndSignal(externalSignal, timeoutMs);
+  const {
+    signal: externalSignal,
+    timeoutMs,
+    headers,
+    body,
+    ...restOptions
+  } = options;
 
-  const sanitizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const { signal, cleanup } = combineTimeoutAndSignal(
+    externalSignal,
+    timeoutMs,
+  );
+
+  const sanitizedEndpoint = endpoint.startsWith('/')
+    ? endpoint
+    : `/${endpoint}`;
+
   const url = `${API_BASE_URL}${sanitizedEndpoint}`;
 
   try {
     const requestHeaders: Record<string, string> = {
       Accept: 'application/json',
-      ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
-      ...(body && typeof body === 'string' ? { 'Content-Type': 'application/json' } : {}),
+
+      ...(body && typeof body === 'string'
+        ? { 'Content-Type': 'application/json' }
+        : {}),
+
       ...(headers as Record<string, string>),
     };
 
@@ -180,6 +285,12 @@ async function request<T>(
       body,
       signal,
       headers: requestHeaders,
+
+      /*
+       * Enable this only if your backend authenticates with cookies.
+       *
+       * credentials: 'include',
+       */
     });
 
     const payload = await readResponseBody(response);
@@ -187,14 +298,16 @@ async function request<T>(
     if (!response.ok) {
       const errorMessage = parseErrorMessage(
         payload,
-        `Request failed with status ${response.status} (${response.statusText})`
+        `Request failed with status ${response.status} (${response.statusText})`,
       );
 
       throw new ApiError(
         errorMessage,
         response.status,
         response.statusText,
-        (payload && typeof payload === 'object' ? payload : undefined) as ApiErrorPayload | undefined
+        (payload && typeof payload === 'object'
+          ? payload
+          : undefined) as ApiErrorPayload | undefined,
       );
     }
 
@@ -204,13 +317,19 @@ async function request<T>(
       throw error;
     }
 
-    if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+    if (
+      error instanceof DOMException &&
+      (error.name === 'AbortError' || error.name === 'TimeoutError')
+    ) {
       throw new Error('The request was cancelled or timed out.');
     }
 
-    if (error instanceof TypeError && error.message.toLowerCase().includes('fetch')) {
+    if (
+      error instanceof TypeError &&
+      error.message.toLowerCase().includes('fetch')
+    ) {
       throw new Error(
-        'Unable to connect to the hospital API server. Please check your network connection or verify the backend is running.'
+        'Unable to connect to the hospital API server. Please check your network connection or verify the backend is running.',
       );
     }
 
@@ -225,30 +344,45 @@ async function request<T>(
 }
 
 /* ==========================================================================
-   API ENDPOINTS
+   AGENT CHAT ENDPOINTS
    ========================================================================== */
 
+/**
+ * GET /api/agent/chats
+ *
+ * Backend response:
+ * {
+ *   success: true,
+ *   chats: Chat[]
+ * }
+ */
 export async function fetchAgentChats(
-  signal?: AbortSignal | null
+  signal?: AbortSignal | null,
 ): Promise<Chat[]> {
-  const response = await request<Chat[]>('/api/agent/chats', {
-    method: 'GET',
-    signal,
-  });
+  const response = await request<AgentChatsResponse>(
+    '/api/agent/chats',
+    {
+      method: 'GET',
+      signal,
+    },
+  );
 
-  return Array.isArray(response) ? response : [];
+  if (!response.success) {
+    throw new Error(response.error || 'Unable to fetch agent chats.');
+  }
+
+  return Array.isArray(response.chats) ? response.chats : [];
 }
 
+/**
+ * POST /api/agent/assign
+ */
 export async function assignChatToAgent(
   patientId: string,
   agentName: string,
-  signal?: AbortSignal | null
-) {
-  return request<{
-    success: boolean;
-    patient?: Chat;
-    error?: string;
-  }>('/api/agent/assign', {
+  signal?: AbortSignal | null,
+): Promise<AssignChatResponse> {
+  return request<AssignChatResponse>('/api/agent/assign', {
     method: 'POST',
     signal,
     body: JSON.stringify({
@@ -258,17 +392,16 @@ export async function assignChatToAgent(
   });
 }
 
+/**
+ * POST /api/agent/reply
+ */
 export async function sendAgentReply(
   patientId: string,
   messageText: string,
   agentName: string,
-  signal?: AbortSignal | null
-) {
-  return request<{
-    success: boolean;
-    message?: Message;
-    error?: string;
-  }>('/api/agent/reply', {
+  signal?: AbortSignal | null,
+): Promise<SendAgentReplyResponse> {
+  return request<SendAgentReplyResponse>('/api/agent/reply', {
     method: 'POST',
     signal,
     body: JSON.stringify({
@@ -279,22 +412,55 @@ export async function sendAgentReply(
   });
 }
 
+/* ==========================================================================
+   APPOINTMENT ENDPOINTS
+   ========================================================================== */
+
+/**
+ * GET /api/appointments
+ *
+ * Supports all of these backend response formats:
+ *
+ * 1. Appointment[]
+ *
+ * 2. {
+ *      success: true,
+ *      appointments: Appointment[]
+ *    }
+ *
+ * 3. {
+ *      success: true,
+ *      data: Appointment[]
+ *    }
+ */
 export async function fetchAppointments(
-  signal?: AbortSignal | null
+  signal?: AbortSignal | null,
 ): Promise<Appointment[]> {
-  const response = await request<AppointmentResponse>('/api/appointments', {
-    method: 'GET',
-    signal,
-  });
+  const response = await request<AppointmentResponse>(
+    '/api/appointments',
+    {
+      method: 'GET',
+      signal,
+    },
+  );
 
   if (Array.isArray(response)) {
     return response;
   }
 
   if (response && typeof response === 'object') {
+    if ('success' in response && response.success === false) {
+      throw new Error(
+        typeof response.error === 'string' && response.error.trim()
+          ? response.error
+          : 'Unable to fetch appointments.',
+      );
+    }
+
     if (Array.isArray(response.appointments)) {
       return response.appointments;
     }
+
     if (Array.isArray(response.data)) {
       return response.data;
     }
