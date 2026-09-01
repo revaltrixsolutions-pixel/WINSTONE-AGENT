@@ -458,8 +458,7 @@ export async function fetchAppointments(
     }
 
     if (Array.isArray(response.appointments)) {
-      return response.appointmen
-      ts;
+      return response.appointments;
     }
 
     if (Array.isArray(response.data)) {
