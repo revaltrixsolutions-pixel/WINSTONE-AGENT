@@ -2,10 +2,10 @@
 
 import { Router } from 'express';
 import type {
-  Request,
   RequestHandler,
   Response,
 } from 'express';
+import type { ParamsDictionary } from 'express-serve-static-core';
 
 import { handleWhatsAppWebhook } from '../controllers/webhookController';
 
@@ -21,6 +21,11 @@ type MetaWebhookVerificationQuery = {
   'hub.challenge'?: string;
 };
 
+type WebhookVerificationErrorResponse = {
+  success: false;
+  error: string;
+};
+
 /* ==========================================================================
    META WEBHOOK VERIFICATION
    ========================================================================== */
@@ -28,20 +33,22 @@ type MetaWebhookVerificationQuery = {
 /**
  * GET /
  *
- * Meta calls this endpoint during webhook setup.
+ * Meta calls this endpoint when you verify the WhatsApp webhook callback URL.
  *
- * Expected query parameters:
+ * Expected parameters:
  * - hub.mode=subscribe
  * - hub.verify_token=YOUR_VERIFY_TOKEN
- * - hub.challenge=RANDOM_META_CHALLENGE
+ * - hub.challenge=CHALLENGE_VALUE
  *
- * When verification succeeds, this route must return the exact raw
- * hub.challenge value with an HTTP 200 response.
+ * When successful, Meta requires a 200 response containing exactly the
+ * raw `hub.challenge` string.
  */
-const verifyWebhookHandler: RequestHandler = (
-  req: Request<Record<string, never>, unknown, unknown, MetaWebhookVerificationQuery>,
-  res: Response,
-): void => {
+const verifyWebhookHandler: RequestHandler<
+  ParamsDictionary,
+  string | WebhookVerificationErrorResponse,
+  unknown,
+  MetaWebhookVerificationQuery
+> = (req, res): void => {
   const mode = req.query['hub.mode'];
   const verifyToken = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
@@ -63,7 +70,7 @@ const verifyWebhookHandler: RequestHandler = (
 
   if (!mode || !verifyToken || !challenge) {
     console.warn(
-      '[WhatsApp Webhook Verification Failed] Missing required Meta verification parameters.',
+      '[WhatsApp Webhook Verification Failed] Required query parameters are missing.',
       {
         hasMode: Boolean(mode),
         hasVerifyToken: Boolean(verifyToken),
@@ -81,7 +88,7 @@ const verifyWebhookHandler: RequestHandler = (
 
   if (mode !== 'subscribe') {
     console.warn(
-      '[WhatsApp Webhook Verification Failed] Unexpected webhook mode.',
+      '[WhatsApp Webhook Verification Failed] Invalid verification mode.',
       {
         receivedMode: mode,
       },
@@ -97,7 +104,7 @@ const verifyWebhookHandler: RequestHandler = (
 
   if (verifyToken !== expectedToken) {
     console.warn(
-      '[WhatsApp Webhook Verification Failed] Verify token did not match.',
+      '[WhatsApp Webhook Verification Failed] Verify token mismatch.',
       {
         receivedMode: mode,
         hasVerifyToken: true,
@@ -105,11 +112,9 @@ const verifyWebhookHandler: RequestHandler = (
     );
 
     /*
-     * Never log:
-     * - verifyToken
-     * - expectedToken
-     *
-     * Both are secrets and should never appear in hosting logs.
+     * Do not log `verifyToken` or `expectedToken`.
+     * They are secrets and must not appear in Render, Railway,
+     * Vercel, PM2, Docker, or server logs.
      */
     res.status(403).json({
       success: false,
@@ -124,7 +129,7 @@ const verifyWebhookHandler: RequestHandler = (
   );
 
   /*
-   * Meta expects exactly the raw challenge text, not a JSON object.
+   * Meta needs the raw challenge text, not a JSON response.
    */
   res.status(200).type('text/plain').send(challenge);
 };
@@ -136,15 +141,11 @@ const verifyWebhookHandler: RequestHandler = (
 /**
  * POST /
  *
- * Receives WhatsApp webhook events from Meta:
- * - Incoming messages
- * - Interactive replies
- * - Delivery statuses
- * - Read statuses
- * - Failed-message statuses
+ * Meta sends incoming WhatsApp messages and message-status events here.
  *
- * The actual event processing, database storage, patient lookup, and
- * agent-queue update are handled in webhookController.ts.
+ * The actual incoming-message parsing and database storage are handled by:
+ *
+ * src/controllers/webhookController.ts
  */
 const receiveWebhookHandler: RequestHandler = async (
   req,
@@ -168,15 +169,15 @@ const receiveWebhookHandler: RequestHandler = async (
    ========================================================================== */
 
 /*
- * If this router is mounted like this:
+ * If mounted in your Express app as:
  *
  * app.use('/api/whatsapp/webhook', whatsappWebhookRoutes);
  *
- * Then Meta callback URL must be:
+ * Then configure this exact Meta Callback URL:
  *
  * https://YOUR-BACKEND-DOMAIN.com/api/whatsapp/webhook
  */
 router.get('/', verifyWebhookHandler);
 router.post('/', receiveWebhookHandler);
 
-export default router;ss
+export default router;
