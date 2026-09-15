@@ -3,8 +3,8 @@
 // backend/src/controllers/webhookController.ts
 
 import { prisma } from "../lib/prisma.js";
+
 import {
-  appointmentConversationState,
   appointmentServiceOptions,
   extractPatientName,
   generateBotReply,
@@ -13,9 +13,8 @@ import {
   isConversationStale,
   isHumanSupportRequest,
   isUsablePatientName,
-  parseAppointmentRequest,
-  updateAppointmentConversation,
 } from "../services/aiBotService.js";
+
 import {
   sendWhatsAppMessage,
   WhatsAppApiError,
@@ -49,10 +48,12 @@ type WhatsAppMessage = {
 
   interactive?: {
     type?: string;
+
     button_reply?: {
       id?: string;
       title?: string;
     };
+
     list_reply?: {
       id?: string;
       title?: string;
@@ -87,20 +88,26 @@ type WhatsAppMessage = {
 
 type WhatsAppWebhookPayload = {
   object?: string;
+
   entry?: Array<{
     changes?: Array<{
       field?: string;
+
       value?: {
         contacts?: WhatsAppContact[];
+
         messages?: WhatsAppMessage[];
+
         statuses?: Array<{
           id?: string;
           status?: string;
           recipient_id?: string;
+
           errors?: Array<{
             error_data?: {
               details?: string;
             };
+
             message?: string;
           }>;
         }>;
@@ -118,22 +125,37 @@ type PatientForBot = {
 };
 
 /* ==========================================================================
-   HELPERS
+   APPOINTMENT SELECTION STATE
+
+   This is intentionally separate from the old AI appointment conversation.
+
+   WhatsApp interactive IDs are authoritative:
+
+   service_xxx
+   date_today
+   date_tomorrow
+   date_next_week
+   time_09_00_am
+
+   The booking is created as soon as service + date + time are available.
 ========================================================================== */
 
-/**
- * Converts a phone number into digits only.
- *
- * +254 712 345 678 -> 254712345678
- * 254712345678     -> 254712345678
- */
+type BookingSelection = {
+  service?: string;
+  date?: string;
+  time?: string;
+};
+
+const bookingSelections = new Map<string, BookingSelection>();
+
+/* ==========================================================================
+   GENERAL HELPERS
+========================================================================== */
+
 function normalizePhoneNumber(phoneNumber: string): string {
   return String(phoneNumber || "").replace(/\D/g, "");
 }
 
-/**
- * Convert a WhatsApp/Meta Unix timestamp to Date.
- */
 function getWebhookMessageDate(timestamp?: string): Date {
   if (!timestamp) {
     return new Date();
@@ -148,9 +170,6 @@ function getWebhookMessageDate(timestamp?: string): Date {
   return new Date(timestampSeconds * 1000);
 }
 
-/**
- * Convert a date to Kenya time for patient-facing appointment details.
- */
 function formatKenyaDateTime(date: Date): string {
   return new Intl.DateTimeFormat("en-KE", {
     timeZone: "Africa/Nairobi",
@@ -159,17 +178,18 @@ function formatKenyaDateTime(date: Date): string {
   }).format(date);
 }
 
-/**
- * Get the last interaction time for a patient.
- */
-async function getLastInteractionHours(patientId: string): Promise<number> {
+async function getLastInteractionHours(
+  patientId: string,
+): Promise<number> {
   const lastMessage = await prisma.messageLog.findFirst({
     where: {
       patientId,
     },
+
     orderBy: {
       timestamp: "desc",
     },
+
     select: {
       timestamp: true,
     },
@@ -179,15 +199,12 @@ async function getLastInteractionHours(patientId: string): Promise<number> {
     return Number.POSITIVE_INFINITY;
   }
 
-  const diffMs =
-    Date.now() - new Date(lastMessage.timestamp).getTime();
-
-  return diffMs / (1000 * 60 * 60);
+  return (
+    (Date.now() - new Date(lastMessage.timestamp).getTime()) /
+    (1000 * 60 * 60)
+  );
 }
 
-/**
- * Get the last staff/agent interaction time.
- */
 async function getLastAgentInteractionHours(
   patientId: string,
 ): Promise<number> {
@@ -196,9 +213,11 @@ async function getLastAgentInteractionHours(
       patientId,
       sender: "AGENT",
     },
+
     orderBy: {
       timestamp: "desc",
     },
+
     select: {
       timestamp: true,
     },
@@ -218,19 +237,25 @@ async function getLastAgentInteractionHours(
    APPOINTMENT LOOKUP
 ========================================================================== */
 
-function isAppointmentLookupRequest(message: string): boolean {
+function isAppointmentLookupRequest(
+  message: string,
+): boolean {
+  const normalized = String(message || "")
+    .toLowerCase()
+    .trim();
+
   return (
     /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(
-      message,
+      normalized,
     ) ||
     /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(
-      message,
+      normalized,
     ) ||
     /\b(when|where|what time)\b.*\b(appointment|visit|doctor|clinic)\b/i.test(
-      message,
+      normalized,
     ) ||
     /\b(scheduled|upcoming|confirmed)\b.*\b(appointment|visit|booking)\b/i.test(
-      message,
+      normalized,
     )
   );
 }
@@ -247,21 +272,25 @@ async function getAppointmentLookupReply(
   const appointments = await prisma.appointment.findMany({
     where: {
       patientId,
+
       slotTime: {
         gte: new Date(),
       },
+
       status: {
         not: "CANCELLED",
       },
     },
+
     orderBy: {
       slotTime: "asc",
     },
+
     take: 5,
   });
 
   if (!appointments.length) {
-    return `${patientName}, I could not find an upcoming appointment under this WhatsApp number. Would you like to book one? Please send the date, time, and department, for example: tomorrow at 9am in Maternity.`;
+    return `${patientName}, I could not find an upcoming appointment under this WhatsApp number. Would you like to book one?`;
   }
 
   const details = appointments
@@ -276,77 +305,127 @@ async function getAppointmentLookupReply(
     )
     .join("\n\n");
 
-  return `${getKenyaGreeting()}, ${patientName}. Here are your upcoming appointment details:\n\n${details}\n\nWhat would you like to do next: keep this appointment, book another one, or speak with staff?`;
+  return `${getKenyaGreeting()}, ${patientName}.
+
+Here are your upcoming appointment details:
+
+${details}
+
+You can book another appointment anytime by selecting "Book appointment".`;
 }
 
 /* ==========================================================================
-   APPOINTMENT DATE/TIME PARSING
+   DATE/TIME PARSING
 ========================================================================== */
 
+/**
+ * Converts appointment date + time into a real Date.
+ *
+ * The server is expected to run in a timezone that is compatible with the
+ * application's appointment handling. The explicit Kenya calculations below
+ * prevent the interactive values from being interpreted as arbitrary strings.
+ */
 function parseAppointmentDate(
   dateText: string,
   timeText: string,
 ): Date {
-  const normalizedDate = String(dateText || "").toLowerCase().trim();
-  const normalizedTime = String(timeText || "").toLowerCase().trim();
+  const normalizedDate = String(dateText || "")
+    .toLowerCase()
+    .trim();
+
+  const normalizedTime = String(timeText || "")
+    .toLowerCase()
+    .trim();
 
   const now = new Date();
 
   let hour = 9;
   let minute = 0;
 
-  const timeMatch = normalizedTime.match(
-    /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i,
-  );
+  /* ---------------------------------------------------------------
+     TIME
+  ---------------------------------------------------------------- */
 
-  if (timeMatch) {
-    hour = Number(timeMatch[1]);
-    minute = Number(timeMatch[2] || 0);
-
-    const meridiem = timeMatch[3].toLowerCase();
-
-    if (meridiem === "pm" && hour < 12) {
-      hour += 12;
-    }
-
-    if (meridiem === "am" && hour === 12) {
-      hour = 0;
-    }
+  if (normalizedTime.includes("noon")) {
+    hour = 12;
+    minute = 0;
+  } else if (normalizedTime.includes("midnight")) {
+    hour = 0;
+    minute = 0;
   } else {
-    const bareTimeMatch = normalizedTime.match(
-      /\b(\d{1,2})(?::(\d{2}))?\b/,
+    const timeMatch = normalizedTime.match(
+      /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i,
     );
 
-    if (bareTimeMatch) {
-      hour = Number(bareTimeMatch[1]);
-      minute = Number(bareTimeMatch[2] || 0);
+    if (timeMatch) {
+      hour = Number(timeMatch[1]);
+      minute = Number(timeMatch[2] || 0);
 
-      if (hour >= 1 && hour <= 7) {
+      const meridiem = timeMatch[3].toLowerCase();
+
+      if (meridiem === "pm" && hour < 12) {
         hour += 12;
+      }
+
+      if (meridiem === "am" && hour === 12) {
+        hour = 0;
+      }
+    } else {
+      const bareTimeMatch = normalizedTime.match(
+        /\b(\d{1,2})(?::(\d{2}))?\b/,
+      );
+
+      if (bareTimeMatch) {
+        hour = Number(bareTimeMatch[1]);
+        minute = Number(bareTimeMatch[2] || 0);
+
+        if (hour >= 1 && hour <= 7) {
+          hour += 12;
+        }
       }
     }
   }
+
+  /* ---------------------------------------------------------------
+     DATE
+  ---------------------------------------------------------------- */
 
   const dateOnly = new Date(now);
 
   dateOnly.setHours(0, 0, 0, 0);
 
-  if (normalizedDate.includes("today")) {
+  if (
+    normalizedDate.includes("today") ||
+    normalizedDate === "date_today"
+  ) {
     dateOnly.setHours(hour, minute, 0, 0);
+
     return dateOnly;
   }
 
-  if (normalizedDate.includes("tomorrow")) {
+  if (
+    normalizedDate.includes("tomorrow") ||
+    normalizedDate === "date_tomorrow"
+  ) {
     dateOnly.setDate(dateOnly.getDate() + 1);
     dateOnly.setHours(hour, minute, 0, 0);
+
     return dateOnly;
   }
 
-  if (normalizedDate.includes("next week")) {
+  if (
+    normalizedDate.includes("next week") ||
+    normalizedDate === "date_next_week"
+  ) {
     dateOnly.setDate(dateOnly.getDate() + 7);
     dateOnly.setHours(hour, minute, 0, 0);
+
     return dateOnly;
   }
+
+  /* ---------------------------------------------------------------
+     WEEKDAYS
+  ---------------------------------------------------------------- */
 
   const weekdays = [
     "sunday",
@@ -368,11 +447,21 @@ function parseAppointmentDate(
     const daysUntil =
       (weekdayIndex - currentIndex + 7) % 7 || 7;
 
-    dateOnly.setDate(dateOnly.getDate() + daysUntil);
+    dateOnly.setDate(
+      dateOnly.getDate() + daysUntil,
+    );
+
     dateOnly.setHours(hour, minute, 0, 0);
 
     return dateOnly;
   }
+
+  /* ---------------------------------------------------------------
+     DD/MM/YYYY
+     DD-MM-YYYY
+     DD/MM
+     DD-MM
+  ---------------------------------------------------------------- */
 
   const numericDateMatch = normalizedDate.match(
     /\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/,
@@ -400,36 +489,73 @@ function parseAppointmentDate(
       0,
     );
 
-    if (!Number.isNaN(directDate.getTime())) {
+    if (
+      directDate.getFullYear() === year &&
+      directDate.getMonth() === month &&
+      directDate.getDate() === day
+    ) {
       return directDate;
     }
   }
 
-  const monthMatch = normalizedDate.match(
-    /\b(\d{1,2})\s*(?:st|nd|rd|th)?\s*(?:of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*(\d{4})?\b/i,
+  /* ---------------------------------------------------------------
+     15 September 2026
+     15 Sep 2026
+     15th September 2026
+  ---------------------------------------------------------------- */
+
+  const monthDateMatch = normalizedDate.match(
+    /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i,
   );
 
-  if (monthMatch) {
-    const day = Number(monthMatch[1]);
+  if (monthDateMatch) {
+    const day = Number(monthDateMatch[1]);
 
-    const months: Record<string, number> = {
+    const monthNames: Record<string, number> = {
+      january: 0,
       jan: 0,
+
+      february: 1,
       feb: 1,
+
+      march: 2,
       mar: 2,
+
+      april: 3,
       apr: 3,
+
       may: 4,
+
+      june: 5,
       jun: 5,
+
+      july: 6,
       jul: 6,
+
+      august: 7,
       aug: 7,
+
+      september: 8,
       sep: 8,
+      sept: 8,
+
+      october: 9,
       oct: 9,
+
+      november: 10,
       nov: 10,
+
+      december: 11,
       dec: 11,
     };
 
-    const month = months[monthMatch[2].slice(0, 3).toLowerCase()];
-    const year = monthMatch[3]
-      ? Number(monthMatch[3])
+    const month =
+      monthNames[
+        monthDateMatch[2].toLowerCase()
+      ];
+
+    const year = monthDateMatch[3]
+      ? Number(monthDateMatch[3])
       : now.getFullYear();
 
     const directDate = new Date(
@@ -442,17 +568,30 @@ function parseAppointmentDate(
       0,
     );
 
-    if (!Number.isNaN(directDate.getTime())) {
+    if (
+      directDate.getFullYear() === year &&
+      directDate.getMonth() === month &&
+      directDate.getDate() === day
+    ) {
       return directDate;
     }
   }
+
+  /* ---------------------------------------------------------------
+     ISO / normal JavaScript date
+  ---------------------------------------------------------------- */
 
   const directDate = new Date(normalizedDate);
 
   if (!Number.isNaN(directDate.getTime())) {
     directDate.setHours(hour, minute, 0, 0);
+
     return directDate;
   }
+
+  /* ---------------------------------------------------------------
+     Fallback
+  ---------------------------------------------------------------- */
 
   dateOnly.setHours(hour, minute, 0, 0);
 
@@ -460,187 +599,252 @@ function parseAppointmentDate(
 }
 
 /* ==========================================================================
-   WHATSAPP INTERACTIVE UI
+   APPOINTMENT INTENT
 ========================================================================== */
 
-function buildAppointmentInteractive(
-  prompt: string,
-  appointmentState: {
-    department?: string;
-    date?: string;
-    time?: string;
-    awaitingConfirmation?: boolean;
-  },
-) {
-  if (appointmentState.awaitingConfirmation) {
-    return {
-      type: "button",
-      body: {
-        text: prompt,
-      },
-      action: {
-        buttons: [
-          {
-            type: "reply",
-            reply: {
-              id: "appointment_confirm",
-              title: "Confirm",
-            },
-          },
-          {
-            type: "reply",
-            reply: {
-              id: "appointment_change",
-              title: "Change details",
-            },
-          },
-        ],
-      },
-    };
-  }
+function isBookAppointmentRequest(
+  message: string,
+): boolean {
+  const normalized = String(message || "")
+    .toLowerCase()
+    .trim();
 
-  if (!appointmentState.department) {
-    const rows = appointmentServiceOptions
-      .map((service) => ({
-        id: `service_${service
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "_")}`,
-        title: service.slice(0, 24),
-        description: `${getServicePrice(service)} + KSh 1,000 consultation`,
-      }))
-      .slice(0, 10);
-
-    return {
-      type: "list",
-      body: {
-        text: `${prompt} The menu shows the most requested services. If yours is not listed, reply with the service name.`,
-      },
-      action: {
-        button: "Choose a service",
-        sections: [
-          {
-            title: "Hospital services",
-            rows,
-          },
-        ],
-      },
-    };
-  }
-
-  if (!appointmentState.date) {
-    return {
-      type: "list",
-      body: {
-        text: prompt,
-      },
-      action: {
-        button: "Choose a date",
-        sections: [
-          {
-            title: "Appointment date",
-            rows: [
-              {
-                id: "date_today",
-                title: "Today",
-              },
-              {
-                id: "date_tomorrow",
-                title: "Tomorrow",
-              },
-              {
-                id: "date_next_week",
-                title: "Next week",
-              },
-            ],
-          },
-        ],
-      },
-    };
-  }
-
-  if (!appointmentState.time) {
-    return {
-      type: "list",
-      body: {
-        text: prompt,
-      },
-      action: {
-        button: "Choose a time",
-        sections: [
-          {
-            title: "Available times",
-            rows: [
-              "09:00 AM",
-              "11:00 AM",
-              "01:00 PM",
-              "03:00 PM",
-              "05:00 PM",
-            ].map((time) => ({
-              id: `time_${time
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, "_")}`,
-              title: time,
-            })),
-          },
-        ],
-      },
-    };
-  }
-
-  return undefined;
+  return (
+    normalized === "book appointment" ||
+    normalized === "appointments" ||
+    normalized === "appointment" ||
+    normalized === "booking" ||
+    normalized === "book" ||
+    /\bbook\s+(an?\s+)?appointment\b/i.test(
+      normalized,
+    ) ||
+    /\bschedule\s+(an?\s+)?appointment\b/i.test(
+      normalized,
+    )
+  );
 }
+
+function isAppointmentSelection(
+  message: string,
+): boolean {
+  const normalized = String(message || "")
+    .toLowerCase()
+    .trim();
+
+  return (
+    normalized.startsWith("service_") ||
+    normalized.startsWith("date_") ||
+    normalized.startsWith("time_")
+  );
+}
+
+/* ==========================================================================
+   WHATSAPP APPOINTMENT MENUS
+========================================================================== */
+
+function buildServiceMenu() {
+  const rows = appointmentServiceOptions
+    .map((service) => ({
+      id: `service_${service
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")}`,
+
+      title: service.slice(0, 24),
+
+      description:
+        `${getServicePrice(service)} + KSh 1,000 consultation`.slice(
+          0,
+          72,
+        ),
+    }))
+    .slice(0, 10);
+
+  return {
+    type: "list",
+
+    body: {
+      text:
+        "Book your Phadam Hospital appointment.\n\nStep 1 of 3: Select the department or service you need.",
+    },
+
+    action: {
+      button: "Choose service",
+
+      sections: [
+        {
+          title: "Hospital services",
+          rows,
+        },
+      ],
+    },
+  };
+}
+
+function buildDateMenu() {
+  return {
+    type: "list",
+
+    body: {
+      text:
+        "Step 2 of 3: Select your preferred appointment date.",
+    },
+
+    action: {
+      button: "Choose date",
+
+      sections: [
+        {
+          title: "Appointment date",
+
+          rows: [
+            {
+              id: "date_today",
+              title: "Today",
+              description: "Book for today",
+            },
+
+            {
+              id: "date_tomorrow",
+              title: "Tomorrow",
+              description: "Book for tomorrow",
+            },
+
+            {
+              id: "date_next_week",
+              title: "Next week",
+              description: "Book seven days from today",
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildTimeMenu() {
+  return {
+    type: "list",
+
+    body: {
+      text:
+        "Step 3 of 3: Select your preferred appointment time.",
+    },
+
+    action: {
+      button: "Choose time",
+
+      sections: [
+        {
+          title: "Available appointment times",
+
+          rows: [
+            {
+              id: "time_09_00_am",
+              title: "09:00 AM",
+            },
+
+            {
+              id: "time_11_00_am",
+              title: "11:00 AM",
+            },
+
+            {
+              id: "time_01_00_pm",
+              title: "01:00 PM",
+            },
+
+            {
+              id: "time_03_00_pm",
+              title: "03:00 PM",
+            },
+
+            {
+              id: "time_05_00_pm",
+              title: "05:00 PM",
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+/* ==========================================================================
+   PATIENT MAIN MENU
+========================================================================== */
 
 function buildPatientMenu() {
   return {
     type: "list",
+
     body: {
-      text: "Welcome to Phadam Hospital. Choose what you need below. You only need to type your name; all other options can be selected.",
+      text:
+        "Welcome to Phadam Hospital. Choose what you need below. You can select an option instead of typing.",
     },
+
     action: {
-      button: "Open hospital menu",
+      button: "Hospital menu",
+
       sections: [
         {
           title: "How can we help?",
+
           rows: [
             {
               id: "menu_appointments",
               title: "Book appointment",
-              description: "Choose service, date and time",
+              description:
+                "Choose service, date and time",
             },
+
             {
               id: "menu_scheduled",
               title: "My appointments",
-              description: "View scheduled appointments",
+              description:
+                "View your scheduled appointments",
             },
+
             {
               id: "menu_services",
               title: "Our services",
-              description: "Browse hospital services",
+              description:
+                "Browse hospital services",
             },
+
             {
               id: "menu_departments",
               title: "Departments",
-              description: "View hospital departments",
+              description:
+                "View hospital departments",
             },
+
             {
               id: "menu_locations",
               title: "Locations and contacts",
-              description: "Find our branches",
+              description:
+                "Find hospital locations",
             },
+
             {
               id: "menu_prices",
               title: "Prices and fees",
-              description: "View available prices",
+              description:
+                "View available prices",
             },
+
             {
               id: "menu_insurance",
               title: "SHA and insurance",
-              description: "Check accepted covers",
+              description:
+                "Check accepted medical covers",
             },
+
             {
               id: "menu_human",
               title: "Speak to staff",
-              description: "Request human assistance",
+              description:
+                "Request human assistance",
             },
           ],
         },
@@ -652,54 +856,74 @@ function buildPatientMenu() {
 function buildKnowledgeMenu() {
   return {
     type: "list",
+
     body: {
-      text: "Choose a topic and I will show the exact Phadam Hospital information.",
+      text:
+        "Choose a topic and I will show you the exact Phadam Hospital information.",
     },
+
     action: {
-      button: "Choose a topic",
+      button: "Choose topic",
+
       sections: [
         {
           title: "Hospital information",
+
           rows: [
             {
               id: "menu_services",
               title: "Services",
-              description: "Clinical and support services",
+              description:
+                "Clinical and support services",
             },
+
             {
               id: "menu_departments",
               title: "Departments",
-              description: "Department information",
+              description:
+                "Department information",
             },
+
             {
               id: "menu_specialists",
               title: "Specialist clinics",
-              description: "Specialist care options",
+              description:
+                "Specialist care options",
             },
+
             {
               id: "menu_locations",
               title: "Locations",
-              description: "Branches and contacts",
+              description:
+                "Branches and contacts",
             },
+
             {
               id: "menu_prices",
               title: "Prices",
-              description: "Procedures and fees",
+              description:
+                "Procedures and fees",
             },
+
             {
               id: "menu_insurance",
               title: "SHA and insurance",
-              description: "Accepted medical covers",
+              description:
+                "Accepted medical covers",
             },
+
             {
               id: "menu_about",
               title: "About Phadam",
-              description: "Mission, values and leadership",
+              description:
+                "Mission and hospital information",
             },
+
             {
               id: "menu_human",
               title: "Speak to staff",
-              description: "Request human help",
+              description:
+                "Request human assistance",
             },
           ],
         },
@@ -712,44 +936,473 @@ function buildKnowledgeMenu() {
    INTERACTIVE SELECTION NORMALIZATION
 ========================================================================== */
 
-function normalizeInteractiveSelection(message: string): string {
+function normalizeInteractiveSelection(
+  message: string,
+): string {
+  const normalized = String(message || "")
+    .trim();
+
   const selections: Record<string, string> = {
     menu_appointments: "book appointment",
-    menu_scheduled: "show my scheduled appointments",
-    menu_services: "show our services",
-    menu_departments: "show our departments",
-    menu_specialists: "show our specialist clinics",
-    menu_locations: "show our locations and contacts",
-    menu_prices: "show prices and fees",
-    menu_insurance: "show SHA and insurance",
-    menu_about: "show hospital information",
-    menu_human: "I want to speak to a human staff member",
 
-    appointment_confirm: "confirm",
-    appointment_change: "change details",
+    menu_scheduled:
+      "show my scheduled appointments",
+
+    menu_services:
+      "show our services",
+
+    menu_departments:
+      "show our departments",
+
+    menu_specialists:
+      "show our specialist clinics",
+
+    menu_locations:
+      "show our locations and contacts",
+
+    menu_prices:
+      "show prices and fees",
+
+    menu_insurance:
+      "show SHA and insurance",
+
+    menu_about:
+      "show hospital information",
+
+    menu_human:
+      "I want to speak to a human staff member",
 
     date_today: "today",
+
     date_tomorrow: "tomorrow",
+
     date_next_week: "next week",
   };
 
-  if (selections[message]) {
-    return selections[message];
+  if (selections[normalized]) {
+    return selections[normalized];
   }
 
-  if (message.startsWith("time_")) {
-    return message
+  if (
+    normalized
+      .toLowerCase()
+      .startsWith("time_")
+  ) {
+    return normalized
       .slice("time_".length)
-      .replaceAll("_", " ");
+      .replace(/_/g, " ");
   }
 
-  if (message.startsWith("service_")) {
-    return message
+  if (
+    normalized
+      .toLowerCase()
+      .startsWith("service_")
+  ) {
+    return normalized
       .slice("service_".length)
-      .replaceAll("_", " ");
+      .replace(/_/g, " ");
   }
 
-  return message;
+  return normalized;
+}
+
+/* ==========================================================================
+   SAVE BOT MESSAGE
+========================================================================== */
+
+async function saveBotMessage(
+  patientId: string,
+  body: string,
+): Promise<void> {
+  await prisma.messageLog.create({
+    data: {
+      patientId,
+      sender: "BOT",
+      body,
+      timestamp: new Date(),
+    },
+  });
+}
+
+/* ==========================================================================
+   SEND APPOINTMENT MENU
+========================================================================== */
+
+async function sendAppointmentMenu(
+  patient: PatientForBot,
+): Promise<void> {
+  try {
+    const menu = buildServiceMenu();
+
+    await sendWhatsAppMessage({
+      recipientPhone: patient.phoneNumber,
+      interactive: menu,
+    });
+
+    await saveBotMessage(
+      patient.id,
+      menu.body.text,
+    );
+  } catch (error) {
+    console.error(
+      "[WhatsApp Appointment Service Menu Failed]",
+      {
+        patientId: patient.id,
+        error:
+          error instanceof Error
+            ? error.message
+            : error,
+      },
+    );
+  }
+}
+
+/* ==========================================================================
+   START BOOKING
+========================================================================== */
+
+async function startAppointmentBooking(
+  patient: PatientForBot,
+): Promise<void> {
+  bookingSelections.set(patient.id, {});
+
+  await sendAppointmentMenu(patient);
+}
+
+/* ==========================================================================
+   PROCESS APPOINTMENT SELECTION
+========================================================================== */
+
+async function processAppointmentSelection(
+  patient: PatientForBot,
+  rawSelection: string,
+): Promise<boolean> {
+  const selection = String(rawSelection || "")
+    .trim();
+
+  if (!isAppointmentSelection(selection)) {
+    return false;
+  }
+
+  const selectionLower = selection.toLowerCase();
+
+  let booking =
+    bookingSelections.get(patient.id);
+
+  if (!booking) {
+    booking = {};
+    bookingSelections.set(
+      patient.id,
+      booking,
+    );
+  }
+
+  /* ------------------------------------------------------------------
+     SERVICE
+  ------------------------------------------------------------------ */
+
+  if (
+    selectionLower.startsWith("service_")
+  ) {
+    const service = normalizeInteractiveSelection(
+      selection,
+    ).trim();
+
+    if (!service) {
+      await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText:
+          "Please select a valid hospital service.",
+      });
+
+      return true;
+    }
+
+    booking.service = service;
+    booking.date = undefined;
+    booking.time = undefined;
+
+    bookingSelections.set(
+      patient.id,
+      booking,
+    );
+
+    const menu = buildDateMenu();
+
+    await sendWhatsAppMessage({
+      recipientPhone: patient.phoneNumber,
+      interactive: menu,
+    });
+
+    await saveBotMessage(
+      patient.id,
+      menu.body.text,
+    );
+
+    console.info(
+      "[WhatsApp Appointment Service Selected]",
+      {
+        patientId: patient.id,
+        service,
+      },
+    );
+
+    return true;
+  }
+
+  /* ------------------------------------------------------------------
+     DATE
+  ------------------------------------------------------------------ */
+
+  if (
+    selectionLower.startsWith("date_")
+  ) {
+    if (!booking.service) {
+      await sendAppointmentMenu(patient);
+      return true;
+    }
+
+    const date =
+      normalizeInteractiveSelection(
+        selection,
+      ).trim();
+
+    booking.date = date;
+    booking.time = undefined;
+
+    bookingSelections.set(
+      patient.id,
+      booking,
+    );
+
+    const menu = buildTimeMenu();
+
+    await sendWhatsAppMessage({
+      recipientPhone: patient.phoneNumber,
+      interactive: menu,
+    });
+
+    await saveBotMessage(
+      patient.id,
+      menu.body.text,
+    );
+
+    console.info(
+      "[WhatsApp Appointment Date Selected]",
+      {
+        patientId: patient.id,
+        service: booking.service,
+        date,
+      },
+    );
+
+    return true;
+  }
+
+  /* ------------------------------------------------------------------
+     TIME
+  ------------------------------------------------------------------ */
+
+  if (
+    selectionLower.startsWith("time_")
+  ) {
+    if (
+      !booking.service ||
+      !booking.date
+    ) {
+      await sendAppointmentMenu(patient);
+      return true;
+    }
+
+    const time =
+      normalizeInteractiveSelection(
+        selection,
+      ).trim();
+
+    booking.time = time;
+
+    bookingSelections.set(
+      patient.id,
+      booking,
+    );
+
+    /* ---------------------------------------------------------------
+       ALL THREE VALUES NOW EXIST.
+
+       CREATE THE APPOINTMENT IMMEDIATELY.
+    ---------------------------------------------------------------- */
+
+    const service =
+      booking.service;
+
+    const date =
+      booking.date;
+
+    const slotTime =
+      parseAppointmentDate(
+        date,
+        time,
+      );
+
+    if (
+      Number.isNaN(
+        slotTime.getTime(),
+      ) ||
+      slotTime.getTime() < Date.now()
+    ) {
+      bookingSelections.delete(
+        patient.id,
+      );
+
+      const retryText =
+        `${patient.fullName || "Patient"}, the selected appointment time is no longer available because it has passed. Please start again and choose a future date and time.`;
+
+      await sendWhatsAppMessage({
+        recipientPhone:
+          patient.phoneNumber,
+        messageText: retryText,
+      });
+
+      await saveBotMessage(
+        patient.id,
+        retryText,
+      );
+
+      return true;
+    }
+
+    try {
+      const appointment =
+        await prisma.appointment.create({
+          data: {
+            patientId:
+              patient.id,
+
+            doctorName:
+              "To be assigned",
+
+            specialty:
+              service,
+
+            servicePrice:
+              getServicePrice(service),
+
+            consultationFee:
+              "KSh 1,000",
+
+            slotTime,
+
+            status:
+              "CONFIRMED",
+          },
+        });
+
+      const confirmationText =
+        [
+          `✅ Appointment booked successfully, ${patient.fullName || "Patient"}.`,
+          "",
+          `Department: ${service}`,
+          `Date: ${date}`,
+          `Time: ${time}`,
+          `Doctor: To be assigned`,
+          `Service price: ${getServicePrice(service)}`,
+          `Consultation fee: KSh 1,000`,
+          `Status: CONFIRMED`,
+          `Reference: ${appointment.id.slice(0, 8)}`,
+          "",
+          "Your appointment has been recorded in the hospital system.",
+        ].join("\n");
+
+      await sendWhatsAppMessage({
+        recipientPhone:
+          patient.phoneNumber,
+        messageText:
+          confirmationText,
+      });
+
+      await saveBotMessage(
+        patient.id,
+        confirmationText,
+      );
+
+      console.info(
+        "[WhatsApp Appointment Created Immediately]",
+        {
+          patientId:
+            patient.id,
+
+          appointmentId:
+            appointment.id,
+
+          service,
+
+          date,
+
+          time,
+
+          slotTime:
+            slotTime.toISOString(),
+        },
+      );
+
+      bookingSelections.delete(
+        patient.id,
+      );
+    } catch (error) {
+      console.error(
+        "[WhatsApp Appointment Creation Failed]",
+        {
+          patientId:
+            patient.id,
+
+          service,
+
+          date,
+
+          time,
+
+          error:
+            error instanceof Error
+              ? error.message
+              : error,
+        },
+      );
+
+      const failureText =
+        `${patient.fullName || "Patient"}, I could not complete the appointment booking right now. Please try again or select "Speak to staff".`;
+
+      try {
+        await sendWhatsAppMessage({
+          recipientPhone:
+            patient.phoneNumber,
+          messageText:
+            failureText,
+        });
+
+        await saveBotMessage(
+          patient.id,
+          failureText,
+        );
+      } catch (sendError) {
+        console.error(
+          "[WhatsApp Booking Failure Message Failed]",
+          {
+            patientId:
+              patient.id,
+
+            error:
+              sendError instanceof Error
+                ? sendError.message
+                : sendError,
+          },
+        );
+      }
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 /* ==========================================================================
@@ -760,98 +1413,140 @@ async function sendBotReply(
   patient: PatientForBot,
   incomingMessage: string,
 ): Promise<void> {
-  const effectiveMessage =
-    normalizeInteractiveSelection(incomingMessage).trim();
+  const rawMessage =
+    String(incomingMessage || "")
+      .trim();
 
-  if (!effectiveMessage) {
+  if (!rawMessage) {
     return;
   }
 
-  const patientName =
-    (isUsablePatientName(patient.fullName)
-      ? patient.fullName
-      : extractPatientName(effectiveMessage)) || "Patient";
-
-  const hasPatientName = patientName !== "Patient";
-
-  const bookingIntent =
-    /\b(book|appointment|visit|consult|schedule|booking|doctor appointment)\b/i.test(
-      effectiveMessage,
-    );
-
-  const appointmentDetails =
-    parseAppointmentRequest(effectiveMessage);
-
-  const existingAppointmentState =
-    appointmentConversationState.get(patient.id);
-
-  /*
-   * IMPORTANT:
-   * Do not destroy appointment state merely because the next message
-   * does not contain the word "appointment".
-   *
-   * Messages such as:
-   *   Emergency
-   *   Today
-   *   Tomorrow
-   *   09:00 AM
-   *   Confirm
-   *
-   * are all valid appointment-flow messages.
-   */
-  const appointmentFlowActive =
-    !!existingAppointmentState &&
-    !existingAppointmentState.completed;
+  /* ------------------------------------------------------------------
+     HUMAN AGENT ACTIVE
+  ------------------------------------------------------------------ */
 
   if (
-    patient.chatStatus === "AGENT_ACTIVE"
+    patient.chatStatus ===
+    "AGENT_ACTIVE"
   ) {
     const hoursSinceAgentMessage =
-      await getLastAgentInteractionHours(patient.id);
+      await getLastAgentInteractionHours(
+        patient.id,
+      );
 
     if (
-      !Number.isFinite(hoursSinceAgentMessage) ||
-      hoursSinceAgentMessage < 3 / 60
-    ) {
-      console.info("[WhatsApp Bot Suppressed] Chat is assigned to staff.", {
-        patientId: patient.id,
+      !Number.isFinite(
         hoursSinceAgentMessage,
-      });
+      ) ||
+      hoursSinceAgentMessage <
+        3 / 60
+    ) {
+      console.info(
+        "[WhatsApp Bot Suppressed] Chat is actively assigned to staff.",
+        {
+          patientId:
+            patient.id,
+
+          hoursSinceAgentMessage,
+        },
+      );
 
       return;
     }
   }
 
-  /*
-   * If a name was just captured, show the main menu.
-   */
-  const nameWasJustCaptured =
-    (patient as PatientForBot & {
-      nameWasJustCaptured?: boolean;
-    }).nameWasJustCaptured === true;
+  /* ------------------------------------------------------------------
+     NAME
+  ------------------------------------------------------------------ */
 
-  if (nameWasJustCaptured) {
-    const menu = buildPatientMenu();
+  const normalizedMessage =
+    normalizeInteractiveSelection(
+      rawMessage,
+    );
+
+  const patientName =
+    isUsablePatientName(
+      patient.fullName,
+    )
+      ? patient.fullName
+      : extractPatientName(
+          normalizedMessage,
+        );
+
+  const hasPatientName =
+    !!patientName &&
+    patientName !== "Patient";
+
+  /* ------------------------------------------------------------------
+     APPOINTMENT INTERACTIVE SELECTIONS MUST BE PROCESSED FIRST.
+  ------------------------------------------------------------------ */
+
+  if (
+    isAppointmentSelection(
+      rawMessage,
+    )
+  ) {
+    await processAppointmentSelection(
+      patient,
+      rawMessage,
+    );
+
+    return;
+  }
+
+  /* ------------------------------------------------------------------
+     BOOK APPOINTMENT
+  ------------------------------------------------------------------ */
+
+  if (
+    isBookAppointmentRequest(
+      normalizedMessage,
+    )
+  ) {
+    await startAppointmentBooking(
+      patient,
+    );
+
+    return;
+  }
+
+  /* ------------------------------------------------------------------
+     PATIENT MENU
+  ------------------------------------------------------------------ */
+
+  const nameWasJustCaptured =
+    (
+      patient as PatientForBot & {
+        nameWasJustCaptured?: boolean;
+      }
+    ).nameWasJustCaptured ===
+    true;
+
+  if (
+    nameWasJustCaptured
+  ) {
+    const menu =
+      buildPatientMenu();
 
     try {
       await sendWhatsAppMessage({
-        recipientPhone: patient.phoneNumber,
-        interactive: menu,
+        recipientPhone:
+          patient.phoneNumber,
+        interactive:
+          menu,
       });
 
-      await prisma.messageLog.create({
-        data: {
-          patientId: patient.id,
-          sender: "BOT",
-          body: menu.body.text,
-          timestamp: new Date(),
-        },
-      });
+      await saveBotMessage(
+        patient.id,
+        menu.body.text,
+      );
     } catch (error) {
       console.error(
         "[WhatsApp Initial Menu Send Failed]",
         {
-          patientId: patient.id,
+          patientId:
+            patient.id,
+
           error:
             error instanceof Error
               ? error.message
@@ -863,31 +1558,46 @@ async function sendBotReply(
     return;
   }
 
-  /*
-   * Knowledge menu selections.
-   */
+  /* ------------------------------------------------------------------
+     KNOWLEDGE MENUS
+  ------------------------------------------------------------------ */
+
   if (
-    effectiveMessage === "show our services" ||
-    effectiveMessage === "show our departments" ||
-    effectiveMessage ===
+    normalizedMessage ===
+      "show our services" ||
+    normalizedMessage ===
+      "show our departments" ||
+    normalizedMessage ===
       "show our specialist clinics" ||
-    effectiveMessage === "show prices and fees" ||
-    effectiveMessage === "show SHA and insurance" ||
-    effectiveMessage ===
+    normalizedMessage ===
+      "show prices and fees" ||
+    normalizedMessage ===
+      "show SHA and insurance" ||
+    normalizedMessage ===
       "show hospital information"
   ) {
-    const menu = buildKnowledgeMenu();
+    const menu =
+      buildKnowledgeMenu();
 
     try {
       await sendWhatsAppMessage({
-        recipientPhone: patient.phoneNumber,
-        interactive: menu,
+        recipientPhone:
+          patient.phoneNumber,
+        interactive:
+          menu,
       });
+
+      await saveBotMessage(
+        patient.id,
+        menu.body.text,
+      );
     } catch (error) {
       console.error(
         "[WhatsApp Knowledge Menu Send Failed]",
         {
-          patientId: patient.id,
+          patientId:
+            patient.id,
+
           error:
             error instanceof Error
               ? error.message
@@ -899,49 +1609,42 @@ async function sendBotReply(
     return;
   }
 
-  /*
-   * Appointment lookup must happen before starting a new booking.
-   */
-  const appointmentLookupReply = hasPatientName
-    ? await getAppointmentLookupReply(
-        patient.id,
-        patientName,
-        effectiveMessage,
-      )
-    : null;
+  /* ------------------------------------------------------------------
+     APPOINTMENT LOOKUP
+  ------------------------------------------------------------------ */
+
+  const appointmentLookupReply =
+    hasPatientName
+      ? await getAppointmentLookupReply(
+          patient.id,
+          patientName!,
+          normalizedMessage,
+        )
+      : null;
 
   if (
-    appointmentLookupReply &&
-    !appointmentFlowActive
+    appointmentLookupReply
   ) {
     try {
-      const whatsappResult =
-        await sendWhatsAppMessage({
-          recipientPhone: patient.phoneNumber,
-          messageText: appointmentLookupReply,
-        });
+      await sendWhatsAppMessage({
+        recipientPhone:
+          patient.phoneNumber,
 
-      await prisma.messageLog.create({
-        data: {
-          patientId: patient.id,
-          sender: "BOT",
-          body: appointmentLookupReply,
-          timestamp: new Date(),
-        },
+        messageText:
+          appointmentLookupReply,
       });
 
-      console.info(
-        "[WhatsApp Appointment Lookup Reply Sent]",
-        {
-          patientId: patient.id,
-          messageId: whatsappResult.messageId,
-        },
+      await saveBotMessage(
+        patient.id,
+        appointmentLookupReply,
       );
     } catch (error) {
       console.error(
         "[WhatsApp Appointment Lookup Reply Failed]",
         {
-          patientId: patient.id,
+          patientId:
+            patient.id,
+
           error:
             error instanceof Error
               ? error.message
@@ -953,265 +1656,19 @@ async function sendBotReply(
     return;
   }
 
-  /*
-   * APPOINTMENT FLOW
-   *
-   * This is deliberately before human-support detection.
-   *
-   * Otherwise words such as "doctor" or "staff" in an appointment
-   * conversation can accidentally terminate the booking flow.
-   */
+  /* ------------------------------------------------------------------
+     HUMAN SUPPORT
+  ------------------------------------------------------------------ */
+
   if (
-    hasPatientName &&
-    (
-      bookingIntent ||
-      appointmentFlowActive ||
-      !!appointmentDetails.date ||
-      !!appointmentDetails.time ||
-      !!appointmentDetails.department
+    isHumanSupportRequest(
+      normalizedMessage,
     )
   ) {
-    const appointmentState =
-      updateAppointmentConversation(
-        patient.id,
-        patientName,
-        effectiveMessage,
-      );
-
-    /*
-     * Appointment is not yet complete.
-     */
-    if (!appointmentState.completed) {
-      const replyText =
-        appointmentState.prompt;
-
-      const interactive =
-        buildAppointmentInteractive(
-          replyText,
-          {
-            ...appointmentState.data,
-            awaitingConfirmation:
-              appointmentState.awaitingConfirmation,
-          },
-        );
-
-      try {
-        await sendWhatsAppMessage({
-          recipientPhone: patient.phoneNumber,
-          messageText: replyText,
-          interactive,
-        });
-
-        await prisma.messageLog.create({
-          data: {
-            patientId: patient.id,
-            sender: "BOT",
-            body: replyText,
-            timestamp: new Date(),
-          },
-        });
-
-        console.info(
-          "[WhatsApp Appointment Prompt Sent]",
-          {
-            patientId: patient.id,
-            prompt: replyText,
-            awaitingConfirmation:
-              appointmentState.awaitingConfirmation,
-            appointmentData:
-              appointmentState.data,
-          },
-        );
-      } catch (error) {
-        console.error(
-          "[WhatsApp Appointment Prompt Failed]",
-          {
-            patientId: patient.id,
-            error:
-              error instanceof Error
-                ? error.message
-                : error,
-          },
-        );
-      }
-
-      return;
-    }
-
-    /*
-     * Appointment flow is complete.
-     *
-     * Only create the DB appointment after the patient has confirmed.
-     */
-    const date =
-      appointmentState.data?.date;
-
-    const time =
-      appointmentState.data?.time;
-
-    const department =
-      appointmentState.data?.department;
-
-    if (!date || !time || !department) {
-      console.error(
-        "[WhatsApp Booking Invalid Completed State]",
-        {
-          patientId: patient.id,
-          appointmentState,
-        },
-      );
-
-      appointmentConversationState.delete(
-        patient.id,
-      );
-
-      return;
-    }
-
-    const slotTime =
-      parseAppointmentDate(date, time);
-
-    /*
-     * Prevent accidentally creating appointments
-     * in the past.
-     */
-    if (
-      Number.isNaN(slotTime.getTime()) ||
-      slotTime.getTime() < Date.now()
-    ) {
-      const retryText =
-        `${patientName}, that appointment time has already passed. Please choose a future date and time.`;
-
-      appointmentConversationState.delete(
-        patient.id,
-      );
-
-      try {
-        await sendWhatsAppMessage({
-          recipientPhone:
-            patient.phoneNumber,
-          messageText: retryText,
-        });
-
-        await prisma.messageLog.create({
-          data: {
-            patientId: patient.id,
-            sender: "BOT",
-            body: retryText,
-            timestamp: new Date(),
-          },
-        });
-      } catch (error) {
-        console.error(
-          "[WhatsApp Invalid Appointment Reply Failed]",
-          {
-            patientId: patient.id,
-            error:
-              error instanceof Error
-                ? error.message
-                : error,
-          },
-        );
-      }
-
-      return;
-    }
-
-    try {
-      const appointment =
-        await prisma.appointment.create({
-          data: {
-            patientId: patient.id,
-            doctorName: "To be assigned",
-            specialty: department,
-            servicePrice:
-              getServicePrice(department),
-            consultationFee:
-              "KSh 1,000",
-            slotTime,
-            status: "CONFIRMED",
-          },
-        });
-
-      const confirmationText =
-        `Thank you, ${patientName}. Your appointment has been booked for ${date} at ${time} in the ${department} department. Your appointment reference is ${appointment.id.slice(0, 8)}.`;
-
-      await sendWhatsAppMessage({
-        recipientPhone:
-          patient.phoneNumber,
-        messageText: confirmationText,
-      });
-
-      await prisma.messageLog.create({
-        data: {
-          patientId: patient.id,
-          sender: "BOT",
-          body: confirmationText,
-          timestamp: new Date(),
-        },
-      });
-
-      console.info(
-        "[WhatsApp Booking Saved]",
-        {
-          patientId: patient.id,
-          appointmentId: appointment.id,
-          date,
-          time,
-          department,
-        },
-      );
-
-      /*
-       * Clear the in-memory appointment state after
-       * successful database creation.
-       */
-      appointmentConversationState.delete(
-        patient.id,
-      );
-    } catch (error) {
-      console.error(
-        "[WhatsApp Booking Save Failed]",
-        {
-          patientId: patient.id,
-          error:
-            error instanceof Error
-              ? error.message
-              : error,
-        },
-      );
-
-      try {
-        await sendWhatsAppMessage({
-          recipientPhone:
-            patient.phoneNumber,
-          messageText:
-            `${patientName}, I could not complete the booking right now. Please try again or ask to speak with hospital staff.`,
-        });
-      } catch (sendError) {
-        console.error(
-          "[WhatsApp Booking Failure Reply Failed]",
-          {
-            patientId: patient.id,
-            error:
-              sendError instanceof Error
-                ? sendError.message
-                : sendError,
-          },
-        );
-      }
-    }
-
-    return;
-  }
-
-  /*
-   * Human support.
-   */
-  if (isHumanSupportRequest(effectiveMessage)) {
-    const humanReply = hasPatientName
-      ? `Thanks, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`
-      : "I can connect you with a human staff member. Before I send the request, please reply with your full name and briefly tell me what you need help with.";
+    const humanReply =
+      hasPatientName
+        ? `Thanks, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`
+        : "I can connect you with a human staff member. Please reply with your full name and briefly tell me what you need help with.";
 
     if (hasPatientName) {
       try {
@@ -1219,15 +1676,19 @@ async function sendBotReply(
           where: {
             id: patient.id,
           },
+
           data: {
-            chatStatus: "PENDING_AGENT",
+            chatStatus:
+              "PENDING_AGENT",
           },
         });
       } catch (error) {
         console.error(
           "[WhatsApp Human Handoff Status Update Failed]",
           {
-            patientId: patient.id,
+            patientId:
+              patient.id,
+
             error:
               error instanceof Error
                 ? error.message
@@ -1241,22 +1702,22 @@ async function sendBotReply(
       await sendWhatsAppMessage({
         recipientPhone:
           patient.phoneNumber,
-        messageText: humanReply,
+
+        messageText:
+          humanReply,
       });
 
-      await prisma.messageLog.create({
-        data: {
-          patientId: patient.id,
-          sender: "BOT",
-          body: humanReply,
-          timestamp: new Date(),
-        },
-      });
+      await saveBotMessage(
+        patient.id,
+        humanReply,
+      );
     } catch (error) {
       console.error(
         "[WhatsApp Human Handoff Reply Failed]",
         {
-          patientId: patient.id,
+          patientId:
+            patient.id,
+
           error:
             error instanceof Error
               ? error.message
@@ -1268,22 +1729,30 @@ async function sendBotReply(
     return;
   }
 
-  /*
-   * Normal AI/knowledge-base response.
-   */
-  const lastInteractionHours =
-    await getLastInteractionHours(patient.id);
+  /* ------------------------------------------------------------------
+     NORMAL AI / KNOWLEDGE RESPONSE
+  ------------------------------------------------------------------ */
 
-  const replyText = generateBotReply({
-    patientName:
-      patientName || null,
-    message: effectiveMessage,
-    isReturning:
-      isConversationStale(
-        lastInteractionHours,
-      ),
-    lastInteractionHours,
-  });
+  const lastInteractionHours =
+    await getLastInteractionHours(
+      patient.id,
+    );
+
+  const replyText =
+    generateBotReply({
+      patientName:
+        patientName || null,
+
+      message:
+        normalizedMessage,
+
+      isReturning:
+        isConversationStale(
+          lastInteractionHours,
+        ),
+
+      lastInteractionHours,
+    });
 
   if (!replyText.trim()) {
     return;
@@ -1294,45 +1763,61 @@ async function sendBotReply(
       await sendWhatsAppMessage({
         recipientPhone:
           patient.phoneNumber,
-        messageText: replyText,
+
+        messageText:
+          replyText,
       });
 
-    await prisma.messageLog.create({
-      data: {
-        patientId: patient.id,
-        sender: "BOT",
-        body: replyText,
-        timestamp: new Date(),
-      },
-    });
+    await saveBotMessage(
+      patient.id,
+      replyText,
+    );
 
     console.info(
       "[WhatsApp Auto Reply Sent]",
       {
-        patientId: patient.id,
+        patientId:
+          patient.id,
+
         recipientPhone:
           patient.phoneNumber,
+
         messageId:
           whatsappResult.messageId,
+
         simulated:
           whatsappResult.simulated,
+
         patientName:
           patientName || null,
       },
     );
   } catch (error) {
-    if (error instanceof WhatsAppApiError) {
+    if (
+      error instanceof
+      WhatsAppApiError
+    ) {
       console.error(
         "[WhatsApp Auto Reply API Error]",
         {
-          patientId: patient.id,
+          patientId:
+            patient.id,
+
           recipientPhone:
             patient.phoneNumber,
-          status: error.status,
-          metaCode: error.metaCode,
-          metaType: error.metaType,
+
+          status:
+            error.status,
+
+          metaCode:
+            error.metaCode,
+
+          metaType:
+            error.metaType,
+
           metaDetails:
             error.metaDetails,
+
           fbTraceId:
             error.fbTraceId,
         },
@@ -1344,9 +1829,12 @@ async function sendBotReply(
     console.error(
       "[WhatsApp Auto Reply Send Failed]",
       {
-        patientId: patient.id,
+        patientId:
+          patient.id,
+
         recipientPhone:
           patient.phoneNumber,
+
         error:
           error instanceof Error
             ? error.message
@@ -1363,28 +1851,40 @@ async function sendBotReply(
 function getMessageBody(
   message: WhatsAppMessage,
 ): string {
-  if (message.type === "text") {
+  if (
+    message.type === "text"
+  ) {
     return (
-      message.text?.body?.trim() || ""
+      message.text?.body?.trim() ||
+      ""
     );
   }
 
-  if (message.type === "button") {
+  if (
+    message.type === "button"
+  ) {
     return (
-      message.button?.text?.trim() ||
       message.button?.payload?.trim() ||
+      message.button?.text?.trim() ||
       "[Button response]"
     );
   }
 
-  if (message.type === "interactive") {
+  if (
+    message.type ===
+    "interactive"
+  ) {
     if (
       message.interactive?.type ===
       "button_reply"
     ) {
       return (
-        message.interactive.button_reply?.id?.trim() ||
-        message.interactive.button_reply?.title?.trim() ||
+        message.interactive
+          .button_reply?.id
+          ?.trim() ||
+        message.interactive
+          .button_reply?.title
+          ?.trim() ||
         "[Interactive button response]"
       );
     }
@@ -1394,9 +1894,15 @@ function getMessageBody(
       "list_reply"
     ) {
       return (
-        message.interactive.list_reply?.id?.trim() ||
-        message.interactive.list_reply?.title?.trim() ||
-        message.interactive.list_reply?.description?.trim() ||
+        message.interactive
+          .list_reply?.id
+          ?.trim() ||
+        message.interactive
+          .list_reply?.title
+          ?.trim() ||
+        message.interactive
+          .list_reply?.description
+          ?.trim() ||
         "[Interactive list response]"
       );
     }
@@ -1404,7 +1910,9 @@ function getMessageBody(
     return "[Interactive WhatsApp response]";
   }
 
-  if (message.type === "image") {
+  if (
+    message.type === "image"
+  ) {
     const caption =
       message.image?.caption?.trim();
 
@@ -1413,14 +1921,19 @@ function getMessageBody(
       : "[Image received]";
   }
 
-  if (message.type === "document") {
+  if (
+    message.type === "document"
+  ) {
     const filename =
       message.document?.filename?.trim();
 
     const caption =
       message.document?.caption?.trim();
 
-    if (filename && caption) {
+    if (
+      filename &&
+      caption
+    ) {
       return `[Document: ${filename}] ${caption}`;
     }
 
@@ -1435,11 +1948,15 @@ function getMessageBody(
     return "[Document received]";
   }
 
-  if (message.type === "audio") {
+  if (
+    message.type === "audio"
+  ) {
     return "[Voice note received]";
   }
 
-  if (message.type === "video") {
+  if (
+    message.type === "video"
+  ) {
     const caption =
       message.video?.caption?.trim();
 
@@ -1448,14 +1965,19 @@ function getMessageBody(
       : "[Video received]";
   }
 
-  if (message.type === "location") {
+  if (
+    message.type === "location"
+  ) {
     const name =
       message.location?.name?.trim();
 
     const address =
       message.location?.address?.trim();
 
-    if (name && address) {
+    if (
+      name &&
+      address
+    ) {
       return `[Location] ${name} — ${address}`;
     }
 
@@ -1483,18 +2005,20 @@ function getContactProfileName(
   contacts: WhatsAppContact[],
   phoneNumber: string,
 ): string | null {
-  const contact = contacts.find(
-    (item) => {
-      const contactNumber =
-        normalizePhoneNumber(
-          item.wa_id || "",
-        );
+  const contact =
+    contacts.find(
+      (item) => {
+        const contactNumber =
+          normalizePhoneNumber(
+            item.wa_id || "",
+          );
 
-      return (
-        contactNumber === phoneNumber
-      );
-    },
-  );
+        return (
+          contactNumber ===
+          phoneNumber
+        );
+      },
+    );
 
   return (
     contact?.profile?.name?.trim() ||
@@ -1522,17 +2046,22 @@ export async function handleWhatsAppWebhook(
     console.info(
       "[WhatsApp Webhook Received]",
       {
-        object: payload?.object,
+        object:
+          payload?.object,
+
         entryCount:
-          Array.isArray(payload?.entry)
+          Array.isArray(
+            payload?.entry,
+          )
             ? payload.entry.length
             : 0,
       },
     );
 
-    /*
-     * Ignore non-WhatsApp webhook events.
-     */
+    /* ----------------------------------------------------------------
+       ONLY WHATSAPP BUSINESS WEBHOOKS
+    ---------------------------------------------------------------- */
+
     if (
       payload?.object !==
       "whatsapp_business_account"
@@ -1540,7 +2069,8 @@ export async function handleWhatsAppWebhook(
       console.warn(
         "[WhatsApp Webhook Ignored] Unexpected webhook object.",
         {
-          object: payload?.object,
+          object:
+            payload?.object,
         },
       );
 
@@ -1548,42 +2078,54 @@ export async function handleWhatsAppWebhook(
       return;
     }
 
-    const entries = Array.isArray(
-      payload.entry,
-    )
-      ? payload.entry
-      : [];
-
-    for (const entry of entries) {
-      const changes = Array.isArray(
-        entry.changes,
+    const entries =
+      Array.isArray(
+        payload.entry,
       )
-        ? entry.changes
+        ? payload.entry
         : [];
 
-      for (const change of changes) {
-        if (change.field !== "messages") {
+    for (
+      const entry of entries
+    ) {
+      const changes =
+        Array.isArray(
+          entry.changes,
+        )
+          ? entry.changes
+          : [];
+
+      for (
+        const change of changes
+      ) {
+        if (
+          change.field !==
+          "messages"
+        ) {
           console.info(
             "[WhatsApp Webhook Ignored] Unsupported event field.",
             {
-              field: change.field,
+              field:
+                change.field,
             },
           );
 
           continue;
         }
 
-        const value = change.value;
+        const value =
+          change.value;
 
         if (!value) {
           continue;
         }
 
-        const contacts = Array.isArray(
-          value.contacts,
-        )
-          ? value.contacts
-          : [];
+        const contacts =
+          Array.isArray(
+            value.contacts,
+          )
+            ? value.contacts
+            : [];
 
         const incomingMessages =
           Array.isArray(
@@ -1599,19 +2141,25 @@ export async function handleWhatsAppWebhook(
             ? value.statuses
             : [];
 
-        /*
-         * Delivery/read status events.
-         */
-        for (const status of statuses) {
+        /* ------------------------------------------------------------
+           MESSAGE STATUS EVENTS
+        ------------------------------------------------------------ */
+
+        for (
+          const status of statuses
+        ) {
           console.info(
             "[WhatsApp Message Status Update]",
             {
               whatsappMessageId:
                 status.id,
+
               status:
                 status.status,
+
               recipientPhone:
                 status.recipient_id,
+
               error:
                 status.errors?.[0]
                   ?.error_data
@@ -1623,10 +2171,13 @@ export async function handleWhatsAppWebhook(
           );
         }
 
-        /*
-         * Patient messages.
-         */
-        for (const incomingMessage of incomingMessages) {
+        /* ------------------------------------------------------------
+           PATIENT MESSAGES
+        ------------------------------------------------------------ */
+
+        for (
+          const incomingMessage of incomingMessages
+        ) {
           const senderPhoneRaw =
             incomingMessage.from?.trim();
 
@@ -1677,7 +2228,9 @@ export async function handleWhatsAppWebhook(
               {
                 senderPhoneLast4:
                   senderPhone.slice(-4),
+
                 whatsappMessageId,
+
                 messageType,
               },
             );
@@ -1690,24 +2243,29 @@ export async function handleWhatsAppWebhook(
               incomingMessage.timestamp,
             );
 
-          /*
-           * Strong duplicate protection using Meta's
-           * WhatsApp message ID.
-           */
-          if (whatsappMessageId) {
+          /* ----------------------------------------------------------
+             META DUPLICATE PROTECTION
+          ---------------------------------------------------------- */
+
+          if (
+            whatsappMessageId
+          ) {
             const alreadyProcessed =
               await prisma.messageLog.findUnique(
                 {
                   where: {
                     whatsappMessageId,
                   },
+
                   select: {
                     id: true,
                   },
                 },
               );
 
-            if (alreadyProcessed) {
+            if (
+              alreadyProcessed
+            ) {
               console.info(
                 "[WhatsApp Duplicate Event Ignored]",
                 {
@@ -1730,44 +2288,29 @@ export async function handleWhatsAppWebhook(
             {
               senderPhoneLast4:
                 senderPhone.slice(-4),
+
               whatsappMessageId,
+
               messageType,
+
               profileName,
+
               messageBody,
             },
           );
 
-          /*
-           * Find patient using normalized international
-           * WhatsApp phone number.
-           */
-          let patient =
-            await prisma.patient.findFirst({
-              where: {
-                phoneNumber:
-                  senderPhone,
-              },
-              select: {
-                id: true,
-                phoneNumber: true,
-                chatStatus: true,
-                assignedTo: true,
-                fullName: true,
-              },
-            });
+          /* ----------------------------------------------------------
+             FIND PATIENT
+          ---------------------------------------------------------- */
 
-          /*
-           * Create first-time patient.
-           */
-          if (!patient) {
-            patient =
-              await prisma.patient.create({
-                data: {
+          let patient =
+            await prisma.patient.findFirst(
+              {
+                where: {
                   phoneNumber:
                     senderPhone,
-                  chatStatus:
-                    "PENDING_AGENT",
                 },
+
                 select: {
                   id: true,
                   phoneNumber: true,
@@ -1775,26 +2318,53 @@ export async function handleWhatsAppWebhook(
                   assignedTo: true,
                   fullName: true,
                 },
-              });
+              },
+            );
+
+          /* ----------------------------------------------------------
+             CREATE PATIENT IF NEW
+          ---------------------------------------------------------- */
+
+          if (!patient) {
+            patient =
+              await prisma.patient.create(
+                {
+                  data: {
+                    phoneNumber:
+                      senderPhone,
+
+                    chatStatus:
+                      "PENDING_AGENT",
+                  },
+
+                  select: {
+                    id: true,
+                    phoneNumber: true,
+                    chatStatus: true,
+                    assignedTo: true,
+                    fullName: true,
+                  },
+                },
+              );
 
             console.info(
               "[WhatsApp New Patient Created]",
               {
                 patientId:
                   patient.id,
+
                 phoneLast4:
                   senderPhone.slice(-4),
+
                 profileName,
               },
             );
           }
 
-          /*
-           * Detect patient name from:
-           * 1. Existing DB name
-           * 2. "My name is..."
-           * 3. WhatsApp profile name
-           */
+          /* ----------------------------------------------------------
+             PATIENT NAME DETECTION
+          ---------------------------------------------------------- */
+
           const storedName =
             isUsablePatientName(
               patient.fullName,
@@ -1830,10 +2400,12 @@ export async function handleWhatsAppWebhook(
                   where: {
                     id: patient.id,
                   },
+
                   data: {
                     fullName:
                       detectedName,
                   },
+
                   select: {
                     id: true,
                     phoneNumber: true,
@@ -1845,18 +2417,20 @@ export async function handleWhatsAppWebhook(
               );
           }
 
-          /*
-           * Prevent duplicate patient messages when Meta
-           * retries an event without a usable message ID.
-           */
+          /* ----------------------------------------------------------
+             SECONDARY DUPLICATE PROTECTION
+          ---------------------------------------------------------- */
+
           const duplicateWindowEnd =
             new Date(
-              sentAt.getTime() + 60_000,
+              sentAt.getTime() +
+                60_000,
             );
 
           const duplicateWindowStart =
             new Date(
-              sentAt.getTime() - 60_000,
+              sentAt.getTime() -
+                60_000,
             );
 
           const duplicateMessage =
@@ -1865,31 +2439,40 @@ export async function handleWhatsAppWebhook(
                 where: {
                   patientId:
                     patient.id,
+
                   sender:
                     "PATIENT",
+
                   body:
                     messageBody,
+
                   timestamp: {
                     gte:
                       duplicateWindowStart,
+
                     lte:
                       duplicateWindowEnd,
                   },
                 },
+
                 select: {
                   id: true,
                 },
               },
             );
 
-          if (duplicateMessage) {
+          if (
+            duplicateMessage
+          ) {
             console.info(
               "[WhatsApp Incoming Message Duplicate Ignored]",
               {
                 patientId:
                   patient.id,
+
                 duplicateMessageLogId:
                   duplicateMessage.id,
+
                 whatsappMessageId,
               },
             );
@@ -1897,103 +2480,121 @@ export async function handleWhatsAppWebhook(
             continue;
           }
 
-          /*
-           * Save incoming patient message.
-           *
-           * This is what makes the message available to:
-           *
-           * GET /api/agent/chats
-           */
+          /* ----------------------------------------------------------
+             SAVE PATIENT MESSAGE FIRST
+          ---------------------------------------------------------- */
+
           const [
             savedMessage,
             updatedPatient,
-          ] = await prisma.$transaction([
-            prisma.messageLog.create({
-              data: {
-                patientId:
-                  patient.id,
-                sender:
-                  "PATIENT",
-                body:
-                  messageBody,
-                whatsappMessageId:
-                  whatsappMessageId ||
-                  undefined,
-                timestamp:
-                  sentAt,
-              },
-            }),
+          ] =
+            await prisma.$transaction(
+              [
+                prisma.messageLog.create(
+                  {
+                    data: {
+                      patientId:
+                        patient.id,
 
-            prisma.patient.update({
-              where: {
-                id: patient.id,
-              },
-              data: {
-                /*
-                 * Do not steal a conversation already
-                 * actively assigned to a human agent.
-                 */
-                chatStatus:
-                  patient.chatStatus ===
-                  "AGENT_ACTIVE"
-                    ? "AGENT_ACTIVE"
-                    : "PENDING_AGENT",
-              },
-              select: {
-                id: true,
-                phoneNumber: true,
-                chatStatus: true,
-                assignedTo: true,
-              },
-            }),
-          ]);
+                      sender:
+                        "PATIENT",
+
+                      body:
+                        messageBody,
+
+                      whatsappMessageId:
+                        whatsappMessageId ||
+                        undefined,
+
+                      timestamp:
+                        sentAt,
+                    },
+                  },
+                ),
+
+                prisma.patient.update(
+                  {
+                    where: {
+                      id:
+                        patient.id,
+                    },
+
+                    data: {
+                      chatStatus:
+                        patient.chatStatus ===
+                        "AGENT_ACTIVE"
+                          ? "AGENT_ACTIVE"
+                          : "PENDING_AGENT",
+                    },
+
+                    select: {
+                      id: true,
+                      phoneNumber: true,
+                      chatStatus: true,
+                      assignedTo: true,
+                      fullName: true,
+                    },
+                  },
+                ),
+              ],
+            );
 
           console.info(
             "[WhatsApp Incoming Message Saved]",
             {
               patientId:
                 updatedPatient.id,
+
               messageLogId:
                 savedMessage.id,
+
               senderPhoneLast4:
                 senderPhone.slice(-4),
+
               whatsappMessageId,
+
               messageType,
+
               chatStatus:
                 updatedPatient.chatStatus,
+
               assignedTo:
                 updatedPatient.assignedTo,
             },
           );
 
-          /*
-           * Bot processing is intentionally AFTER the
-           * incoming message has been persisted.
-           */
+          /* ----------------------------------------------------------
+             BOT PROCESSING
+          ---------------------------------------------------------- */
+
           await sendBotReply(
             {
               id:
-                patient.id,
+                updatedPatient.id,
+
               phoneNumber:
-                patient.phoneNumber,
+                updatedPatient.phoneNumber,
+
               fullName:
-                patient.fullName ||
-                detectedName ||
-                null,
+                updatedPatient.fullName,
+
               chatStatus:
-                patient.chatStatus,
+                updatedPatient.chatStatus,
+
               assignedTo:
-                patient.assignedTo,
+                updatedPatient.assignedTo,
             },
+
             messageBody,
           );
         }
       }
     }
 
-    /*
-     * Meta expects HTTP 200.
-     */
+    /* ----------------------------------------------------------------
+       META MUST RECEIVE HTTP 200
+    ---------------------------------------------------------------- */
+
     res.sendStatus(200);
   } catch (error) {
     console.error(
@@ -2004,12 +2605,9 @@ export async function handleWhatsAppWebhook(
         : error,
     );
 
-    /*
-     * Returning 500 tells Meta that processing failed,
-     * allowing Meta to retry the webhook.
-     */
     res.status(500).json({
       success: false,
+
       error:
         "Unable to process incoming WhatsApp webhook event.",
     });
