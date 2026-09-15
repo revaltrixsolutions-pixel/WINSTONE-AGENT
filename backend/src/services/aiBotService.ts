@@ -16,6 +16,8 @@ export type AppointmentRequestData = {
 
 export const appointmentConversationState = new Map<string, Partial<AppointmentRequestData>>();
 
+export const CONVERSATION_MEMORY_MINUTES = 3;
+
 const DEFAULT_WELCOME =
   'Welcome to Phadam Hospital. We are here to help you with your care needs. What is your name?';
 
@@ -74,7 +76,8 @@ export function isUsablePatientName(name: string | null | undefined): boolean {
 }
 
 export function isConversationStale(lastInteractionHours: number): boolean {
-  return Number.isFinite(lastInteractionHours) && lastInteractionHours >= 6;
+  return Number.isFinite(lastInteractionHours) &&
+    lastInteractionHours >= CONVERSATION_MEMORY_MINUTES / 60;
 }
 
 export function parseAppointmentRequest(message: string): AppointmentRequestData {

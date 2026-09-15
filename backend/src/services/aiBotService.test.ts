@@ -9,6 +9,7 @@ import {
   generateAppointmentCollectionPrompt,
   getKenyaGreeting,
   isUsablePatientName,
+  CONVERSATION_MEMORY_MINUTES,
 } from './aiBotService';
 
 test('welcome message asks for patient name', () => {
@@ -87,6 +88,11 @@ test('formats Kenya greeting periods', () => {
   assert.equal(getKenyaGreeting(new Date('2026-09-15T08:00:00.000Z')), 'Good morning');
   assert.equal(getKenyaGreeting(new Date('2026-09-15T12:00:00.000Z')), 'Good afternoon');
   assert.equal(getKenyaGreeting(new Date('2026-09-15T15:00:00.000Z')), 'Good evening');
+});
+
+test('conversation memory expires after three minutes', () => {
+  assert.equal(isConversationStale((CONVERSATION_MEMORY_MINUTES - 1) / 60), false);
+  assert.equal(isConversationStale(CONVERSATION_MEMORY_MINUTES / 60), true);
 });
 
 test('parses booking details from patient request', () => {

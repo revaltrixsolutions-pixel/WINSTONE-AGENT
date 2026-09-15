@@ -315,7 +315,7 @@ async function sendBotReply(
   if (patient.chatStatus === 'AGENT_ACTIVE') {
     const hoursSinceAgentMessage = await getLastAgentInteractionHours(patient.id);
 
-    if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < 6) {
+    if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < 3 / 60) {
       console.info('[WhatsApp Bot Suppressed] Chat is assigned to staff.', {
         patientId: patient.id,
         hoursSinceAgentMessage,

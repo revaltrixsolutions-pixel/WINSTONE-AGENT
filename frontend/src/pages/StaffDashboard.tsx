@@ -99,30 +99,39 @@ export const StaffDashboard: React.FC = () => {
 
       audioContextRef.current = audioContext;
 
+      const play = () => {
+        const startTime = audioContext.currentTime;
+        const notes = [
+          { frequency: 587.33, start: 0, duration: 0.8 },
+          { frequency: 783.99, start: 0.9, duration: 0.8 },
+          { frequency: 987.77, start: 1.8, duration: 0.8 },
+          { frequency: 783.99, start: 2.7, duration: 0.8 },
+          { frequency: 587.33, start: 3.6, duration: 1.2 },
+        ];
+
+        for (const note of notes) {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          const noteStart = startTime + note.start;
+          const noteEnd = noteStart + note.duration;
+
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(note.frequency, noteStart);
+          gainNode.gain.setValueAtTime(0.0001, noteStart);
+          gainNode.gain.exponentialRampToValueAtTime(0.12, noteStart + 0.06);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          oscillator.start(noteStart);
+          oscillator.stop(noteEnd);
+        }
+      };
+
       if (audioContext.state === 'suspended') {
-        void audioContext.resume();
+        void audioContext.resume().then(play);
+      } else {
+        play();
       }
-
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(
-        587.33,
-        audioContext.currentTime,
-      );
-
-      gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(
-        0.0001,
-        audioContext.currentTime + 0.45,
-      );
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.45);
     } catch (soundError) {
       console.warn('Notification sound unavailable:', soundError);
     }
