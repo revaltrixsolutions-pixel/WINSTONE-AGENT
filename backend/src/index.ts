@@ -261,181 +261,163 @@ app.get('/health', async (_req, res) => {
    DAILY APPOINTMENT REMINDERS
    ========================================================= */
 
-/**
- * Runs every day at 8:00 AM Nairobi time.
- *
- * Cron:
- * 0 8 * * *
- */
+const reminderWindowMinutes = [720, 360, 60] as const;
+const reminderDispatchState = new Map<string, Set<number>>();
 
-cron.schedule(
-  '0 8 * * *',
-  async () => {
-    console.info(
-      '[Cron Job] Starting appointment reminder check for tomorrow.',
-    );
+function formatAppointmentDateTime(date: Date): {
+  date: string;
+  time: string;
+} {
+  const dateString = date.toLocaleDateString('en-KE', {
+    timeZone: CRON_TIMEZONE,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 
-    try {
-      const startOfTomorrow = new Date();
+  const timeString = date.toLocaleTimeString('en-KE', {
+    timeZone: CRON_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 
-      startOfTomorrow.setDate(
-        startOfTomorrow.getDate() + 1,
-      );
+  return {
+    date: dateString,
+    time: timeString,
+  };
+}
 
-      startOfTomorrow.setHours(0, 0, 0, 0);
+async function dispatchAppointmentReminders(): Promise<void> {
+  const now = new Date();
 
-      const endOfTomorrow = new Date(
-        startOfTomorrow,
-      );
+  const upcomingWindowStart = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const upcomingWindowEnd = new Date(now.getTime() + 14 * 60 * 60 * 1000);
 
-      endOfTomorrow.setHours(
-        23,
-        59,
-        59,
-        999,
-      );
+  const appointments = await prisma.appointment.findMany({
+    where: {
+      status: 'CONFIRMED',
+      slotTime: {
+        gte: upcomingWindowStart,
+        lte: upcomingWindowEnd,
+      },
+    },
+    include: {
+      patient: true,
+    },
+  });
 
-      const appointments =
-        await prisma.appointment.findMany({
-          where: {
-            slotTime: {
-              gte: startOfTomorrow,
-              lte: endOfTomorrow,
-            },
-            status: 'CONFIRMED',
-          },
+  for (const appointment of appointments) {
+    const patientPhone = appointment.patient?.phoneNumber?.trim();
 
-          include: {
-            patient: true,
-          },
+    if (!patientPhone) {
+      continue;
+    }
+
+    const diffMinutes =
+      (appointment.slotTime.getTime() - now.getTime()) / 60000;
+
+    for (const reminderMinutes of reminderWindowMinutes) {
+      if (diffMinutes <= 0 || diffMinutes < reminderMinutes - 20) {
+        continue;
+      }
+
+      const distanceToWindow = Math.abs(diffMinutes - reminderMinutes);
+
+      if (distanceToWindow > 20) {
+        continue;
+      }
+
+      const key = `${appointment.id}:${reminderMinutes}`;
+      const seen = reminderDispatchState.get(appointment.id) ?? new Set<number>();
+
+      if (seen.has(reminderMinutes)) {
+        continue;
+      }
+
+      const { date, time } = formatAppointmentDateTime(appointment.slotTime);
+      const reminderLabel =
+        reminderMinutes === 720
+          ? '12 hours before'
+          : reminderMinutes === 360
+            ? '6 hours before'
+            : '1 hour before';
+
+      const reminderMessage = [
+        '🏥 *Phadam Hospital Appointment Reminder*',
+        '',
+        `This is a reminder that your appointment is ${reminderLabel}.`,
+        `Doctor: ${appointment.doctorName}`,
+        `Specialty: ${appointment.specialty}`,
+        `Date: ${date}`,
+        `Time: ${time}`,
+        '',
+        'Please contact the hospital if you need assistance or need to reschedule.',
+      ].join('\n');
+
+      try {
+        const whatsappResult = await sendWhatsAppMessage({
+          recipientPhone: patientPhone,
+          messageText: reminderMessage,
         });
 
-      console.info(
-        `[Cron Job] Found ${appointments.length} confirmed appointment(s) scheduled for tomorrow.`,
-      );
+        seen.add(reminderMinutes);
+        reminderDispatchState.set(appointment.id, seen);
 
-      for (const appointment of appointments) {
-        const patientPhone =
-          appointment.patient?.phoneNumber?.trim();
-
-        if (!patientPhone) {
-          console.warn(
-            '[Cron Job] Appointment skipped: patient has no phone number.',
-            {
-              appointmentId: appointment.id,
-              patientId: appointment.patientId,
-            },
-          );
-
-          continue;
-        }
-
-        const appointmentDate =
-          appointment.slotTime.toLocaleDateString(
-            'en-KE',
-            {
-              timeZone: CRON_TIMEZONE,
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            },
-          );
-
-        const appointmentTime =
-          appointment.slotTime.toLocaleTimeString(
-            'en-KE',
-            {
-              timeZone: CRON_TIMEZONE,
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            },
-          );
-
-        const reminderMessage = [
-          '🏥 *Phadam Hospital Appointment Reminder*',
-          '',
-          'You have an upcoming appointment tomorrow.',
-          `Specialty: ${appointment.specialty}`,
-          `Date: ${appointmentDate}`,
-          `Time: ${appointmentTime}`,
-          '',
-          'Please contact the hospital if you need assistance or need to reschedule.',
-        ].join('\n');
-
-        try {
-          const whatsappResult =
-            await sendWhatsAppMessage({
-              recipientPhone: patientPhone,
-              messageText: reminderMessage,
-            });
-
-          console.info(
-            '[Cron Job] Reminder accepted by WhatsApp.',
-            {
-              appointmentId: appointment.id,
-              patientId: appointment.patientId,
-              recipientPhone: patientPhone,
-              messageId:
-                whatsappResult.messageId,
-              simulated:
-                whatsappResult.simulated,
-            },
-          );
-        } catch (error) {
-          if (
-            error instanceof WhatsAppApiError
-          ) {
-            console.error(
-              '[Cron Job] WhatsApp reminder rejected.',
-              {
-                appointmentId:
-                  appointment.id,
-                patientId:
-                  appointment.patientId,
-                recipientPhone:
-                  patientPhone,
-                status: error.status,
-                metaCode:
-                  error.metaCode,
-                metaDetails:
-                  error.metaDetails,
-                fbTraceId:
-                  error.fbTraceId,
-                error: error.message,
-              },
-            );
-          } else {
-            console.error(
-              '[Cron Job] Failed to send appointment reminder.',
-              {
-                appointmentId:
-                  appointment.id,
-                patientId:
-                  appointment.patientId,
-                recipientPhone:
-                  patientPhone,
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : 'Unknown error',
-              },
-            );
-          }
+        console.info('[Cron Job] Appointment reminder sent.', {
+          appointmentId: appointment.id,
+          patientId: appointment.patientId,
+          reminderMinutes,
+          reminderLabel,
+          messageId: whatsappResult.messageId,
+          simulated: whatsappResult.simulated,
+        });
+      } catch (error) {
+        if (error instanceof WhatsAppApiError) {
+          console.error('[Cron Job] Appointment reminder rejected.', {
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            reminderMinutes,
+            reminderLabel,
+            recipientPhone: patientPhone,
+            status: error.status,
+            metaCode: error.metaCode,
+            metaDetails: error.metaDetails,
+            fbTraceId: error.fbTraceId,
+          });
+        } else {
+          console.error('[Cron Job] Failed to send appointment reminder.', {
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            reminderMinutes,
+            reminderLabel,
+            recipientPhone: patientPhone,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
         }
       }
 
-      console.info(
-        '[Cron Job] Appointment reminder check completed.',
-      );
+      void key;
+    }
+  }
+}
+
+/**
+ * Runs every 15 minutes to send 12h, 6h, and 1h reminders.
+ */
+cron.schedule(
+  '*/15 * * * *',
+  async () => {
+    console.info('[Cron Job] Checking appointment reminders.');
+
+    try {
+      await dispatchAppointmentReminders();
+      console.info('[Cron Job] Appointment reminder check completed.');
     } catch (error) {
       console.error(
         '[Cron Job] Failed to query or process appointment reminders.',
-        error instanceof Error
-          ? error.stack ||
-            error.message
-          : error,
+        error instanceof Error ? error.stack || error.message : error,
       );
     }
   },

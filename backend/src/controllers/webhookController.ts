@@ -2,6 +2,16 @@
 
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import {
+  extractPatientName,
+  generateBotReply,
+  isConversationStale,
+  updateAppointmentConversation,
+} from '../services/aiBotService';
+import {
+  sendWhatsAppMessage,
+  WhatsAppApiError,
+} from '../services/whatsappService';
 
 /* ==========================================================================
    WHATSAPP WEBHOOK TYPES
@@ -138,6 +148,241 @@ type WhatsAppWebhookPayload = {
  */
 function normalizePhoneNumber(phoneNumber: string): string {
   return phoneNumber.replace(/\D/g, '');
+}
+
+async function getLastInteractionHours(
+  patientId: string,
+): Promise<number> {
+  const lastMessage = await prisma.messageLog.findFirst({
+    where: {
+      patientId,
+    },
+    orderBy: {
+      timestamp: 'desc',
+    },
+    select: {
+      timestamp: true,
+    },
+  });
+
+  if (!lastMessage?.timestamp) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const diffMs = Date.now() - new Date(lastMessage.timestamp).getTime();
+  return diffMs / (1000 * 60 * 60);
+}
+
+function parseAppointmentDate(dateText: string, timeText: string): Date {
+  const normalizedDate = dateText.toLowerCase();
+  const normalizedTime = timeText.toLowerCase();
+
+  const base = new Date();
+  const dateOnly = new Date(base);
+  dateOnly.setHours(0, 0, 0, 0);
+
+  const timeMatch = normalizedTime.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  const parsedHour = timeMatch ? Number(timeMatch[1]) : 9;
+  const parsedMinute = timeMatch && timeMatch[2] ? Number(timeMatch[2]) : 0;
+  let hour = parsedHour;
+  const meridiem = timeMatch?.[3]?.toLowerCase();
+
+  if (meridiem === 'pm' && hour < 12) {
+    hour += 12;
+  }
+  if (meridiem === 'am' && hour === 12) {
+    hour = 0;
+  }
+
+  if (normalizedDate.includes('today')) {
+    dateOnly.setHours(hour, parsedMinute, 0, 0);
+    return dateOnly;
+  }
+
+  if (normalizedDate.includes('tomorrow')) {
+    dateOnly.setDate(dateOnly.getDate() + 1);
+    dateOnly.setHours(hour, parsedMinute, 0, 0);
+    return dateOnly;
+  }
+
+  const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const weekdayIndex = weekdays.findIndex((day) => normalizedDate.includes(day));
+  if (weekdayIndex >= 0) {
+    const currentIndex = dateOnly.getDay();
+    const daysUntil = (weekdayIndex - currentIndex + 7) % 7 || 7;
+    dateOnly.setDate(dateOnly.getDate() + daysUntil);
+    dateOnly.setHours(hour, parsedMinute, 0, 0);
+    return dateOnly;
+  }
+
+  if (normalizedDate.includes('next week')) {
+    dateOnly.setDate(dateOnly.getDate() + 7);
+    dateOnly.setHours(hour, parsedMinute, 0, 0);
+    return dateOnly;
+  }
+
+  const directDate = new Date(normalizedDate);
+  if (!Number.isNaN(directDate.getTime())) {
+    directDate.setHours(hour, parsedMinute, 0, 0);
+    return directDate;
+  }
+
+  dateOnly.setHours(hour, parsedMinute, 0, 0);
+  return dateOnly;
+}
+
+async function sendBotReply(
+  patient: {
+    id: string;
+    phoneNumber: string;
+    fullName?: string | null;
+  },
+  incomingMessage: string,
+): Promise<void> {
+  const patientName = patient.fullName || extractPatientName(incomingMessage) || 'Patient';
+  const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(incomingMessage);
+
+  if (bookingIntent || appointmentConversationState.has(patient.id)) {
+    const appointmentState = updateAppointmentConversation(patient.id, patientName, incomingMessage);
+
+    if (!appointmentState.completed) {
+      const replyText = appointmentState.prompt;
+
+      try {
+        await sendWhatsAppMessage({
+          recipientPhone: patient.phoneNumber,
+          messageText: replyText,
+        });
+
+        await prisma.messageLog.create({
+          data: {
+            patientId: patient.id,
+            sender: 'BOT',
+            body: replyText,
+            timestamp: new Date(),
+          },
+        });
+
+        console.info('[WhatsApp Appointment Prompt Sent]', {
+          patientId: patient.id,
+          prompt: replyText,
+        });
+      } catch (error) {
+        console.error('[WhatsApp Appointment Prompt Failed]', {
+          patientId: patient.id,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+
+      if (appointmentState.awaitingConfirmation) {
+        return;
+      }
+
+      return;
+    }
+
+    const { date, time, department } = appointmentState.data!;
+    const slotTime = parseAppointmentDate(date, time);
+
+    try {
+      const appointment = await prisma.appointment.create({
+        data: {
+          patientId: patient.id,
+          doctorName: 'To be assigned',
+          specialty: department,
+          slotTime,
+          status: 'CONFIRMED',
+        },
+      });
+
+      const confirmationText = `Thank you, ${patientName}. Your appointment has been booked for ${date} at ${time} in the ${department} department. Your appointment reference is ${appointment.id.slice(0, 8)}.`;
+
+      await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText: confirmationText,
+      });
+
+      await prisma.messageLog.create({
+        data: {
+          patientId: patient.id,
+          sender: 'BOT',
+          body: confirmationText,
+          timestamp: new Date(),
+        },
+      });
+
+      console.info('[WhatsApp Booking Saved]', {
+        patientId: patient.id,
+        appointmentId: appointment.id,
+        date,
+        time,
+        department,
+      });
+
+      return;
+    } catch (error) {
+      console.error('[WhatsApp Booking Save Failed]', {
+        patientId: patient.id,
+        error: error instanceof Error ? error.message : error,
+      });
+      return;
+    }
+  }
+
+  const lastInteractionHours = await getLastInteractionHours(patient.id);
+  const replyText = generateBotReply({
+    patientName: patientName || null,
+    message: incomingMessage,
+    isReturning: isConversationStale(lastInteractionHours),
+    lastInteractionHours,
+  });
+
+  if (!replyText.trim()) {
+    return;
+  }
+
+  try {
+    const whatsappResult = await sendWhatsAppMessage({
+      recipientPhone: patient.phoneNumber,
+      messageText: replyText,
+    });
+
+    await prisma.messageLog.create({
+      data: {
+        patientId: patient.id,
+        sender: 'BOT',
+        body: replyText,
+        timestamp: new Date(),
+      },
+    });
+
+    console.info('[WhatsApp Auto Reply Sent]', {
+      patientId: patient.id,
+      recipientPhone: patient.phoneNumber,
+      messageId: whatsappResult.messageId,
+      simulated: whatsappResult.simulated,
+      patientName: patientName || null,
+    });
+  } catch (error) {
+    if (error instanceof WhatsAppApiError) {
+      console.error('[WhatsApp Auto Reply API Error]', {
+        patientId: patient.id,
+        recipientPhone: patient.phoneNumber,
+        status: error.status,
+        metaCode: error.metaCode,
+        metaType: error.metaType,
+        metaDetails: error.metaDetails,
+        fbTraceId: error.fbTraceId,
+      });
+      return;
+    }
+
+    console.error('[WhatsApp Auto Reply Send Failed]', {
+      patientId: patient.id,
+      recipientPhone: patient.phoneNumber,
+      error: error instanceof Error ? error.message : error,
+    });
+  }
 }
 
 /**
@@ -458,6 +703,7 @@ export async function handleWhatsAppWebhook(
               phoneNumber: true,
               chatStatus: true,
               assignedTo: true,
+              fullName: true,
             },
           });
 
@@ -478,6 +724,7 @@ export async function handleWhatsAppWebhook(
                 phoneNumber: true,
                 chatStatus: true,
                 assignedTo: true,
+                fullName: true,
               },
             });
 
@@ -488,14 +735,23 @@ export async function handleWhatsAppWebhook(
             });
           }
 
-          /*
-           * Meta can retry webhook events if a request is delayed or fails.
-           *
-           * This fallback prevents most duplicate messages even if your
-           * MessageLog model does not yet have whatsappMessageId.
-           */
-          const duplicateWindowStart = new Date(
-            sentAt.getTime() - 60_000,
+          const detectedName = patient.fullName || extractPatientName(messageBody);
+
+          if (detectedName && !patient.fullName) {
+            patient = await prisma.patient.update({
+              where: {
+                id: patient.id,
+              },
+              data: {
+                fullName: detectedName,
+              },
+              select: {
+                id: true,
+                phoneNumber: true,
+                chatStatus: true,
+                assignedTo: true,
+                fullName: true,
+              },
           );
 
           const duplicateWindowEnd = new Date(
@@ -580,6 +836,15 @@ export async function handleWhatsAppWebhook(
             chatStatus: updatedPatient.chatStatus,
             assignedTo: updatedPatient.assignedTo,
           });
+
+          await sendBotReply(
+            {
+              id: patient.id,
+              phoneNumber: patient.phoneNumber,
+              fullName: patient.fullName || detectedName || null,
+            },
+            messageBody,
+          );
         }
       }
     }
