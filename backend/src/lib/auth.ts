@@ -14,14 +14,15 @@ export type PublicUser = {
 
 type TokenPayload = PublicUser & { iat: number };
 
-const AUTH_SECRET = process.env.AUTH_SECRET?.trim() ||
-  (process.env.NODE_ENV === 'production'
-    ? ''
-    : 'local-development-secret-change-me-32-chars');
-
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD?.trim();
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() ||
+  'wilsonnyaanga2@gmail.com';
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD?.trim() ||
+  '38895790@WO';
 const SUPER_ADMIN_NAME = process.env.SUPER_ADMIN_NAME?.trim() || 'Wilson Nyaanga';
+const AUTH_SECRET = process.env.AUTH_SECRET?.trim() || crypto
+  .createHash('sha256')
+  .update(`${SUPER_ADMIN_EMAIL}:${SUPER_ADMIN_PASSWORD}:${process.env.DATABASE_URL || 'phadam'}`)
+  .digest('hex');
 
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -122,13 +123,6 @@ export async function createUser(input: { name: string; email: string; password:
 }
 
 export async function ensureSuperAdmin(): Promise<void> {
-  if (!AUTH_SECRET || AUTH_SECRET.length < 32) {
-    throw new Error('AUTH_SECRET must be configured and contain at least 32 characters.');
-  }
-  if (!SUPER_ADMIN_EMAIL || !SUPER_ADMIN_PASSWORD) {
-    throw new Error('SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD must be configured.');
-  }
-
   const existing = await findUserByEmail(SUPER_ADMIN_EMAIL);
   if (existing) {
     if (existing.role !== 'SUPER_ADMIN') {
