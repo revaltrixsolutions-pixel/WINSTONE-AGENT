@@ -11,98 +11,165 @@ const node_cron_1 = __importDefault(require("node-cron"));
 const webhookRoutes_1 = __importDefault(require("./routes/webhookRoutes"));
 const publicApiRoutes_1 = __importDefault(require("./routes/publicApiRoutes"));
 const agentRoutes_1 = __importDefault(require("./routes/agentRoutes"));
+const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const prisma_1 = require("./lib/prisma");
+const auth_1 = require("./lib/auth");
 const whatsappService_1 = require("./services/whatsappService");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = Number(process.env.PORT || 5000);
 const APP_NAME = 'Phadam Medical Automation Engine';
 const CRON_TIMEZONE = 'Africa/Nairobi';
+/* =========================================================
+   STARTUP VALIDATION
+   ========================================================= */
 if (Number.isNaN(PORT) || PORT <= 0) {
     throw new Error(`[Startup Error]: Invalid PORT value "${process.env.PORT}".`);
 }
+/* =========================================================
+   CORS CONFIGURATION
+   ========================================================= */
 /**
- * Allowed frontend origins.
+ * Production frontend:
+ * https://phadam-whats-app.vercel.app
  *
- * Example .env:
+ * Production backend:
+ * https://phadamwhatsapp.onrender.com
  *
- * FRONTEND_URL=https://app.phadamhospital.co.ke
+ * Render environment variables supported:
  *
- * For multiple frontend URLs:
+ * FRONTEND_URL=https://phadam-whats-app.vercel.app
  *
- * FRONTEND_URLS=https://app.phadamhospital.co.ke,https://admin.phadamhospital.co.ke
+ * FRONTEND_URLS=https://example1.com,https://example2.com
  */
-const allowedOrigins = [
+const defaultAllowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
+    'https://phadam-whats-app.vercel.app',
+];
+const environmentOrigins = [
     process.env.FRONTEND_URL,
     ...(process.env.FRONTEND_URLS?.split(',') ?? []),
+];
+const normalizeOrigin = (origin) => origin.trim().replace(/\/+$/, '');
+const allowedOrigins = [
+    ...defaultAllowedOrigins,
+    ...environmentOrigins,
 ]
-    .map((origin) => origin?.trim())
-    .filter((origin) => Boolean(origin));
+    .filter((origin) => Boolean(origin))
+    .map(normalizeOrigin)
+    .filter((origin, index, origins) => origins.indexOf(origin) === index);
+console.info('[CORS] Allowed origins:', allowedOrigins);
 const corsOptions = {
     origin(origin, callback) {
         /*
-         * Requests without Origin are commonly server-to-server requests,
-         * cURL requests, uptime checks, Meta webhook callbacks, and Postman.
+         * Requests without Origin include:
+         *
+         * - Meta WhatsApp webhooks
+         * - cURL
+         * - Postman
+         * - Render health checks
+         * - Server-to-server requests
          */
         if (!origin) {
-            callback(null, true);
-            return;
+            return callback(null, true);
         }
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-            return;
+        const normalizedOrigin = normalizeOrigin(origin);
+        if (allowedOrigins.includes(normalizedOrigin)) {
+            console.info('[CORS Allowed]', {
+                origin: normalizedOrigin,
+            });
+            return callback(null, true);
         }
         console.warn('[CORS Blocked]', {
-            origin,
+            origin: normalizedOrigin,
             allowedOrigins,
         });
-        callback(new Error(`Origin "${origin}" is not allowed by CORS.`));
+        /*
+         * Return an error so the application does not silently
+         * allow an unknown browser origin.
+         */
+        return callback(new Error(`Origin "${normalizedOrigin}" is not allowed by CORS.`));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: [
+        'GET',
+        'POST',
+        'PUT',
+        'PATCH',
+        'DELETE',
+        'OPTIONS',
+    ],
     allowedHeaders: [
         'Content-Type',
         'Authorization',
         'x-api-key',
         'x-hub-signature-256',
     ],
+    exposedHeaders: [
+        'Content-Length',
+        'Content-Type',
+    ],
+    optionsSuccessStatus: 204,
 };
-app.use((0, cors_1.default)(corsOptions));
-/**
- * Meta WhatsApp webhook requests are normal JSON payloads in the
- * current controller implementation.
- *
- * Keep express.json() before the routes only if your webhook controller
- * does not validate Meta's x-hub-signature-256 against the raw request body.
- *
- * If you later add raw Meta webhook signature validation, mount the
- * webhook router BEFORE express.json() and use express.raw() only on
- * the POST webhook route.
+/*
+ * CORS middleware must be registered before the routes.
  */
-app.use(express_1.default.json({ limit: '1mb' }));
-/**
- * Application routes
+app.use((0, cors_1.default)(corsOptions));
+/*
+ * Explicit OPTIONS/preflight handling.
+ */
+app.options('*', (0, cors_1.default)(corsOptions));
+/* =========================================================
+   BODY PARSER
+   ========================================================= */
+app.use(express_1.default.json({
+    limit: '1mb',
+}));
+/* =========================================================
+   REQUEST LOGGING
+   ========================================================= */
+app.use((req, _res, next) => {
+    console.info('[HTTP Request]', {
+        method: req.method,
+        path: req.path,
+        origin: req.headers.origin || 'none',
+        userAgent: req.headers['user-agent'] || 'unknown',
+    });
+    next();
+});
+/* =========================================================
+   ROUTES
+   ========================================================= */
+/*
+ * WhatsApp / Meta webhook
  *
- * Meta callback endpoint:
- * GET/POST https://your-domain.com/webhook
+ * GET:
+ * Meta webhook verification
  *
- * Public notification endpoint:
- * POST https://your-domain.com/api/v1/send-notification
- *
- * Agent dashboard endpoints:
- * GET/POST https://your-domain.com/api/agent/...
+ * POST:
+ * Incoming WhatsApp messages and status updates
  */
 app.use('/webhook', webhookRoutes_1.default);
-app.use('/api/v1', publicApiRoutes_1.default);
-app.use('/api/agent', agentRoutes_1.default);
-/**
- * Basic health-check endpoint.
- *
- * Use this for load balancers, deployment health checks,
- * UptimeRobot, Render, Railway, Fly.io, or reverse proxies.
+/*
+ * Public API
  */
+app.use('/api/v1', publicApiRoutes_1.default);
+/*
+ * Auth and admin API
+ */
+app.use('/api/auth', authRoutes_1.default);
+/*
+ * Agent dashboard API
+ *
+ * GET  /api/agent/chats
+ * POST /api/agent/assign
+ * POST /api/agent/reply
+ */
+app.use('/api/agent', agentRoutes_1.default);
+/* =========================================================
+   ROOT HEALTH CHECK
+   ========================================================= */
 app.get('/', (_req, res) => {
     return res.status(200).json({
         success: true,
@@ -112,6 +179,9 @@ app.get('/', (_req, res) => {
         timestamp: new Date().toISOString(),
     });
 });
+/* =========================================================
+   DATABASE HEALTH CHECK
+   ========================================================= */
 app.get('/health', async (_req, res) => {
     try {
         await prisma_1.prisma.$queryRaw `SELECT 1`;
@@ -124,127 +194,146 @@ app.get('/health', async (_req, res) => {
         });
     }
     catch (error) {
-        console.error('[Health Check Error]', error instanceof Error ? error.message : error);
+        console.error('[Health Check Error]', error instanceof Error
+            ? error.message
+            : error);
         return res.status(503).json({
             success: false,
             service: APP_NAME,
             status: 'unhealthy',
             database: 'unavailable',
+            timestamp: new Date().toISOString(),
         });
     }
 });
-/**
- * Daily appointment reminders.
- *
- * Schedule:
- * 0 8 * * *
- *
- * Meaning:
- * 8:00 AM every day in Africa/Nairobi timezone.
- */
-node_cron_1.default.schedule('0 8 * * *', async () => {
-    console.info('[Cron Job] Starting appointment reminder check for tomorrow.');
-    try {
-        const startOfTomorrow = new Date();
-        startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
-        startOfTomorrow.setHours(0, 0, 0, 0);
-        const endOfTomorrow = new Date(startOfTomorrow);
-        endOfTomorrow.setHours(23, 59, 59, 999);
-        const appointments = await prisma_1.prisma.appointment.findMany({
-            where: {
-                slotTime: {
-                    gte: startOfTomorrow,
-                    lte: endOfTomorrow,
-                },
-                status: 'CONFIRMED',
+/* =========================================================
+   DAILY APPOINTMENT REMINDERS
+   ========================================================= */
+const reminderWindowMinutes = [720, 360, 60];
+const reminderDispatchState = new Map();
+function formatAppointmentDateTime(date) {
+    const dateString = date.toLocaleDateString('en-KE', {
+        timeZone: CRON_TIMEZONE,
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+    const timeString = date.toLocaleTimeString('en-KE', {
+        timeZone: CRON_TIMEZONE,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    });
+    return {
+        date: dateString,
+        time: timeString,
+    };
+}
+async function dispatchAppointmentReminders() {
+    const now = new Date();
+    const upcomingWindowStart = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const upcomingWindowEnd = new Date(now.getTime() + 14 * 60 * 60 * 1000);
+    const appointments = await prisma_1.prisma.appointment.findMany({
+        where: {
+            status: 'CONFIRMED',
+            slotTime: {
+                gte: upcomingWindowStart,
+                lte: upcomingWindowEnd,
             },
-            include: {
-                patient: true,
-            },
-        });
-        console.info(`[Cron Job] Found ${appointments.length} confirmed appointment(s) scheduled for tomorrow.`);
-        for (const appointment of appointments) {
-            const patientPhone = appointment.patient?.phoneNumber?.trim();
-            if (!patientPhone) {
-                console.warn('[Cron Job] Appointment skipped: patient has no phone number.', {
-                    appointmentId: appointment.id,
-                    patientId: appointment.patientId,
-                });
+        },
+        include: {
+            patient: true,
+        },
+    });
+    for (const appointment of appointments) {
+        const patientPhone = appointment.patient?.phoneNumber?.trim();
+        if (!patientPhone) {
+            continue;
+        }
+        const diffMinutes = (appointment.slotTime.getTime() - now.getTime()) / 60000;
+        for (const reminderMinutes of reminderWindowMinutes) {
+            if (diffMinutes <= 0 || diffMinutes < reminderMinutes - 20) {
                 continue;
             }
-            const appointmentDate = appointment.slotTime.toLocaleDateString('en-KE', {
-                timeZone: CRON_TIMEZONE,
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-            });
-            const appointmentTime = appointment.slotTime.toLocaleTimeString('en-KE', {
-                timeZone: CRON_TIMEZONE,
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true,
-            });
+            const distanceToWindow = Math.abs(diffMinutes - reminderMinutes);
+            if (distanceToWindow > 20) {
+                continue;
+            }
+            const key = `${appointment.id}:${reminderMinutes}`;
+            const seen = reminderDispatchState.get(appointment.id) ?? new Set();
+            if (seen.has(reminderMinutes)) {
+                continue;
+            }
+            const { date, time } = formatAppointmentDateTime(appointment.slotTime);
+            const reminderLabel = reminderMinutes === 720
+                ? '12 hours before'
+                : reminderMinutes === 360
+                    ? '6 hours before'
+                    : '1 hour before';
             const reminderMessage = [
                 '🏥 *Phadam Hospital Appointment Reminder*',
                 '',
-                `You have an upcoming appointment tomorrow.`,
+                `This is a reminder that your appointment is ${reminderLabel}.`,
+                `Doctor: ${appointment.doctorName}`,
                 `Specialty: ${appointment.specialty}`,
-                `Date: ${appointmentDate}`,
-                `Time: ${appointmentTime}`,
+                `Date: ${date}`,
+                `Time: ${time}`,
                 '',
                 'Please contact the hospital if you need assistance or need to reschedule.',
             ].join('\n');
             try {
-                /*
-                 * Updated WhatsApp service signature.
-                 *
-                 * Old:
-                 * sendWhatsAppMessage(patientPhone, reminderMessage)
-                 *
-                 * New:
-                 * sendWhatsAppMessage({
-                 *   recipientPhone: patientPhone,
-                 *   messageText: reminderMessage,
-                 * })
-                 */
                 const whatsappResult = await (0, whatsappService_1.sendWhatsAppMessage)({
                     recipientPhone: patientPhone,
                     messageText: reminderMessage,
                 });
-                console.info('[Cron Job] Reminder accepted by WhatsApp.', {
+                seen.add(reminderMinutes);
+                reminderDispatchState.set(appointment.id, seen);
+                console.info('[Cron Job] Appointment reminder sent.', {
                     appointmentId: appointment.id,
                     patientId: appointment.patientId,
-                    recipientPhone: patientPhone,
+                    reminderMinutes,
+                    reminderLabel,
                     messageId: whatsappResult.messageId,
                     simulated: whatsappResult.simulated,
                 });
             }
             catch (error) {
                 if (error instanceof whatsappService_1.WhatsAppApiError) {
-                    console.error('[Cron Job] WhatsApp reminder rejected.', {
+                    console.error('[Cron Job] Appointment reminder rejected.', {
                         appointmentId: appointment.id,
                         patientId: appointment.patientId,
+                        reminderMinutes,
+                        reminderLabel,
                         recipientPhone: patientPhone,
                         status: error.status,
                         metaCode: error.metaCode,
                         metaDetails: error.metaDetails,
                         fbTraceId: error.fbTraceId,
-                        error: error.message,
                     });
                 }
                 else {
                     console.error('[Cron Job] Failed to send appointment reminder.', {
                         appointmentId: appointment.id,
                         patientId: appointment.patientId,
+                        reminderMinutes,
+                        reminderLabel,
                         recipientPhone: patientPhone,
-                        error: error instanceof Error
-                            ? error.message
-                            : 'Unknown error',
+                        error: error instanceof Error ? error.message : 'Unknown error',
                     });
                 }
             }
+            void key;
         }
+    }
+}
+/**
+ * Runs every 15 minutes to send 12h, 6h, and 1h reminders.
+ */
+node_cron_1.default.schedule('*/15 * * * *', async () => {
+    console.info('[Cron Job] Checking appointment reminders.');
+    try {
+        await dispatchAppointmentReminders();
         console.info('[Cron Job] Appointment reminder check completed.');
     }
     catch (error) {
@@ -253,48 +342,81 @@ node_cron_1.default.schedule('0 8 * * *', async () => {
 }, {
     timezone: CRON_TIMEZONE,
 });
-/**
- * Central Express error handler.
- *
- * This catches, among other things:
- * - Invalid JSON bodies
- * - CORS rejection errors
- * - Unexpected route errors passed through next(error)
- */
+/* =========================================================
+   404 HANDLER
+   ========================================================= */
+app.use((req, res) => {
+    console.warn('[404 Not Found]', {
+        method: req.method,
+        path: req.path,
+    });
+    return res.status(404).json({
+        success: false,
+        error: 'Route not found.',
+        path: req.path,
+    });
+});
+/* =========================================================
+   CENTRAL ERROR HANDLER
+   ========================================================= */
 app.use((error, _req, res, _next) => {
     console.error('[Express Error Handler]', error.message);
-    if (error instanceof SyntaxError && 'body' in error) {
+    /*
+     * Invalid JSON
+     */
+    if (error instanceof SyntaxError &&
+        'body' in error) {
         return res.status(400).json({
             success: false,
             error: 'Invalid JSON request body.',
         });
     }
-    if (error.message.includes('not allowed by CORS')) {
+    /*
+     * CORS error
+     */
+    if (error.message
+        .toLowerCase()
+        .includes('cors') ||
+        error.message
+            .toLowerCase()
+            .includes('origin')) {
         return res.status(403).json({
             success: false,
             error: 'Request origin is not allowed.',
         });
     }
+    /*
+     * General server error
+     */
     return res.status(500).json({
         success: false,
         error: 'Internal server error.',
     });
 });
-const server = app.listen(PORT, () => {
-    console.info('========================================');
-    console.info(`🚀 ${APP_NAME} is running.`);
-    console.info(`📍 Port: ${PORT}`);
-    console.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.info(`🕗 Reminder Cron Timezone: ${CRON_TIMEZONE}`);
-    console.info('========================================');
+/* =========================================================
+   START SERVER
+   ========================================================= */
+let server;
+async function startServer() {
+    await (0, auth_1.ensureSuperAdmin)();
+    server = app.listen(PORT, '0.0.0.0', () => {
+        console.info('========================================');
+        console.info(`🚀 ${APP_NAME} is running.`);
+        console.info(`📍 Port: ${PORT}`);
+        console.info(`🌍 Environment: ${process.env.NODE_ENV ||
+            'development'}`);
+        console.info(`🕗 Reminder Cron Timezone: ${CRON_TIMEZONE}`);
+        console.info(`🌐 Frontend origins configured: ${allowedOrigins.join(', ')}`);
+        console.info('========================================');
+    });
+}
+void startServer().catch((error) => {
+    console.error('[Startup Error]', error);
+    process.exit(1);
 });
-/**
- * Graceful shutdown.
- *
- * Stops Express from accepting new connections and disconnects Prisma
- * cleanly when the host, Docker container, PM2, Render, Railway, etc.
- * sends a termination signal.
- */
+/* =========================================================
+   GRACEFUL SHUTDOWN
+   ========================================================= */
 async function shutdown(signal) {
     console.info(`[Shutdown] ${signal} received. Closing server...`);
     server.close(async () => {
@@ -305,7 +427,9 @@ async function shutdown(signal) {
             process.exit(0);
         }
         catch (error) {
-            console.error('[Shutdown] Failed to disconnect Prisma cleanly.', error instanceof Error ? error.message : error);
+            console.error('[Shutdown] Failed to disconnect Prisma cleanly.', error instanceof Error
+                ? error.message
+                : error);
             process.exit(1);
         }
     });

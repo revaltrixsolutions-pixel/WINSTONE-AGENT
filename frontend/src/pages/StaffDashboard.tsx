@@ -9,6 +9,13 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatQueue } from '../components/ChatQueue';
 import { ChatWindow } from '../components/ChatWindow';
 import { AppointmentTable } from '../components/AppointmentTable';
+import {
+  createUserAccount,
+  fetchCurrentUser,
+  fetchUsers,
+  loginToDashboard,
+  logoutDashboard,
+} from '../services/api';
 
 import {
   assignChatToAgent,
@@ -27,11 +34,52 @@ export const StaffDashboard: React.FC = () => {
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    role: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
+  } | null>(null);
+  const [loginForm, setLoginForm] = useState({ email: 'superadmin@phadam.com', password: 'Phadam123!' });
+  const [adminUsers, setAdminUsers] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
+  }>>([]);
+  const [adminForm, setAdminForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'STAFF' as 'SUPER_ADMIN' | 'ADMIN' | 'STAFF',
+  });
+  const [adminBusy, setAdminBusy] = useState(false);
 
   const previousChatIds = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
   const isLoadingChatsRef = useRef(false);
+
+  const notifyBrowser = useCallback((newChatCount: number) => {
+    if (!('Notification' in window)) return;
+
+    if (Notification.permission === 'granted') {
+      new Notification('New message from patient', {
+        body: `${newChatCount} new WhatsApp conversation${newChatCount > 1 ? 's are' : ' is'} waiting in the queue.`,
+        tag: 'phadam-whatsapp-new-chat',
+      });
+    }
+  }, []);
+
+  const requestNotificationPermission = useCallback(async () => {
+    if (!('Notification' in window)) return;
+
+    if (Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+  }, []);
 
   const playNotificationSound = useCallback(() => {
     try {
@@ -96,12 +144,9 @@ export const StaffDashboard: React.FC = () => {
         previousIds.size > 0 &&
         [...nextChatIds].some((id) => !previousIds.has(id));
 
-      if (
-        hasNewChats &&
-        typeof document !== 'undefined' &&
-        document.visibilityState === 'visible'
-      ) {
+      if (hasNewChats) {
         playNotificationSound();
+        notifyBrowser(nextChats.length - previousIds.size || 1);
       }
 
       previousChatIds.current = nextChatIds;
@@ -123,9 +168,86 @@ export const StaffDashboard: React.FC = () => {
       isLoadingChatsRef.current = false;
       setIsLoading(false);
     }
-  }, [playNotificationSound]);
+  }, [notifyBrowser, playNotificationSound]);
+
+  const handleLogin = useCallback(async () => {
+    try {
+      setAuthError(null);
+      const response = await loginToDashboard(loginForm.email, loginForm.password);
+
+      if (!response.success || !response.user) {
+        throw new Error(response.error || 'Login failed.');
+      }
+
+      setCurrentUser(response.user);
+      setActiveTab(response.user.role === 'SUPER_ADMIN' ? 'admin' : 'inbox');
+      await requestNotificationPermission();
+      void loadChats();
+    } catch (loginError) {
+      const message = loginError instanceof Error ? loginError.message : 'Login failed.';
+      setAuthError(message);
+    }
+  }, [loadChats, loginForm.email, loginForm.password, requestNotificationPermission]);
+
+  const handleLogout = useCallback(() => {
+    logoutDashboard();
+    setCurrentUser(null);
+    setAuthError(null);
+    setActiveTab('inbox');
+    setChatListEmpty();
+  }, []);
+
+  const setChatListEmpty = useCallback(() => {
+    setChats([]);
+    setSelectedChat(null);
+    previousChatIds.current = new Set();
+  }, []);
+
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      const user = await fetchCurrentUser();
+      setCurrentUser(user);
+
+      if (user) {
+        await requestNotificationPermission();
+      }
+    } catch {
+      setCurrentUser(null);
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, [requestNotificationPermission]);
+
+  const loadAdminUsers = useCallback(async () => {
+    if (!currentUser) {
+      return;
+    }
+
+    try {
+      const users = await fetchUsers();
+      setAdminUsers(users);
+    } catch (loadUsersError) {
+      console.error('Unable to load admin users:', loadUsersError);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
+    void loadCurrentUser();
+  }, [loadCurrentUser]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    void loadAdminUsers();
+  }, [currentUser, loadAdminUsers]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
     void loadChats();
 
     const intervalId = window.setInterval(() => {
@@ -135,7 +257,38 @@ export const StaffDashboard: React.FC = () => {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [loadChats]);
+  }, [currentUser, loadChats]);
+
+  const handleCreateUser = useCallback(async () => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      setAuthError('Only the super admin can create users.');
+      return;
+    }
+
+    try {
+      setAdminBusy(true);
+      const payload = {
+        name: adminForm.name.trim(),
+        email: adminForm.email.trim(),
+        password: adminForm.password,
+        role: adminForm.role,
+      };
+
+      const response = await createUserAccount(payload);
+
+      if (!response.success) {
+        throw new Error(response.error || 'Unable to create user.');
+      }
+
+      setAdminForm({ name: '', email: '', password: '', role: 'STAFF' });
+      await loadAdminUsers();
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : 'Unable to create user.';
+      setError(message);
+    } finally {
+      setAdminBusy(false);
+    }
+  }, [adminForm, currentUser, loadAdminUsers]);
 
   useEffect(() => {
     return () => {
@@ -214,6 +367,71 @@ export const StaffDashboard: React.FC = () => {
     setMobileQueueOpen(false);
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <div className="rounded-3xl border border-white/10 bg-white/5 px-8 py-6 text-center shadow-2xl">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-fuchsia-500 border-t-transparent" />
+          <p className="text-lg font-black">Loading Phadam WhatsApp</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#3b0764_0%,_#111827_35%,_#020617_100%)] px-4 py-8 text-white">
+        <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-900/80 p-7 shadow-2xl backdrop-blur-xl">
+          <div className="mb-6 text-center">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-fuchsia-500 via-violet-500 to-cyan-400 text-3xl font-black shadow-lg">
+              P
+            </div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-violet-300">Phadam WhatsApp</p>
+            <h1 className="mt-3 text-3xl font-black tracking-tight">You are not logged in.</h1>
+            <p className="mt-2 text-sm text-slate-300">Please log in to access the hospital dashboard.</p>
+          </div>
+
+          <label className="mb-4 block text-sm font-medium text-slate-200">
+            Email
+            <input
+              type="email"
+              value={loginForm.email}
+              onChange={(event) => setLoginForm((prev) => ({ ...prev, email: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none ring-0 placeholder:text-slate-500 focus:border-violet-400"
+              placeholder="name@phadam.com"
+            />
+          </label>
+
+          <label className="mb-5 block text-sm font-medium text-slate-200">
+            Password
+            <input
+              type="password"
+              value={loginForm.password}
+              onChange={(event) => setLoginForm((prev) => ({ ...prev, password: event.target.value }))}
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-violet-400"
+              placeholder="••••••••"
+            />
+          </label>
+
+          {authError && (
+            <div className="mb-4 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+              {authError}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void handleLogin()}
+            className="w-full rounded-2xl bg-gradient-to-r from-fuchsia-600 via-violet-600 to-cyan-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/30 transition hover:scale-[1.01]"
+          >
+            Log in to dashboard
+          </button>
+
+        </div>
+      </div>
+    );
+  }
+
   const renderMobileHeader = () => {
     if (activeTab === 'inbox' && selectedChat) {
       return (
@@ -253,14 +471,24 @@ export const StaffDashboard: React.FC = () => {
               Phadam Portal
             </h1>
             <p className="text-[11px] font-medium text-slate-400">
-              Staff workspace
+              {currentUser.name}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-2 text-[11px] font-bold text-emerald-300">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-          Online
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-2 text-[11px] font-bold text-emerald-300">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+            Online
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold text-slate-100 hover:bg-white/10"
+          >
+            Log out
+          </button>
         </div>
       </header>
     );
@@ -324,11 +552,37 @@ export const StaffDashboard: React.FC = () => {
           <Sidebar
             activeTab={activeTab}
             setActiveTab={handleTabChange}
+            isSuperAdmin={currentUser?.role === 'SUPER_ADMIN'}
           />
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {renderMobileHeader()}
+
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur md:px-6">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-violet-500">Operations</p>
+              <h2 className="text-base font-black text-slate-800">{currentUser.name}</h2>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void requestNotificationPermission()}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                Enable alerts
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-700"
+              >
+                Log out
+              </button>
+            </div>
+          </div>
 
           {error && (
             <div className="mx-3 mt-3 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm md:mx-6">
@@ -397,6 +651,9 @@ export const StaffDashboard: React.FC = () => {
                         selectedChatId={selectedChat?.id || null}
                         onSelectChat={handleSelectChat}
                         onAssignChat={handleAssignChat}
+                        staffMembers={adminUsers
+                          .filter((user) => user.role !== 'SUPER_ADMIN')
+                          .map((user) => user.name)}
                       />
                     )}
                   </div>
@@ -497,6 +754,107 @@ export const StaffDashboard: React.FC = () => {
                     External records are not currently available, or registry
                     synchronization is still pending.
                   </p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'admin' && currentUser?.role === 'SUPER_ADMIN' && (
+            <section className="min-h-0 flex-1 overflow-y-auto p-4 pb-28 md:p-8">
+              <div className="mx-auto max-w-5xl space-y-6">
+                <div className="rounded-[2rem] bg-gradient-to-br from-slate-900 via-violet-900 to-fuchsia-800 p-6 text-white shadow-2xl">
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-violet-200">Super admin</p>
+                  <h2 className="mt-3 text-3xl font-black">User management</h2>
+                  <p className="mt-2 max-w-xl text-sm text-violet-100">
+                    Create staff, admin, or super admin accounts so the hospital team can access the WhatsApp workspace.
+                  </p>
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
+                    <h3 className="text-xl font-black text-slate-800">Add a user</h3>
+
+                    <div className="mt-5 space-y-4">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Full name
+                        <input
+                          value={adminForm.name}
+                          onChange={(event) => setAdminForm((prev) => ({ ...prev, name: event.target.value }))}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-violet-400"
+                          placeholder="Jane Doe"
+                        />
+                      </label>
+
+                      <label className="block text-sm font-medium text-slate-700">
+                        Email
+                        <input
+                          type="email"
+                          value={adminForm.email}
+                          onChange={(event) => setAdminForm((prev) => ({ ...prev, email: event.target.value }))}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-violet-400"
+                          placeholder="user@phadam.com"
+                        />
+                      </label>
+
+                      <label className="block text-sm font-medium text-slate-700">
+                        Password
+                        <input
+                          type="password"
+                          value={adminForm.password}
+                          onChange={(event) => setAdminForm((prev) => ({ ...prev, password: event.target.value }))}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-violet-400"
+                          placeholder="Set password"
+                        />
+                      </label>
+
+                      <label className="block text-sm font-medium text-slate-700">
+                        Role
+                        <select
+                          value={adminForm.role}
+                          onChange={(event) => setAdminForm((prev) => ({ ...prev, role: event.target.value as 'SUPER_ADMIN' | 'ADMIN' | 'STAFF' }))}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-violet-400"
+                        >
+                          <option value="STAFF">Staff</option>
+                          <option value="ADMIN">Admin</option>
+                          <option value="SUPER_ADMIN">Super admin</option>
+                        </select>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleCreateUser()}
+                        disabled={adminBusy}
+                        className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/20 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {adminBusy ? 'Creating user...' : 'Create user'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
+                    <h3 className="text-xl font-black text-slate-800">Existing users</h3>
+                    <div className="mt-5 space-y-3">
+                      {adminUsers.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                          No users have been added yet.
+                        </div>
+                      ) : (
+                        adminUsers.map((user) => (
+                          <div key={user.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-black text-slate-800">{user.name}</p>
+                                <p className="text-xs text-slate-500">{user.email}</p>
+                              </div>
+                              <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-violet-700">
+                                {user.role}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>

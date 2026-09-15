@@ -6,6 +6,7 @@ interface SidebarProps {
   setActiveTab: (tab: DashboardTab) => void;
   chatCount?: number;
   isOnline?: boolean;
+  isSuperAdmin?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -13,6 +14,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   chatCount = 0,
   isOnline = true,
+  isSuperAdmin = false,
 }) => {
   const navItems: Array<{
     id: DashboardTab;
@@ -38,6 +40,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: '👥',
       description: 'Patient directory',
     },
+    ...(isSuperAdmin
+      ? [
+          {
+            id: 'admin' as DashboardTab,
+            label: 'Admin users',
+            icon: '🛡️',
+            description: 'Manage accounts',
+          },
+        ]
+      : []),
   ];
 
   return (

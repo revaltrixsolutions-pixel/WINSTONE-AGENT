@@ -1,6 +1,6 @@
 // src/types/dashboard.ts
 
-export type DashboardTab = 'inbox' | 'appointments' | 'patients';
+export type DashboardTab = 'inbox' | 'appointments' | 'patients' | 'admin';
 
 // Alias 'Tab' to 'DashboardTab' for backwards compatibility across dashboard components
 export type Tab = DashboardTab;

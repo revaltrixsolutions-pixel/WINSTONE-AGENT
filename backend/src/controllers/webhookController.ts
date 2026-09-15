@@ -6,6 +6,7 @@ import {
   extractPatientName,
   generateBotReply,
   isConversationStale,
+  appointmentConversationState,
   updateAppointmentConversation,
 } from '../services/aiBotService';
 import {
@@ -752,10 +753,14 @@ export async function handleWhatsAppWebhook(
                 assignedTo: true,
                 fullName: true,
               },
-          );
+            });
+          }
 
           const duplicateWindowEnd = new Date(
             sentAt.getTime() + 60_000,
+          );
+          const duplicateWindowStart = new Date(
+            sentAt.getTime() - 60_000,
           );
 
           const duplicateMessage = await prisma.messageLog.findFirst({

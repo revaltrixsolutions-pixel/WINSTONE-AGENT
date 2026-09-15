@@ -10,16 +10,10 @@ interface ChatQueueProps {
     doctorName: string
   ) => void | Promise<void>;
   isLoading?: boolean;
+  staffMembers?: string[];
 }
 
 type QueueFilter = 'ALL' | 'PENDING_AGENT' | 'AGENT_ACTIVE';
-
-const STAFF_MEMBERS = [
-  'General Desk',
-  'Dr. Smith',
-  'Dr. Jane',
-  'Dr. Kiprono',
-];
 
 const getStatusLabel = (status?: string): string => {
   if (!status) return 'Unknown';
@@ -74,6 +68,7 @@ export const ChatQueue: React.FC<ChatQueueProps> = ({
   onSelectChat,
   onAssignChat,
   isLoading = false,
+  staffMembers = [],
 }) => {
   const [selectedStaff, setSelectedStaff] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
@@ -288,7 +283,7 @@ export const ChatQueue: React.FC<ChatQueueProps> = ({
                             className="min-h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-100"
                           >
                             <option value="">Select staff member</option>
-                            {STAFF_MEMBERS.map((member) => (
+                            {staffMembers.map((member) => (
                               <option key={member} value={member}>
                                 {member}
                               </option>

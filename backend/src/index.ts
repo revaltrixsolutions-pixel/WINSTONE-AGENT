@@ -8,8 +8,10 @@ import cron from 'node-cron';
 import webhookRouter from './routes/webhookRoutes';
 import publicApiRouter from './routes/publicApiRoutes';
 import agentRouter from './routes/agentRoutes';
+import authRouter from './routes/authRoutes';
 
 import { prisma } from './lib/prisma';
+import { ensureSuperAdmin } from './lib/auth';
 import {
   sendWhatsAppMessage,
   WhatsAppApiError,
@@ -199,6 +201,11 @@ app.use('/webhook', webhookRouter);
  * Public API
  */
 app.use('/api/v1', publicApiRouter);
+
+/*
+ * Auth and admin API
+ */
+app.use('/api/auth', authRouter);
 
 /*
  * Agent dashboard API
@@ -503,10 +510,15 @@ app.use(
    START SERVER
    ========================================================= */
 
-const server = app.listen(
-  PORT,
-  '0.0.0.0',
-  () => {
+let server: ReturnType<typeof app.listen>;
+
+async function startServer(): Promise<void> {
+  await ensureSuperAdmin();
+
+  server = app.listen(
+    PORT,
+    '0.0.0.0',
+    () => {
     console.info(
       '========================================',
     );
@@ -539,8 +551,14 @@ const server = app.listen(
     console.info(
       '========================================',
     );
-  },
-);
+    },
+  );
+}
+
+void startServer().catch((error: unknown) => {
+  console.error('[Startup Error]', error);
+  process.exit(1);
+});
 
 /* =========================================================
    GRACEFUL SHUTDOWN

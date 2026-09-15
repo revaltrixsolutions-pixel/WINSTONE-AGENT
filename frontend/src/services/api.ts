@@ -59,6 +59,26 @@ export type Appointment = {
   createdAt?: string;
 };
 
+export type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
+};
+
+export type LoginResponse = {
+  success: boolean;
+  token?: string;
+  user?: AuthUser;
+  error?: string;
+};
+
+export type UsersResponse = {
+  success: boolean;
+  users?: AuthUser[];
+  error?: string;
+};
+
 type AppointmentResponse =
   | Appointment[]
   | {
@@ -88,6 +108,27 @@ const API_BASE_URL = (
 ).replace(/\/$/, '');
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+
+const AUTH_TOKEN_KEY = 'phadam-auth-token';
+
+function getStoredAuthToken(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function setStoredAuthToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    return;
+  }
+
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+}
 
 /* ==========================================================================
    ERROR CLASS
@@ -272,6 +313,10 @@ async function request<T>(
   try {
     const requestHeaders: Record<string, string> = {
       Accept: 'application/json',
+
+      ...(getStoredAuthToken()
+        ? { Authorization: `Bearer ${getStoredAuthToken()}` }
+        : {}),
 
       ...(body && typeof body === 'string'
         ? { 'Content-Type': 'application/json' }
@@ -467,4 +512,80 @@ export async function fetchAppointments(
   }
 
   return [];
+}
+
+export async function loginToDashboard(
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
+  const response = await request<LoginResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (response.token) {
+    setStoredAuthToken(response.token);
+  }
+
+  return response;
+}
+
+export async function fetchCurrentUser(
+  signal?: AbortSignal | null,
+): Promise<AuthUser | null> {
+  const token = getStoredAuthToken();
+
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const response = await request<{ success: boolean; user?: AuthUser; error?: string }>(
+      '/api/auth/me',
+      { method: 'GET', signal },
+    );
+
+    if (!response.success || !response.user) {
+      setStoredAuthToken(null);
+      return null;
+    }
+
+    return response.user;
+  } catch {
+    setStoredAuthToken(null);
+    return null;
+  }
+}
+
+export async function fetchUsers(
+  signal?: AbortSignal | null,
+): Promise<AuthUser[]> {
+  const response = await request<UsersResponse>('/api/auth/users', {
+    method: 'GET',
+    signal,
+  });
+
+  if (!response.success) {
+    throw new Error(response.error || 'Unable to fetch users.');
+  }
+
+  return Array.isArray(response.users) ? response.users : [];
+}
+
+export async function createUserAccount(
+  userInput: {
+    name: string;
+    email: string;
+    password: string;
+    role?: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
+  },
+): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
+  return request<{ success: boolean; user?: AuthUser; error?: string }>('/api/auth/users', {
+    method: 'POST',
+    body: JSON.stringify(userInput),
+  });
+}
+
+export function logoutDashboard(): void {
+  setStoredAuthToken(null);
 }

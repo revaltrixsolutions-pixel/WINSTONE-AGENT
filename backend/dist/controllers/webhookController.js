@@ -1,409 +1,592 @@
 "use strict";
-// src/controllers/webhookController.ts
+// backend/src/controllers/webhookController.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleWhatsAppWebhook = handleWhatsAppWebhook;
 const prisma_1 = require("../lib/prisma");
+const aiBotService_1 = require("../services/aiBotService");
 const whatsappService_1 = require("../services/whatsappService");
-const hospitalData_1 = require("../knowledge/hospitalData");
-const HUMAN_AGENT_KEYWORDS = [
-    'human',
-    'agent',
-    'medical officer',
-    'speak to someone',
-    'speak to a person',
-    'talk to someone',
-    'talk to a person',
-    'customer care',
-    'help me',
-];
-function isHumanAgentRequest(text) {
-    return HUMAN_AGENT_KEYWORDS.some((keyword) => text.includes(keyword));
-}
-function getFallbackMenu() {
-    return [
-        '👋 Welcome to *Phadam Hospital*.',
-        '',
-        'How can we help you?',
-        '',
-        '• *Insurance* — accepted insurance providers',
-        '• *Locations* — branches, contacts, and directions',
-        '• *Services* — hospital services',
-        '• *Departments* — department information',
-        '• *Price* — procedure prices',
-        '• *Doctor* — specialist clinics and availability guidance',
-        '• Type *BOOK* — appointment booking instructions',
-        '• Type *AGENT* — speak to a human agent',
-    ].join('\n');
-}
-function getBookingHelpMessage() {
-    return [
-        '📅 *Book an Appointment*',
-        '',
-        'Reply using:',
-        '*BOOK [Specialty] [YYYY-MM-DD]*',
-        '',
-        'Example:',
-        '*BOOK General 2026-08-25*',
-        '',
-        'You can also request a human agent by typing *AGENT*.',
-    ].join('\n');
-}
-function parseBookingRequest(originalText) {
-    const parts = originalText.trim().split(/\s+/);
-    /*
-     * Expected format:
-     * BOOK General 2026-08-25
-     *
-     * parts[0] = BOOK
-     * parts[1] = General
-     * parts[2] = 2026-08-25
-     */
-    const specialty = parts[1]?.trim() || 'General';
-    const dateText = parts[2]?.trim();
-    if (!dateText) {
-        return null;
-    }
-    const appointmentDate = new Date(`${dateText}T09:00:00.000Z`);
-    if (Number.isNaN(appointmentDate.getTime())) {
-        return null;
-    }
-    return {
-        specialty,
-        dateText,
-        appointmentDate,
-    };
-}
+/* ==========================================================================
+   HELPERS
+   ========================================================================== */
 /**
- * Handles a single incoming WhatsApp text message.
+ * Converts a phone number into digits only.
  *
- * This function:
- * 1. Finds or creates the patient.
- * 2. Stores the patient's WhatsApp message.
- * 3. Keeps agent-active conversations out of the bot flow.
- * 4. Generates a knowledge-base, agent, booking, or menu reply.
- * 5. Sends the reply through Meta WhatsApp Cloud API.
- * 6. Stores the successful bot reply.
+ * Examples:
+ * +254 712 345 678 -> 254712345678
+ * 254712345678      -> 254712345678
  */
-async function processIncomingTextMessage(message) {
-    const senderPhone = message.from?.trim();
-    const incomingMessageId = message.id?.trim();
-    const messageType = message.type;
-    const userText = message.text?.body?.trim() || '';
-    console.info('[WhatsApp incoming message]', {
-        incomingMessageId,
-        senderPhone,
-        messageType,
-        userText,
-    });
-    if (!senderPhone) {
-        console.warn('[WhatsApp webhook] Ignoring message because sender phone is missing.');
-        return;
-    }
-    if (messageType !== 'text') {
-        console.info('[WhatsApp webhook] Ignoring non-text message.', {
-            senderPhone,
-            messageType,
-        });
-        return;
-    }
-    if (!userText) {
-        console.info('[WhatsApp webhook] Ignoring empty text message.', {
-            senderPhone,
-            incomingMessageId,
-        });
-        return;
-    }
-    let patient = await prisma_1.prisma.patient.findUnique({
+function normalizePhoneNumber(phoneNumber) {
+    return phoneNumber.replace(/\D/g, '');
+}
+async function getLastInteractionHours(patientId) {
+    const lastMessage = await prisma_1.prisma.messageLog.findFirst({
         where: {
-            phoneNumber: senderPhone,
+            patientId,
+        },
+        orderBy: {
+            timestamp: 'desc',
+        },
+        select: {
+            timestamp: true,
         },
     });
-    if (!patient) {
-        console.info('[WhatsApp webhook] Creating new patient record.', {
-            senderPhone,
-        });
-        patient = await prisma_1.prisma.patient.create({
-            data: {
-                phoneNumber: senderPhone,
-                chatStatus: 'BOT',
-            },
-        });
-        console.info('[WhatsApp webhook] Patient created.', {
-            patientId: patient.id,
-            senderPhone,
-        });
+    if (!lastMessage?.timestamp) {
+        return Number.POSITIVE_INFINITY;
     }
-    else {
-        console.info('[WhatsApp webhook] Existing patient found.', {
-            patientId: patient.id,
-            senderPhone,
-            chatStatus: patient.chatStatus,
-            assignedTo: patient.assignedTo,
-        });
+    const diffMs = Date.now() - new Date(lastMessage.timestamp).getTime();
+    return diffMs / (1000 * 60 * 60);
+}
+function parseAppointmentDate(dateText, timeText) {
+    const normalizedDate = dateText.toLowerCase();
+    const normalizedTime = timeText.toLowerCase();
+    const base = new Date();
+    const dateOnly = new Date(base);
+    dateOnly.setHours(0, 0, 0, 0);
+    const timeMatch = normalizedTime.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    const parsedHour = timeMatch ? Number(timeMatch[1]) : 9;
+    const parsedMinute = timeMatch && timeMatch[2] ? Number(timeMatch[2]) : 0;
+    let hour = parsedHour;
+    const meridiem = timeMatch?.[3]?.toLowerCase();
+    if (meridiem === 'pm' && hour < 12) {
+        hour += 12;
     }
-    /*
-     * Store every valid incoming patient text.
-     *
-     * If your MessageLog Prisma model includes `whatsappMessageId`,
-     * you may add the incoming Meta message ID:
-     *
-     * ...(incomingMessageId
-     *   ? { whatsappMessageId: incomingMessageId }
-     *   : {}),
-     */
-    await prisma_1.prisma.messageLog.create({
-        data: {
-            patientId: patient.id,
-            sender: 'PATIENT',
-            body: userText,
-        },
-    });
-    console.info('[WhatsApp webhook] Patient message saved.', {
-        patientId: patient.id,
-        incomingMessageId,
-    });
-    /*
-     * Do not let the bot respond while a staff member is actively
-     * handling the patient's conversation.
-     */
-    if (patient.chatStatus === 'AGENT_ACTIVE') {
-        console.info('[WhatsApp webhook] No bot reply: conversation is AGENT_ACTIVE.', {
-            patientId: patient.id,
-            assignedTo: patient.assignedTo,
-        });
-        return;
+    if (meridiem === 'am' && hour === 12) {
+        hour = 0;
     }
-    const normalizedText = userText.toLowerCase().trim();
-    let replyText;
-    /*
-     * 1. Explicit agent escalation is checked first.
-     * This prevents a phrase such as "I need a human agent" from being
-     * handled as a generic hospital-information query.
-     */
-    if (isHumanAgentRequest(normalizedText)) {
-        await prisma_1.prisma.patient.update({
-            where: {
-                id: patient.id,
-            },
-            data: {
-                chatStatus: 'PENDING_AGENT',
-            },
-        });
-        replyText = [
-            '🔄 *Human Assistance Requested*',
-            '',
-            'You have been placed in the queue for an available medical officer or hospital agent.',
-            'Please wait for a member of the Phadam Hospital team to respond.',
-        ].join('\n');
-        console.info('[WhatsApp webhook] Patient escalated to agent queue.', {
-            patientId: patient.id,
-            senderPhone,
-        });
+    if (normalizedDate.includes('today')) {
+        dateOnly.setHours(hour, parsedMinute, 0, 0);
+        return dateOnly;
     }
-    /*
-     * 2. Booking help command.
-     */
-    else if (normalizedText === 'book') {
-        replyText = getBookingHelpMessage();
+    if (normalizedDate.includes('tomorrow')) {
+        dateOnly.setDate(dateOnly.getDate() + 1);
+        dateOnly.setHours(hour, parsedMinute, 0, 0);
+        return dateOnly;
     }
-    /*
-     * 3. Booking command.
-     */
-    else if (normalizedText.startsWith('book ')) {
-        const booking = parseBookingRequest(userText);
-        if (!booking) {
-            replyText = [
-                '❌ *Invalid booking format.*',
-                '',
-                'Please use:',
-                '*BOOK [Specialty] [YYYY-MM-DD]*',
-                '',
-                'Example:',
-                '*BOOK General 2026-08-25*',
-            ].join('\n');
+    const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const weekdayIndex = weekdays.findIndex((day) => normalizedDate.includes(day));
+    if (weekdayIndex >= 0) {
+        const currentIndex = dateOnly.getDay();
+        const daysUntil = (weekdayIndex - currentIndex + 7) % 7 || 7;
+        dateOnly.setDate(dateOnly.getDate() + daysUntil);
+        dateOnly.setHours(hour, parsedMinute, 0, 0);
+        return dateOnly;
+    }
+    if (normalizedDate.includes('next week')) {
+        dateOnly.setDate(dateOnly.getDate() + 7);
+        dateOnly.setHours(hour, parsedMinute, 0, 0);
+        return dateOnly;
+    }
+    const directDate = new Date(normalizedDate);
+    if (!Number.isNaN(directDate.getTime())) {
+        directDate.setHours(hour, parsedMinute, 0, 0);
+        return directDate;
+    }
+    dateOnly.setHours(hour, parsedMinute, 0, 0);
+    return dateOnly;
+}
+async function sendBotReply(patient, incomingMessage) {
+    const patientName = patient.fullName || (0, aiBotService_1.extractPatientName)(incomingMessage) || 'Patient';
+    const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(incomingMessage);
+    if (bookingIntent || aiBotService_1.appointmentConversationState.has(patient.id)) {
+        const appointmentState = (0, aiBotService_1.updateAppointmentConversation)(patient.id, patientName, incomingMessage);
+        if (!appointmentState.completed) {
+            const replyText = appointmentState.prompt;
+            try {
+                await (0, whatsappService_1.sendWhatsAppMessage)({
+                    recipientPhone: patient.phoneNumber,
+                    messageText: replyText,
+                });
+                await prisma_1.prisma.messageLog.create({
+                    data: {
+                        patientId: patient.id,
+                        sender: 'BOT',
+                        body: replyText,
+                        timestamp: new Date(),
+                    },
+                });
+                console.info('[WhatsApp Appointment Prompt Sent]', {
+                    patientId: patient.id,
+                    prompt: replyText,
+                });
+            }
+            catch (error) {
+                console.error('[WhatsApp Appointment Prompt Failed]', {
+                    patientId: patient.id,
+                    error: error instanceof Error ? error.message : error,
+                });
+            }
+            if (appointmentState.awaitingConfirmation) {
+                return;
+            }
+            return;
         }
-        else {
+        const { date, time, department } = appointmentState.data;
+        const slotTime = parseAppointmentDate(date, time);
+        try {
             const appointment = await prisma_1.prisma.appointment.create({
                 data: {
                     patientId: patient.id,
-                    doctorName: 'On-Call Doctor',
-                    specialty: booking.specialty,
-                    slotTime: booking.appointmentDate,
+                    doctorName: 'To be assigned',
+                    specialty: department,
+                    slotTime,
                     status: 'CONFIRMED',
                 },
             });
-            replyText = [
-                '✅ *Appointment Confirmed!*',
-                '',
-                `Specialty: ${booking.specialty}`,
-                `Date: ${booking.dateText}`,
-                `Reference: ${appointment.id}`,
-                '',
-                'Please contact the hospital branch for confirmation of the exact consultation time and doctor availability.',
-            ].join('\n');
-            console.info('[WhatsApp webhook] Appointment created.', {
+            const confirmationText = `Thank you, ${patientName}. Your appointment has been booked for ${date} at ${time} in the ${department} department. Your appointment reference is ${appointment.id.slice(0, 8)}.`;
+            await (0, whatsappService_1.sendWhatsAppMessage)({
+                recipientPhone: patient.phoneNumber,
+                messageText: confirmationText,
+            });
+            await prisma_1.prisma.messageLog.create({
+                data: {
+                    patientId: patient.id,
+                    sender: 'BOT',
+                    body: confirmationText,
+                    timestamp: new Date(),
+                },
+            });
+            console.info('[WhatsApp Booking Saved]', {
+                patientId: patient.id,
                 appointmentId: appointment.id,
-                patientId: patient.id,
-                specialty: booking.specialty,
-                date: booking.dateText,
+                date,
+                time,
+                department,
             });
+            return;
+        }
+        catch (error) {
+            console.error('[WhatsApp Booking Save Failed]', {
+                patientId: patient.id,
+                error: error instanceof Error ? error.message : error,
+            });
+            return;
         }
     }
-    /*
-     * 4. Phadam Hospital local knowledge base.
-     */
-    else {
-        const knowledgeBaseReply = (0, hospitalData_1.searchKnowledgeBase)(userText);
-        if (knowledgeBaseReply) {
-            replyText = knowledgeBaseReply;
-            console.info('[WhatsApp webhook] Knowledge-base answer found.', {
-                patientId: patient.id,
-                senderPhone,
-            });
-        }
-        else {
-            replyText = getFallbackMenu();
-            console.info('[WhatsApp webhook] Sending fallback menu.', {
-                patientId: patient.id,
-                senderPhone,
-            });
-        }
+    const lastInteractionHours = await getLastInteractionHours(patient.id);
+    const replyText = (0, aiBotService_1.generateBotReply)({
+        patientName: patientName || null,
+        message: incomingMessage,
+        isReturning: (0, aiBotService_1.isConversationStale)(lastInteractionHours),
+        lastInteractionHours,
+    });
+    if (!replyText.trim()) {
+        return;
     }
-    console.info('[WhatsApp webhook] Sending bot reply.', {
-        patientId: patient.id,
-        senderPhone,
-        replyLength: replyText.length,
-    });
-    /*
-     * Updated service signature:
-     *
-     * sendWhatsAppMessage({
-     *   recipientPhone: string,
-     *   messageText: string,
-     * })
-     *
-     * Returned result:
-     *
-     * {
-     *   recipientPhone: string;
-     *   messageId: string;
-     *   whatsappId?: string;
-     *   simulated: boolean;
-     * }
-     */
-    const whatsappResult = await (0, whatsappService_1.sendWhatsAppMessage)({
-        recipientPhone: senderPhone,
-        messageText: replyText,
-    });
-    console.info('[WhatsApp webhook] Meta accepted bot reply.', {
-        patientId: patient.id,
-        senderPhone,
-        outgoingMetaMessageId: whatsappResult.messageId,
-        simulated: whatsappResult.simulated,
-    });
-    /*
-     * Save the outgoing bot reply only after Meta has accepted it.
-     *
-     * If your Prisma MessageLog model has a `whatsappMessageId` field,
-     * use the optional version below instead:
-     *
-     * data: {
-     *   patientId: patient.id,
-     *   sender: 'BOT',
-     *   body: replyText,
-     *   whatsappMessageId: whatsappResult.messageId,
-     * }
-     */
-    await prisma_1.prisma.messageLog.create({
-        data: {
-            patientId: patient.id,
-            sender: 'BOT',
-            body: replyText,
-        },
-    });
-    console.info('[WhatsApp webhook] Bot response saved.', {
-        patientId: patient.id,
-        outgoingMetaMessageId: whatsappResult.messageId,
-    });
-}
-/**
- * POST /api/whatsapp/webhook
- *
- * Receives incoming WhatsApp Cloud API webhooks.
- *
- * Important:
- * - Meta sends both incoming messages and outbound-status updates here.
- * - Status updates are valid and should return HTTP 200.
- * - Meta can deliver multiple entries, changes, and messages in one webhook.
- */
-async function handleWhatsAppWebhook(req, res) {
-    console.info('========================================');
-    console.info('[WhatsApp webhook] Request received');
-    console.info('========================================');
-    console.info('Method:', req.method);
-    console.info('URL:', req.originalUrl);
     try {
-        const body = req.body;
-        if (body?.object !== 'whatsapp_business_account') {
-            console.warn('[WhatsApp webhook] Invalid webhook object.', {
-                receivedObject: body?.object,
-            });
-            return res.sendStatus(404);
-        }
-        const entries = body.entry ?? [];
-        if (!entries.length) {
-            console.info('[WhatsApp webhook] No entries found.');
-            return res.sendStatus(200);
-        }
-        let incomingMessageCount = 0;
-        let statusUpdateCount = 0;
-        for (const entry of entries) {
-            for (const change of entry.changes ?? []) {
-                const value = change.value;
-                if (!value) {
-                    continue;
-                }
-                const statuses = value.statuses ?? [];
-                for (const status of statuses) {
-                    statusUpdateCount += 1;
-                    console.info('[WhatsApp webhook] Message status update.', {
-                        metaMessageId: status.id,
-                        status: status.status,
-                        recipientId: status.recipient_id,
-                        timestamp: status.timestamp,
-                        errors: status.errors,
-                    });
-                }
-                const messages = value.messages ?? [];
-                for (const message of messages) {
-                    incomingMessageCount += 1;
-                    await processIncomingTextMessage(message);
-                }
-            }
-        }
-        console.info('[WhatsApp webhook] Processing complete.', {
-            incomingMessageCount,
-            statusUpdateCount,
+        const whatsappResult = await (0, whatsappService_1.sendWhatsAppMessage)({
+            recipientPhone: patient.phoneNumber,
+            messageText: replyText,
         });
-        console.info('========================================');
-        return res.sendStatus(200);
+        await prisma_1.prisma.messageLog.create({
+            data: {
+                patientId: patient.id,
+                sender: 'BOT',
+                body: replyText,
+                timestamp: new Date(),
+            },
+        });
+        console.info('[WhatsApp Auto Reply Sent]', {
+            patientId: patient.id,
+            recipientPhone: patient.phoneNumber,
+            messageId: whatsappResult.messageId,
+            simulated: whatsappResult.simulated,
+            patientName: patientName || null,
+        });
     }
     catch (error) {
         if (error instanceof whatsappService_1.WhatsAppApiError) {
-            console.error('[WhatsApp webhook] Meta API error while replying.', {
-                message: error.message,
+            console.error('[WhatsApp Auto Reply API Error]', {
+                patientId: patient.id,
+                recipientPhone: patient.phoneNumber,
                 status: error.status,
-                recipientPhone: error.recipientPhone,
                 metaCode: error.metaCode,
                 metaType: error.metaType,
                 metaDetails: error.metaDetails,
                 fbTraceId: error.fbTraceId,
             });
+            return;
         }
-        else {
-            console.error('[WhatsApp webhook] Processing error.', error instanceof Error ? error.stack || error.message : error);
+        console.error('[WhatsApp Auto Reply Send Failed]', {
+            patientId: patient.id,
+            recipientPhone: patient.phoneNumber,
+            error: error instanceof Error ? error.message : error,
+        });
+    }
+}
+/**
+ * Converts the incoming Meta timestamp, which is in Unix seconds,
+ * into a JavaScript Date object.
+ */
+function getWebhookMessageDate(timestamp) {
+    if (!timestamp) {
+        return new Date();
+    }
+    const timestampSeconds = Number(timestamp);
+    if (!Number.isFinite(timestampSeconds)) {
+        return new Date();
+    }
+    return new Date(timestampSeconds * 1000);
+}
+/**
+ * Gets a displayable body for text, buttons, interactive messages,
+ * media, voice notes, documents, and location messages.
+ */
+function getMessageBody(message) {
+    if (message.type === 'text') {
+        return message.text?.body?.trim() || '';
+    }
+    if (message.type === 'button') {
+        return (message.button?.text?.trim() ||
+            message.button?.payload?.trim() ||
+            '[Button response]');
+    }
+    if (message.type === 'interactive') {
+        if (message.interactive?.type === 'button_reply') {
+            return (message.interactive.button_reply?.title?.trim() ||
+                message.interactive.button_reply?.id?.trim() ||
+                '[Interactive button response]');
         }
-        console.error('========================================');
-        return res.sendStatus(500);
+        if (message.interactive?.type === 'list_reply') {
+            return (message.interactive.list_reply?.title?.trim() ||
+                message.interactive.list_reply?.description?.trim() ||
+                message.interactive.list_reply?.id?.trim() ||
+                '[Interactive list response]');
+        }
+        return '[Interactive WhatsApp response]';
+    }
+    if (message.type === 'image') {
+        const caption = message.image?.caption?.trim();
+        return caption
+            ? `[Image] ${caption}`
+            : '[Image received]';
+    }
+    if (message.type === 'document') {
+        const filename = message.document?.filename?.trim();
+        const caption = message.document?.caption?.trim();
+        if (filename && caption) {
+            return `[Document: ${filename}] ${caption}`;
+        }
+        if (filename) {
+            return `[Document received: ${filename}]`;
+        }
+        if (caption) {
+            return `[Document] ${caption}`;
+        }
+        return '[Document received]';
+    }
+    if (message.type === 'audio') {
+        return '[Voice note received]';
+    }
+    if (message.type === 'video') {
+        const caption = message.video?.caption?.trim();
+        return caption
+            ? `[Video] ${caption}`
+            : '[Video received]';
+    }
+    if (message.type === 'location') {
+        const name = message.location?.name?.trim();
+        const address = message.location?.address?.trim();
+        if (name && address) {
+            return `[Location] ${name} — ${address}`;
+        }
+        if (name) {
+            return `[Location] ${name}`;
+        }
+        if (address) {
+            return `[Location] ${address}`;
+        }
+        return '[Location received]';
+    }
+    return `[Unsupported WhatsApp message type: ${message.type || 'unknown'}]`;
+}
+/**
+ * Finds a profile name from the Meta contacts array.
+ */
+function getContactProfileName(contacts, phoneNumber) {
+    const contact = contacts.find((item) => {
+        const contactNumber = normalizePhoneNumber(item.wa_id || '');
+        return contactNumber === phoneNumber;
+    });
+    return contact?.profile?.name?.trim() || null;
+}
+/* ==========================================================================
+   WEBHOOK CONTROLLER
+   ========================================================================== */
+/**
+ * POST /api/whatsapp/webhook
+ *
+ * Receives WhatsApp events sent by Meta.
+ *
+ * Main responsibilities:
+ * 1. Read incoming patient WhatsApp messages.
+ * 2. Find or create a Patient using the WhatsApp phone number.
+ * 3. Save incoming message into MessageLog.
+ * 4. Set chatStatus to PENDING_AGENT.
+ * 5. Return HTTP 200 so Meta knows the webhook was accepted.
+ */
+async function handleWhatsAppWebhook(req, res) {
+    try {
+        const payload = req.body;
+        console.info('[WhatsApp Webhook Received]', {
+            object: payload?.object,
+            entryCount: Array.isArray(payload?.entry)
+                ? payload.entry.length
+                : 0,
+        });
+        /*
+         * Ignore any event that is not a WhatsApp Business Account webhook.
+         */
+        if (payload?.object !== 'whatsapp_business_account') {
+            console.warn('[WhatsApp Webhook Ignored] Unexpected webhook object.', {
+                object: payload?.object,
+            });
+            res.sendStatus(200);
+            return;
+        }
+        const entries = Array.isArray(payload.entry)
+            ? payload.entry
+            : [];
+        for (const entry of entries) {
+            const changes = Array.isArray(entry.changes)
+                ? entry.changes
+                : [];
+            for (const change of changes) {
+                /*
+                 * WhatsApp incoming messages and delivery/read statuses
+                 * normally arrive under field: "messages".
+                 */
+                if (change.field !== 'messages') {
+                    console.info('[WhatsApp Webhook Ignored] Unsupported event field.', {
+                        field: change.field,
+                    });
+                    continue;
+                }
+                const value = change.value;
+                if (!value) {
+                    continue;
+                }
+                const contacts = Array.isArray(value.contacts)
+                    ? value.contacts
+                    : [];
+                const incomingMessages = Array.isArray(value.messages)
+                    ? value.messages
+                    : [];
+                const statuses = Array.isArray(value.statuses)
+                    ? value.statuses
+                    : [];
+                /*
+                 * These status events are generated for messages sent from
+                 * your system to a patient.
+                 *
+                 * They are not patient messages, so they are logged only.
+                 */
+                for (const status of statuses) {
+                    console.info('[WhatsApp Message Status Update]', {
+                        whatsappMessageId: status.id,
+                        status: status.status,
+                        recipientPhone: status.recipient_id,
+                        error: status.errors?.[0]?.error_data?.details ||
+                            status.errors?.[0]?.message ||
+                            null,
+                    });
+                }
+                /*
+                 * These are messages sent from the patient's WhatsApp number
+                 * to your connected WhatsApp Business number.
+                 */
+                for (const incomingMessage of incomingMessages) {
+                    const senderPhoneRaw = incomingMessage.from?.trim();
+                    const whatsappMessageId = incomingMessage.id?.trim();
+                    const messageType = incomingMessage.type || 'unknown';
+                    if (!senderPhoneRaw) {
+                        console.warn('[WhatsApp Incoming Message Ignored] Missing sender phone number.', {
+                            whatsappMessageId,
+                            messageType,
+                        });
+                        continue;
+                    }
+                    const senderPhone = normalizePhoneNumber(senderPhoneRaw);
+                    if (!senderPhone) {
+                        console.warn('[WhatsApp Incoming Message Ignored] Invalid sender phone number.', {
+                            senderPhoneRaw,
+                            whatsappMessageId,
+                        });
+                        continue;
+                    }
+                    const messageBody = getMessageBody(incomingMessage);
+                    if (!messageBody) {
+                        console.warn('[WhatsApp Incoming Message Ignored] Empty message body.', {
+                            senderPhoneLast4: senderPhone.slice(-4),
+                            whatsappMessageId,
+                            messageType,
+                        });
+                        continue;
+                    }
+                    const sentAt = getWebhookMessageDate(incomingMessage.timestamp);
+                    const profileName = getContactProfileName(contacts, senderPhone);
+                    console.info('[WhatsApp Incoming Message]', {
+                        senderPhoneLast4: senderPhone.slice(-4),
+                        whatsappMessageId,
+                        messageType,
+                        profileName,
+                    });
+                    /*
+                     * Find the existing patient/chat by WhatsApp number.
+                     *
+                     * Patient.phoneNumber should be stored consistently in
+                     * international digits-only format, for example:
+                     *
+                     * 254712345678
+                     */
+                    let patient = await prisma_1.prisma.patient.findFirst({
+                        where: {
+                            phoneNumber: senderPhone,
+                        },
+                        select: {
+                            id: true,
+                            phoneNumber: true,
+                            chatStatus: true,
+                            assignedTo: true,
+                            fullName: true,
+                        },
+                    });
+                    /*
+                     * A first-time WhatsApp sender gets a new patient/chat record.
+                     *
+                     * If your Patient Prisma model has other required fields,
+                     * add them in this `data` object.
+                     */
+                    if (!patient) {
+                        patient = await prisma_1.prisma.patient.create({
+                            data: {
+                                phoneNumber: senderPhone,
+                                chatStatus: 'PENDING_AGENT',
+                            },
+                            select: {
+                                id: true,
+                                phoneNumber: true,
+                                chatStatus: true,
+                                assignedTo: true,
+                                fullName: true,
+                            },
+                        });
+                        console.info('[WhatsApp New Patient Created]', {
+                            patientId: patient.id,
+                            phoneLast4: senderPhone.slice(-4),
+                            profileName,
+                        });
+                    }
+                    const detectedName = patient.fullName || (0, aiBotService_1.extractPatientName)(messageBody);
+                    if (detectedName && !patient.fullName) {
+                        patient = await prisma_1.prisma.patient.update({
+                            where: {
+                                id: patient.id,
+                            },
+                            data: {
+                                fullName: detectedName,
+                            },
+                            select: {
+                                id: true,
+                                phoneNumber: true,
+                                chatStatus: true,
+                                assignedTo: true,
+                                fullName: true,
+                            },
+                        });
+                    }
+                    const duplicateWindowEnd = new Date(sentAt.getTime() + 60_000);
+                    const duplicateWindowStart = new Date(sentAt.getTime() - 60_000);
+                    const duplicateMessage = await prisma_1.prisma.messageLog.findFirst({
+                        where: {
+                            patientId: patient.id,
+                            sender: 'PATIENT',
+                            body: messageBody,
+                            timestamp: {
+                                gte: duplicateWindowStart,
+                                lte: duplicateWindowEnd,
+                            },
+                        },
+                        select: {
+                            id: true,
+                        },
+                    });
+                    if (duplicateMessage) {
+                        console.info('[WhatsApp Incoming Message Duplicate Ignored]', {
+                            patientId: patient.id,
+                            duplicateMessageLogId: duplicateMessage.id,
+                            whatsappMessageId,
+                        });
+                        continue;
+                    }
+                    /*
+                     * Save incoming WhatsApp message to your MessageLog table.
+                     *
+                     * This is what makes the text available in:
+                     *
+                     * GET /api/agent/chats
+                     */
+                    const [savedMessage, updatedPatient] = await prisma_1.prisma.$transaction([
+                        prisma_1.prisma.messageLog.create({
+                            data: {
+                                patientId: patient.id,
+                                sender: 'PATIENT',
+                                body: messageBody,
+                                timestamp: sentAt,
+                            },
+                        }),
+                        prisma_1.prisma.patient.update({
+                            where: {
+                                id: patient.id,
+                            },
+                            data: {
+                                /*
+                                 * Keep an active agent assignment if a staff member
+                                 * already owns the conversation.
+                                 */
+                                chatStatus: patient.chatStatus === 'AGENT_ACTIVE'
+                                    ? 'AGENT_ACTIVE'
+                                    : 'PENDING_AGENT',
+                            },
+                            select: {
+                                id: true,
+                                phoneNumber: true,
+                                chatStatus: true,
+                                assignedTo: true,
+                            },
+                        }),
+                    ]);
+                    console.info('[WhatsApp Incoming Message Saved]', {
+                        patientId: updatedPatient.id,
+                        messageLogId: savedMessage.id,
+                        senderPhoneLast4: senderPhone.slice(-4),
+                        whatsappMessageId,
+                        messageType,
+                        chatStatus: updatedPatient.chatStatus,
+                        assignedTo: updatedPatient.assignedTo,
+                    });
+                    await sendBotReply({
+                        id: patient.id,
+                        phoneNumber: patient.phoneNumber,
+                        fullName: patient.fullName || detectedName || null,
+                    }, messageBody);
+                }
+            }
+        }
+        /*
+         * Meta needs a successful response.
+         * A non-2xx status can cause Meta to retry the same event.
+         */
+        res.sendStatus(200);
+    }
+    catch (error) {
+        console.error('[WhatsApp Webhook Controller Error]', error instanceof Error ? error.stack || error.message : error);
+        /*
+         * Returning 500 tells Meta delivery failed.
+         * Meta may retry the event later.
+         */
+        res.status(500).json({
+            success: false,
+            error: 'Unable to process incoming WhatsApp webhook event.',
+        });
     }
 }
