@@ -62,6 +62,7 @@ export const StaffDashboard: React.FC = () => {
   const [adminBusy, setAdminBusy] = useState(false);
 
   const previousChatIds = useRef<Set<string>>(new Set());
+  const previousLatestMessages = useRef<Record<string, string>>({});
   const previousAssignments = useRef<Record<string, string | null>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
   const isLoadingChatsRef = useRef(false);
@@ -164,14 +165,38 @@ export const StaffDashboard: React.FC = () => {
       );
 
       const previousIds = previousChatIds.current;
+      const latestMessages = Object.fromEntries(
+        nextChats.map((chat) => {
+          const latestMessage = chat.messages?.[chat.messages.length - 1];
+          return [
+            chat.id,
+            latestMessage?.id || latestMessage?.timestamp || '',
+          ];
+        }),
+      );
 
       const hasNewChats =
         previousIds.size > 0 &&
         [...nextChatIds].some((id) => !previousIds.has(id));
 
-      if (hasNewChats) {
+      const hasNewMessages =
+        Object.keys(previousLatestMessages.current).length > 0 &&
+        nextChats.some((chat) => {
+          const latestMessage = latestMessages[chat.id];
+          return Boolean(
+            latestMessage &&
+            latestMessage !== previousLatestMessages.current[chat.id] &&
+            chat.messages?.[chat.messages.length - 1]?.sender === 'PATIENT',
+          );
+        });
+
+      if (hasNewChats || hasNewMessages) {
         playNotificationSound();
-        notifyBrowser(nextChats.length - previousIds.size || 1);
+        notifyBrowser(
+          hasNewChats
+            ? nextChats.length - previousIds.size || 1
+            : 1,
+        );
       }
 
       if (currentUser) {
@@ -195,6 +220,7 @@ export const StaffDashboard: React.FC = () => {
       previousAssignments.current = Object.fromEntries(
         nextChats.map((chat) => [chat.id, chat.assignedTo ?? null]),
       );
+      previousLatestMessages.current = latestMessages;
 
       previousChatIds.current = nextChatIds;
       setChats(nextChats);

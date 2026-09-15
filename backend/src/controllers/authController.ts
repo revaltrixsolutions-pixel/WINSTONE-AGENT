@@ -91,7 +91,7 @@ export async function listUsers(
 ): Promise<Response> {
   return res.status(200).json({
     success: true,
-    users: getUsers(),
+    users: await getUsers(),
   });
 }
 
@@ -109,7 +109,7 @@ export async function createAccount(
   }
 
   try {
-    const user = createUser({
+    const user = await createUser({
       name,
       email,
       password,
