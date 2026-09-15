@@ -385,21 +385,104 @@ function buildAppointmentInteractive(
   return undefined;
 }
 
+function buildPatientMenu(): WhatsAppInteractivePayload {
+  return {
+    type: 'list',
+    body: {
+      text: 'Welcome to Phadam Hospital. Choose what you need below. You only need to type your name; all other options can be selected.',
+    },
+    action: {
+      button: 'Open hospital menu',
+      sections: [{
+        title: 'How can we help?',
+        rows: [
+          { id: 'menu_appointments', title: 'Book appointment', description: 'Choose service, date and time' },
+          { id: 'menu_scheduled', title: 'My appointments', description: 'View scheduled appointments' },
+          { id: 'menu_services', title: 'Our services', description: 'Browse hospital services' },
+          { id: 'menu_departments', title: 'Departments', description: 'View hospital departments' },
+          { id: 'menu_locations', title: 'Locations and contacts', description: 'Find our branches' },
+          { id: 'menu_prices', title: 'Prices and fees', description: 'View available prices' },
+          { id: 'menu_insurance', title: 'SHA and insurance', description: 'Check accepted covers' },
+          { id: 'menu_human', title: 'Speak to staff', description: 'Request human assistance' },
+        ],
+      }],
+    },
+  };
+}
+
+function buildKnowledgeMenu(): WhatsAppInteractivePayload {
+  return {
+    type: 'list',
+    body: { text: 'Choose a topic and I will show the exact Phadam Hospital information.' },
+    action: {
+      button: 'Choose a topic',
+      sections: [{
+        title: 'Hospital information',
+        rows: [
+          { id: 'menu_services', title: 'Services', description: 'Clinical and support services' },
+          { id: 'menu_departments', title: 'Departments', description: 'Department information' },
+          { id: 'menu_specialists', title: 'Specialist clinics', description: 'Specialist care options' },
+          { id: 'menu_locations', title: 'Locations', description: 'Branches and contacts' },
+          { id: 'menu_prices', title: 'Prices', description: 'Procedures and fees' },
+          { id: 'menu_insurance', title: 'SHA and insurance', description: 'Accepted medical covers' },
+          { id: 'menu_about', title: 'About Phadam', description: 'Mission, values and leadership' },
+          { id: 'menu_human', title: 'Speak to staff', description: 'Request human help' },
+        ],
+      }],
+    },
+  };
+}
+
+function normalizeInteractiveSelection(message: string): string {
+  const selections: Record<string, string> = {
+    menu_appointments: 'book appointment',
+    menu_scheduled: 'show my scheduled appointments',
+    menu_services: 'show our services',
+    menu_departments: 'show our departments',
+    menu_specialists: 'show our specialist clinics',
+    menu_locations: 'show our locations and contacts',
+    menu_prices: 'show prices and fees',
+    menu_insurance: 'show SHA and insurance',
+    menu_about: 'show hospital information',
+    menu_human: 'I want to speak to a human staff member',
+    appointment_confirm: 'confirm',
+    appointment_change: 'change details',
+    date_today: 'today',
+    date_tomorrow: 'tomorrow',
+    date_next_week: 'next week',
+  };
+
+  if (selections[message]) return selections[message];
+
+  if (message.startsWith('time_')) {
+    return message.slice('time_'.length).replaceAll('_', ' ');
+  }
+
+  if (message.startsWith('service_')) {
+    return message.slice('service_'.length).replaceAll('_', ' ');
+  }
+
+  return message;
+}
+
 async function sendBotReply(
   patient: {
     id: string;
     phoneNumber: string;
     fullName?: string | null;
     chatStatus?: string;
+    nameWasJustCaptured?: boolean;
   },
   incomingMessage: string,
 ): Promise<void> {
+  const effectiveMessage = normalizeInteractiveSelection(incomingMessage);
   const patientName = (isUsablePatientName(patient.fullName)
     ? patient.fullName
-    : extractPatientName(incomingMessage)) || 'Patient';
-  const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(incomingMessage);
+    : extractPatientName(effectiveMessage)) || 'Patient';
+  const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(effectiveMessage);
   const hasPatientName = patientName !== 'Patient';
-  const appointmentDetails = parseAppointmentRequest(incomingMessage);
+  const appointmentDetails = parseAppointmentRequest(effectiveMessage);
+  const nameWasJustCaptured = patient.nameWasJustCaptured === true;
 
   if (
     appointmentConversationState.has(patient.id) &&
@@ -423,7 +506,27 @@ async function sendBotReply(
     }
   }
 
-  if (isHumanSupportRequest(incomingMessage)) {
+  if (nameWasJustCaptured) {
+    const menu = buildPatientMenu();
+    await sendWhatsAppMessage({ recipientPhone: patient.phoneNumber, interactive: menu });
+    await prisma.messageLog.create({
+      data: {
+        patientId: patient.id,
+        sender: 'BOT',
+        body: menu.body.text,
+        timestamp: new Date(),
+      },
+    });
+    return;
+  }
+
+  if (effectiveMessage === 'show our services' || effectiveMessage === 'show our departments' || effectiveMessage === 'show our specialist clinics' || effectiveMessage === 'show prices and fees' || effectiveMessage === 'show SHA and insurance' || effectiveMessage === 'show hospital information') {
+    const menu = buildKnowledgeMenu();
+    await sendWhatsAppMessage({ recipientPhone: patient.phoneNumber, interactive: menu });
+    return;
+  }
+
+  if (isHumanSupportRequest(effectiveMessage)) {
     const humanReply = hasPatientName
       ? `Thanks, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`
       : 'I can connect you with a human staff member. Before I send the request, please reply with your full name and briefly tell me what you need help with.';
@@ -463,7 +566,7 @@ async function sendBotReply(
     ? await getAppointmentLookupReply(
         patient.id,
         patientName,
-        incomingMessage,
+        effectiveMessage,
       )
     : null;
 
@@ -498,7 +601,7 @@ async function sendBotReply(
   }
 
   if (hasPatientName && (bookingIntent || appointmentConversationState.has(patient.id))) {
-    const appointmentState = updateAppointmentConversation(patient.id, patientName, incomingMessage);
+    const appointmentState = updateAppointmentConversation(patient.id, patientName, effectiveMessage);
 
     if (!appointmentState.completed) {
       const replyText = appointmentState.prompt;
@@ -594,7 +697,7 @@ async function sendBotReply(
   const lastInteractionHours = await getLastInteractionHours(patient.id);
   const replyText = generateBotReply({
     patientName: patientName || null,
-    message: incomingMessage,
+    message: effectiveMessage,
     isReturning: isConversationStale(lastInteractionHours),
     lastInteractionHours,
   });
@@ -685,17 +788,17 @@ function getMessageBody(message: WhatsAppIncomingMessage): string {
   if (message.type === 'interactive') {
     if (message.interactive?.type === 'button_reply') {
       return (
-        message.interactive.button_reply?.title?.trim() ||
         message.interactive.button_reply?.id?.trim() ||
+        message.interactive.button_reply?.title?.trim() ||
         '[Interactive button response]'
       );
     }
 
     if (message.interactive?.type === 'list_reply') {
       return (
+        message.interactive.list_reply?.id?.trim() ||
         message.interactive.list_reply?.title?.trim() ||
         message.interactive.list_reply?.description?.trim() ||
-        message.interactive.list_reply?.id?.trim() ||
         '[Interactive list response]'
       );
     }
@@ -936,6 +1039,20 @@ export async function handleWhatsAppWebhook(
             incomingMessage.timestamp,
           );
 
+          if (whatsappMessageId) {
+            const alreadyProcessed = await prisma.messageLog.findUnique({
+              where: { whatsappMessageId },
+              select: { id: true },
+            });
+
+            if (alreadyProcessed) {
+              console.info('[WhatsApp Duplicate Event Ignored]', {
+                whatsappMessageId,
+              });
+              continue;
+            }
+          }
+
           const profileName = getContactProfileName(
             contacts,
             senderPhone,
@@ -1074,6 +1191,7 @@ export async function handleWhatsAppWebhook(
                   patientId: patient.id,
                   sender: 'PATIENT',
                   body: messageBody,
+                  whatsappMessageId: whatsappMessageId || undefined,
                   timestamp: sentAt,
                 },
               }),

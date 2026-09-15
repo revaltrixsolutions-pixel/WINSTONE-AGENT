@@ -36,6 +36,7 @@ model Appointment {
 
 model MessageLog {
   id        String   @id @default(uuid())
+  whatsappMessageId String? @unique
   patientId String?
   patient   Patient? @relation(fields: [patientId], references: [id])
   sender    String   
