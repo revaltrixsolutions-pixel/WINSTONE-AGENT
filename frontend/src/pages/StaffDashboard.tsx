@@ -11,10 +11,12 @@ import { ChatWindow } from '../components/ChatWindow';
 import { AppointmentTable } from '../components/AppointmentTable';
 import {
   createUserAccount,
+  deleteUserAccount,
   fetchCurrentUser,
   fetchUsers,
   loginToDashboard,
   logoutDashboard,
+  updateUserStatus,
 } from '../services/api';
 
 import {
@@ -49,6 +51,7 @@ export const StaffDashboard: React.FC = () => {
     name: string;
     email: string;
     role: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
+    isActive: boolean;
   }>>([]);
   const [adminForm, setAdminForm] = useState({
     name: '',
@@ -59,6 +62,7 @@ export const StaffDashboard: React.FC = () => {
   const [adminBusy, setAdminBusy] = useState(false);
 
   const previousChatIds = useRef<Set<string>>(new Set());
+  const previousAssignments = useRef<Record<string, string | null>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
   const isLoadingChatsRef = useRef(false);
 
@@ -170,6 +174,28 @@ export const StaffDashboard: React.FC = () => {
         notifyBrowser(nextChats.length - previousIds.size || 1);
       }
 
+      if (currentUser) {
+        const newlyAssigned = nextChats.filter((chat) =>
+          chat.assignedTo === currentUser.name &&
+          previousAssignments.current[chat.id] !== currentUser.name,
+        );
+
+        if (newlyAssigned.length > 0) {
+          playNotificationSound();
+          notifyBrowser(newlyAssigned.length);
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Patient needs your help', {
+              body: 'A patient has been assigned to you. Open the chat and introduce yourself.',
+              tag: `phadam-assignment-${newlyAssigned[0].id}`,
+            });
+          }
+        }
+      }
+
+      previousAssignments.current = Object.fromEntries(
+        nextChats.map((chat) => [chat.id, chat.assignedTo ?? null]),
+      );
+
       previousChatIds.current = nextChatIds;
       setChats(nextChats);
 
@@ -189,7 +215,7 @@ export const StaffDashboard: React.FC = () => {
       isLoadingChatsRef.current = false;
       setIsLoading(false);
     }
-  }, [notifyBrowser, playNotificationSound]);
+  }, [currentUser, notifyBrowser, playNotificationSound]);
 
   const handleLogin = useCallback(async () => {
     try {
@@ -311,6 +337,33 @@ export const StaffDashboard: React.FC = () => {
       setAdminBusy(false);
     }
   }, [adminForm, currentUser, loadAdminUsers]);
+
+  const handleToggleUser = useCallback(async (userId: string, isActive: boolean) => {
+    try {
+      setAdminBusy(true);
+      const response = await updateUserStatus(userId, isActive);
+      if (!response.success) throw new Error(response.error || 'Unable to update user.');
+      await loadAdminUsers();
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : 'Unable to update user.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }, [loadAdminUsers]);
+
+  const handleDeleteUser = useCallback(async (userId: string) => {
+    if (!window.confirm('Delete this user permanently?')) return;
+
+    try {
+      setAdminBusy(true);
+      await deleteUserAccount(userId);
+      await loadAdminUsers();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete user.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }, [loadAdminUsers]);
 
   useEffect(() => {
     return () => {
@@ -677,7 +730,7 @@ export const StaffDashboard: React.FC = () => {
                         onSelectChat={handleSelectChat}
                         onAssignChat={handleAssignChat}
                         staffMembers={adminUsers
-                          .filter((user) => user.role !== 'SUPER_ADMIN')
+                          .filter((user) => user.role !== 'SUPER_ADMIN' && user.isActive)
                           .map((user) => user.name)}
                       />
                     )}
@@ -874,6 +927,29 @@ export const StaffDashboard: React.FC = () => {
                               <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-violet-700">
                                 {user.role}
                               </span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              <span className={`text-xs font-bold ${user.isActive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {user.isActive ? 'Active access' : 'Access deactivated'}
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={adminBusy || user.id === currentUser.id}
+                                  onClick={() => void handleToggleUser(user.id, !user.isActive)}
+                                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {user.isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={adminBusy || user.id === currentUser.id}
+                                  onClick={() => void handleDeleteUser(user.id)}
+                                  className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Delete
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))

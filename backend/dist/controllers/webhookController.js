@@ -137,6 +137,7 @@ async function sendBotReply(patient, incomingMessage) {
         ? patient.fullName
         : (0, aiBotService_1.extractPatientName)(incomingMessage)) || 'Patient';
     const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(incomingMessage);
+    const hasPatientName = patientName !== 'Patient';
     if (patient.chatStatus === 'AGENT_ACTIVE') {
         const hoursSinceAgentMessage = await getLastAgentInteractionHours(patient.id);
         if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < 6) {
@@ -147,7 +148,9 @@ async function sendBotReply(patient, incomingMessage) {
             return;
         }
     }
-    const appointmentLookupReply = await getAppointmentLookupReply(patient.id, patientName, incomingMessage);
+    const appointmentLookupReply = hasPatientName
+        ? await getAppointmentLookupReply(patient.id, patientName, incomingMessage)
+        : null;
     if (appointmentLookupReply) {
         try {
             const whatsappResult = await (0, whatsappService_1.sendWhatsAppMessage)({
@@ -175,7 +178,7 @@ async function sendBotReply(patient, incomingMessage) {
         }
         return;
     }
-    if (bookingIntent || aiBotService_1.appointmentConversationState.has(patient.id)) {
+    if (hasPatientName && (bookingIntent || aiBotService_1.appointmentConversationState.has(patient.id))) {
         const appointmentState = (0, aiBotService_1.updateAppointmentConversation)(patient.id, patientName, incomingMessage);
         if (!appointmentState.completed) {
             const replyText = appointmentState.prompt;

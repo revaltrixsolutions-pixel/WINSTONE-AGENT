@@ -18,6 +18,7 @@ const auth_1 = require("./auth");
         email: 'superadmin@phadam.com',
         role: 'SUPER_ADMIN',
         name: 'Super Admin',
+        isActive: true,
     });
     const payload = (0, auth_1.verifyUserToken)(token);
     strict_1.default.ok(payload);

@@ -10,6 +10,7 @@ export type PublicUser = {
   name: string;
   email: string;
   role: UserRole;
+  isActive: boolean;
 };
 
 type TokenPayload = PublicUser & { iat: number };
@@ -82,12 +83,13 @@ export function verifyUserToken(token: string): TokenPayload | null {
   }
 }
 
-function toPublicUser(user: { id: string; name: string; email: string; role: string }): PublicUser {
+function toPublicUser(user: { id: string; name: string; email: string; role: string; isActive: boolean }): PublicUser {
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role as UserRole,
+    isActive: user.isActive,
   };
 }
 
@@ -101,7 +103,7 @@ export async function findUserById(id: string) {
 
 export async function getUsers(): Promise<PublicUser[]> {
   const users = await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, isActive: true },
     orderBy: { createdAt: 'asc' },
   });
   return users.map(toPublicUser);
@@ -117,7 +119,7 @@ export async function createUser(input: { name: string; email: string; password:
   }
 
   const user = await prisma.user.create({
-    data: { name, email, password: hashPassword(password), role: input.role || 'STAFF' },
+    data: { name, email, password: hashPassword(password), role: input.role || 'STAFF', isActive: true },
   });
   return toPublicUser(user);
 }
@@ -137,6 +139,7 @@ export async function ensureSuperAdmin(): Promise<void> {
       email: SUPER_ADMIN_EMAIL,
       password: hashPassword(SUPER_ADMIN_PASSWORD),
       role: 'SUPER_ADMIN',
+      isActive: true,
     },
   });
 }
@@ -154,6 +157,14 @@ export const requireAuth: RequestHandler = async (req: Request, res: Response, n
   const user = await findUserById(payload.id);
   if (!user) {
     res.status(401).json({ success: false, error: 'User account no longer exists.' });
+    return;
+  }
+
+  if (!user.isActive) {
+    res.status(403).json({
+      success: false,
+      error: 'This account has been deactivated. Contact the super admin.',
+    });
     return;
   }
 

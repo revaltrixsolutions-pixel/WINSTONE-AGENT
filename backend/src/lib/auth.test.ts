@@ -22,6 +22,7 @@ test('creates and validates signed auth tokens', () => {
     email: 'superadmin@phadam.com',
     role: 'SUPER_ADMIN',
     name: 'Super Admin',
+    isActive: true,
   });
 
   const payload = verifyUserToken(token);

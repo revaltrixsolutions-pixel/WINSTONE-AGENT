@@ -78,6 +78,7 @@ function toPublicUser(user) {
         name: user.name,
         email: user.email,
         role: user.role,
+        isActive: user.isActive,
     };
 }
 async function findUserByEmail(email) {
@@ -88,7 +89,7 @@ async function findUserById(id) {
 }
 async function getUsers() {
     const users = await prisma_1.prisma.user.findMany({
-        select: { id: true, name: true, email: true, role: true },
+        select: { id: true, name: true, email: true, role: true, isActive: true },
         orderBy: { createdAt: 'asc' },
     });
     return users.map(toPublicUser);
@@ -101,7 +102,7 @@ async function createUser(input) {
         throw new Error('Name, email, and a password of at least 8 characters are required.');
     }
     const user = await prisma_1.prisma.user.create({
-        data: { name, email, password: hashPassword(password), role: input.role || 'STAFF' },
+        data: { name, email, password: hashPassword(password), role: input.role || 'STAFF', isActive: true },
     });
     return toPublicUser(user);
 }
@@ -119,6 +120,7 @@ async function ensureSuperAdmin() {
             email: SUPER_ADMIN_EMAIL,
             password: hashPassword(SUPER_ADMIN_PASSWORD),
             role: 'SUPER_ADMIN',
+            isActive: true,
         },
     });
 }
@@ -133,6 +135,13 @@ const requireAuth = async (req, res, next) => {
     const user = await findUserById(payload.id);
     if (!user) {
         res.status(401).json({ success: false, error: 'User account no longer exists.' });
+        return;
+    }
+    if (!user.isActive) {
+        res.status(403).json({
+            success: false,
+            error: 'This account has been deactivated. Contact the super admin.',
+        });
         return;
     }
     req.user = toPublicUser(user);

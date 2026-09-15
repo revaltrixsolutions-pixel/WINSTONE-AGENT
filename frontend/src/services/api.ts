@@ -64,6 +64,7 @@ export type AuthUser = {
   name: string;
   email: string;
   role: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
+  isActive: boolean;
 };
 
 export type LoginResponse = {
@@ -583,6 +584,27 @@ export async function createUserAccount(
   return request<{ success: boolean; user?: AuthUser; error?: string }>('/api/auth/users', {
     method: 'POST',
     body: JSON.stringify(userInput),
+  });
+}
+
+export async function updateUserStatus(
+  userId: string,
+  isActive: boolean,
+): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
+  return request<{ success: boolean; user?: AuthUser; error?: string }>(
+    `/api/auth/users/${encodeURIComponent(userId)}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive }),
+    },
+  );
+}
+
+export async function deleteUserAccount(
+  userId: string,
+): Promise<void> {
+  await request<void>(`/api/auth/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
   });
 }
 

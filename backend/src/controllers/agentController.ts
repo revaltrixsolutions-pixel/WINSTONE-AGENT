@@ -96,19 +96,35 @@ export async function assignChat(
       });
     }
 
+    const staffUser = await prisma.user.findFirst({
+      where: {
+        name: trimmedAgentName,
+        isActive: true,
+        role: { in: ['STAFF', 'ADMIN', 'SUPER_ADMIN'] },
+      },
+      select: { id: true, name: true },
+    });
+
+    if (!staffUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'That staff member is not active or does not exist.',
+      });
+    }
+
     const updatedPatient = await prisma.patient.update({
       where: {
         id: trimmedPatientId,
       },
       data: {
         chatStatus: 'AGENT_ACTIVE',
-        assignedTo: trimmedAgentName,
+        assignedTo: staffUser.name,
       },
     });
 
     console.info('[Agent Chat Assigned]', {
       patientId: updatedPatient.id,
-      agentName: trimmedAgentName,
+      agentName: staffUser.name,
     });
 
     return res.status(200).json({
