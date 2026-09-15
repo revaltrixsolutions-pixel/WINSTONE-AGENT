@@ -9,6 +9,7 @@ import {
   generateAppointmentCollectionPrompt,
   getKenyaGreeting,
   isUsablePatientName,
+  isHumanSupportRequest,
   CONVERSATION_MEMORY_MINUTES,
 } from './aiBotService';
 
@@ -70,6 +71,17 @@ test('extracts patient name from message', () => {
 test('does not treat a command as a patient name', () => {
   assert.equal(extractPatientName('Assign me'), null);
   assert.equal(isUsablePatientName('Assign'), false);
+  assert.equal(isUsablePatientName('Patient'), false);
+});
+
+test('guides patients who request a human', () => {
+  assert.equal(isHumanSupportRequest('Can I talk to a human?'), true);
+  assert.match(generateBotReply({
+    patientName: 'Mary',
+    message: 'Can I talk to a human?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  }), /staff|introduce/i);
 });
 
 test('named greetings provide Kenya time and next actions', () => {

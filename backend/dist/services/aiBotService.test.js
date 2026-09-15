@@ -54,6 +54,16 @@ const aiBotService_1 = require("./aiBotService");
 (0, node_test_1.default)('does not treat a command as a patient name', () => {
     strict_1.default.equal((0, aiBotService_1.extractPatientName)('Assign me'), null);
     strict_1.default.equal((0, aiBotService_1.isUsablePatientName)('Assign'), false);
+    strict_1.default.equal((0, aiBotService_1.isUsablePatientName)('Patient'), false);
+});
+(0, node_test_1.default)('guides patients who request a human', () => {
+    strict_1.default.equal((0, aiBotService_1.isHumanSupportRequest)('Can I talk to a human?'), true);
+    strict_1.default.match((0, aiBotService_1.generateBotReply)({
+        patientName: 'Mary',
+        message: 'Can I talk to a human?',
+        isReturning: false,
+        lastInteractionHours: 0,
+    }), /staff|introduce/i);
 });
 (0, node_test_1.default)('named greetings provide Kenya time and next actions', () => {
     const reply = (0, aiBotService_1.generateBotReply)({

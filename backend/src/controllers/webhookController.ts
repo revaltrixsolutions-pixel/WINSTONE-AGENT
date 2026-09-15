@@ -9,6 +9,7 @@ import {
   getKenyaGreeting,
   isUsablePatientName,
   isConversationStale,
+  isHumanSupportRequest,
   parseAppointmentRequest,
   appointmentConversationState,
   updateAppointmentConversation,
@@ -198,8 +199,9 @@ async function getLastAgentInteractionHours(
 
 function isAppointmentLookupRequest(message: string): boolean {
   return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
-    /\b(appointment|booking|visit)\b.*\b(details|status|when|date|time|schedule|scheduled)\b/i.test(message) ||
-    /\bwhen\b.*\b(appointment|visit|see the doctor)\b/i.test(message);
+    /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(message) ||
+    /\b(when|where|what time)\b.*\b(appointment|visit|doctor|clinic)\b/i.test(message) ||
+    /\b(scheduled|upcoming|confirmed)\b.*\b(appointment|visit|booking)\b/i.test(message);
 }
 
 function formatKenyaDateTime(date: Date): string {
@@ -308,9 +310,9 @@ function buildAppointmentInteractive(
     department?: string;
     awaitingConfirmation?: boolean;
   },
-): WhatsAppInteractivePayload | undefined {
+): WhatsAppInteractivePayload[] {
   if (appointmentState.awaitingConfirmation) {
-    return {
+    return [{
       type: 'button',
       body: { text: prompt },
       action: {
@@ -319,7 +321,7 @@ function buildAppointmentInteractive(
           { type: 'reply', reply: { id: 'appointment_change', title: 'Change details' } },
         ],
       },
-    };
+    }];
   }
 
   if (!appointmentState.department) {
@@ -329,26 +331,26 @@ function buildAppointmentInteractive(
       description: `Book ${service.slice(0, 52)}`,
     }));
 
-    const sections = [];
+    const messages: WhatsAppInteractivePayload[] = [];
     for (let index = 0; index < rows.length; index += 10) {
-      sections.push({
-        title: index === 0 ? 'Hospital services' : 'More services',
-        rows: rows.slice(index, index + 10),
+      messages.push({
+        type: 'list',
+        body: { text: prompt },
+        action: {
+          button: index === 0 ? 'Choose a service' : 'More services',
+          sections: [{
+            title: index === 0 ? 'Hospital services' : 'More services',
+            rows: rows.slice(index, index + 10),
+          }],
+        },
       });
     }
 
-    return {
-      type: 'list',
-      body: { text: prompt },
-      action: {
-        button: 'Choose a service',
-        sections,
-      },
-    };
+    return messages;
   }
 
   if (!appointmentState.date) {
-    return {
+    return [{
       type: 'list',
       body: { text: prompt },
       action: {
@@ -362,11 +364,11 @@ function buildAppointmentInteractive(
           ],
         }],
       },
-    };
+    }];
   }
 
   if (!appointmentState.time) {
-    return {
+    return [{
       type: 'list',
       body: { text: prompt },
       action: {
@@ -379,10 +381,10 @@ function buildAppointmentInteractive(
           })),
         }],
       },
-    };
+    }];
   }
 
-  return undefined;
+  return [];
 }
 
 async function sendBotReply(
@@ -421,6 +423,42 @@ async function sendBotReply(
       });
       return;
     }
+  }
+
+  if (isHumanSupportRequest(incomingMessage)) {
+    const humanReply = hasPatientName
+      ? `Thanks, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`
+      : 'I can connect you with a human staff member. Before I send the request, please reply with your full name and briefly tell me what you need help with.';
+
+    if (hasPatientName) {
+      await prisma.patient.update({
+        where: { id: patient.id },
+        data: { chatStatus: 'PENDING_AGENT' },
+      });
+    }
+
+    try {
+      await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText: humanReply,
+      });
+
+      await prisma.messageLog.create({
+        data: {
+          patientId: patient.id,
+          sender: 'BOT',
+          body: humanReply,
+          timestamp: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('[WhatsApp Human Handoff Reply Failed]', {
+        patientId: patient.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+
+    return;
   }
 
   const appointmentLookupReply = hasPatientName
@@ -466,17 +504,26 @@ async function sendBotReply(
 
     if (!appointmentState.completed) {
       const replyText = appointmentState.prompt;
-      const interactive = buildAppointmentInteractive(replyText, {
+      const interactiveMessages = buildAppointmentInteractive(replyText, {
         ...appointmentState.data,
         awaitingConfirmation: appointmentState.awaitingConfirmation,
       });
 
       try {
-        await sendWhatsAppMessage({
-          recipientPhone: patient.phoneNumber,
-          messageText: replyText,
-          interactive,
-        });
+        if (interactiveMessages.length) {
+          for (const interactive of interactiveMessages) {
+            await sendWhatsAppMessage({
+              recipientPhone: patient.phoneNumber,
+              messageText: replyText,
+              interactive,
+            });
+          }
+        } else {
+          await sendWhatsAppMessage({
+            recipientPhone: patient.phoneNumber,
+            messageText: replyText,
+          });
+        }
 
         await prisma.messageLog.create({
           data: {
@@ -962,7 +1009,12 @@ export async function handleWhatsAppWebhook(
           const storedName = isUsablePatientName(patient.fullName)
             ? patient.fullName
             : null;
-          const detectedName = storedName || extractPatientName(messageBody);
+          const profileNameCandidate = isUsablePatientName(profileName)
+            ? profileName
+            : null;
+          const detectedName = storedName ||
+            extractPatientName(messageBody) ||
+            profileNameCandidate;
 
           if (detectedName !== patient.fullName) {
             patient = await prisma.patient.update({

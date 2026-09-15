@@ -50,8 +50,9 @@ async function getLastAgentInteractionHours(patientId) {
 }
 function isAppointmentLookupRequest(message) {
     return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
-        /\b(appointment|booking|visit)\b.*\b(details|status|when|date|time|schedule|scheduled)\b/i.test(message) ||
-        /\bwhen\b.*\b(appointment|visit|see the doctor)\b/i.test(message);
+        /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(message) ||
+        /\b(when|where|what time)\b.*\b(appointment|visit|doctor|clinic)\b/i.test(message) ||
+        /\b(scheduled|upcoming|confirmed)\b.*\b(appointment|visit|booking)\b/i.test(message);
 }
 function formatKenyaDateTime(date) {
     return new Intl.DateTimeFormat('en-KE', {
@@ -134,16 +135,16 @@ function parseAppointmentDate(dateText, timeText) {
 }
 function buildAppointmentInteractive(prompt, appointmentState) {
     if (appointmentState.awaitingConfirmation) {
-        return {
-            type: 'button',
-            body: { text: prompt },
-            action: {
-                buttons: [
-                    { type: 'reply', reply: { id: 'appointment_confirm', title: 'Confirm' } },
-                    { type: 'reply', reply: { id: 'appointment_change', title: 'Change details' } },
-                ],
-            },
-        };
+        return [{
+                type: 'button',
+                body: { text: prompt },
+                action: {
+                    buttons: [
+                        { type: 'reply', reply: { id: 'appointment_confirm', title: 'Confirm' } },
+                        { type: 'reply', reply: { id: 'appointment_change', title: 'Change details' } },
+                    ],
+                },
+            }];
     }
     if (!appointmentState.department) {
         const rows = aiBotService_1.appointmentServiceOptions.map((service) => ({
@@ -151,56 +152,56 @@ function buildAppointmentInteractive(prompt, appointmentState) {
             title: service.slice(0, 24),
             description: `Book ${service.slice(0, 52)}`,
         }));
-        const sections = [];
+        const messages = [];
         for (let index = 0; index < rows.length; index += 10) {
-            sections.push({
-                title: index === 0 ? 'Hospital services' : 'More services',
-                rows: rows.slice(index, index + 10),
+            messages.push({
+                type: 'list',
+                body: { text: prompt },
+                action: {
+                    button: index === 0 ? 'Choose a service' : 'More services',
+                    sections: [{
+                            title: index === 0 ? 'Hospital services' : 'More services',
+                            rows: rows.slice(index, index + 10),
+                        }],
+                },
             });
         }
-        return {
-            type: 'list',
-            body: { text: prompt },
-            action: {
-                button: 'Choose a service',
-                sections,
-            },
-        };
+        return messages;
     }
     if (!appointmentState.date) {
-        return {
-            type: 'list',
-            body: { text: prompt },
-            action: {
-                button: 'Choose a date',
-                sections: [{
-                        title: 'Appointment date',
-                        rows: [
-                            { id: 'date_today', title: 'Today' },
-                            { id: 'date_tomorrow', title: 'Tomorrow' },
-                            { id: 'date_next_week', title: 'Next week' },
-                        ],
-                    }],
-            },
-        };
+        return [{
+                type: 'list',
+                body: { text: prompt },
+                action: {
+                    button: 'Choose a date',
+                    sections: [{
+                            title: 'Appointment date',
+                            rows: [
+                                { id: 'date_today', title: 'Today' },
+                                { id: 'date_tomorrow', title: 'Tomorrow' },
+                                { id: 'date_next_week', title: 'Next week' },
+                            ],
+                        }],
+                },
+            }];
     }
     if (!appointmentState.time) {
-        return {
-            type: 'list',
-            body: { text: prompt },
-            action: {
-                button: 'Choose a time',
-                sections: [{
-                        title: 'Available times',
-                        rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
-                            id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-                            title: time,
-                        })),
-                    }],
-            },
-        };
+        return [{
+                type: 'list',
+                body: { text: prompt },
+                action: {
+                    button: 'Choose a time',
+                    sections: [{
+                            title: 'Available times',
+                            rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
+                                id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                                title: time,
+                            })),
+                        }],
+                },
+            }];
     }
-    return undefined;
+    return [];
 }
 async function sendBotReply(patient, incomingMessage) {
     const patientName = ((0, aiBotService_1.isUsablePatientName)(patient.fullName)
@@ -225,6 +226,38 @@ async function sendBotReply(patient, incomingMessage) {
             });
             return;
         }
+    }
+    if ((0, aiBotService_1.isHumanSupportRequest)(incomingMessage)) {
+        const humanReply = hasPatientName
+            ? `Thanks, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`
+            : 'I can connect you with a human staff member. Before I send the request, please reply with your full name and briefly tell me what you need help with.';
+        if (hasPatientName) {
+            await prisma_1.prisma.patient.update({
+                where: { id: patient.id },
+                data: { chatStatus: 'PENDING_AGENT' },
+            });
+        }
+        try {
+            await (0, whatsappService_1.sendWhatsAppMessage)({
+                recipientPhone: patient.phoneNumber,
+                messageText: humanReply,
+            });
+            await prisma_1.prisma.messageLog.create({
+                data: {
+                    patientId: patient.id,
+                    sender: 'BOT',
+                    body: humanReply,
+                    timestamp: new Date(),
+                },
+            });
+        }
+        catch (error) {
+            console.error('[WhatsApp Human Handoff Reply Failed]', {
+                patientId: patient.id,
+                error: error instanceof Error ? error.message : error,
+            });
+        }
+        return;
     }
     const appointmentLookupReply = hasPatientName
         ? await getAppointmentLookupReply(patient.id, patientName, incomingMessage)
@@ -260,16 +293,26 @@ async function sendBotReply(patient, incomingMessage) {
         const appointmentState = (0, aiBotService_1.updateAppointmentConversation)(patient.id, patientName, incomingMessage);
         if (!appointmentState.completed) {
             const replyText = appointmentState.prompt;
-            const interactive = buildAppointmentInteractive(replyText, {
+            const interactiveMessages = buildAppointmentInteractive(replyText, {
                 ...appointmentState.data,
                 awaitingConfirmation: appointmentState.awaitingConfirmation,
             });
             try {
-                await (0, whatsappService_1.sendWhatsAppMessage)({
-                    recipientPhone: patient.phoneNumber,
-                    messageText: replyText,
-                    interactive,
-                });
+                if (interactiveMessages.length) {
+                    for (const interactive of interactiveMessages) {
+                        await (0, whatsappService_1.sendWhatsAppMessage)({
+                            recipientPhone: patient.phoneNumber,
+                            messageText: replyText,
+                            interactive,
+                        });
+                    }
+                }
+                else {
+                    await (0, whatsappService_1.sendWhatsAppMessage)({
+                        recipientPhone: patient.phoneNumber,
+                        messageText: replyText,
+                    });
+                }
                 await prisma_1.prisma.messageLog.create({
                     data: {
                         patientId: patient.id,
@@ -653,7 +696,12 @@ async function handleWhatsAppWebhook(req, res) {
                     const storedName = (0, aiBotService_1.isUsablePatientName)(patient.fullName)
                         ? patient.fullName
                         : null;
-                    const detectedName = storedName || (0, aiBotService_1.extractPatientName)(messageBody);
+                    const profileNameCandidate = (0, aiBotService_1.isUsablePatientName)(profileName)
+                        ? profileName
+                        : null;
+                    const detectedName = storedName ||
+                        (0, aiBotService_1.extractPatientName)(messageBody) ||
+                        profileNameCandidate;
                     if (detectedName !== patient.fullName) {
                         patient = await prisma_1.prisma.patient.update({
                             where: {

@@ -33,7 +33,7 @@ const DEFAULT_WELCOME =
 
 const NON_NAME_WORDS = new Set([
   'assign', 'me', 'help', 'please', 'book', 'appointment', 'appointments', 'need', 'visit',
-  'hello', 'hi', 'hey', 'thanks', 'thank', 'you', 'yes', 'no', 'okay',
+  'hello', 'hi', 'hey', 'thanks', 'thank', 'you', 'yes', 'no', 'okay', 'patient',
   'how', 'what', 'where', 'when', 'why', 'can', 'could', 'would',
 ]);
 
@@ -88,6 +88,10 @@ export function isUsablePatientName(name: string | null | undefined): boolean {
 export function isConversationStale(lastInteractionHours: number): boolean {
   return Number.isFinite(lastInteractionHours) &&
     lastInteractionHours >= CONVERSATION_MEMORY_MINUTES / 60;
+}
+
+export function isHumanSupportRequest(message: string): boolean {
+  return /\b(human|person|agent|staff|doctor|nurse|reception|receptionist|customer care|customer service|talk to|speak to|connect me|assign me|real person|live support|help desk)\b/i.test(message);
 }
 
 export function parseAppointmentRequest(message: string): AppointmentRequestData {
@@ -329,7 +333,14 @@ export function generateBotReply({
   }
 
   if (!patientName) {
+    if (isHumanSupportRequest(text)) {
+      return 'I can connect you with a human staff member. Please reply with your full name and briefly tell me what you need help with so I can send the request to the team.';
+    }
     return `${DEFAULT_WELCOME} You can reply with your full name.`;
+  }
+
+  if (isHumanSupportRequest(text)) {
+    return `Thank you, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`;
   }
 
   const isGreeting = /^(hi|hello|hey|good morning|good afternoon|good evening)\b/i.test(normalized);

@@ -4,6 +4,7 @@ exports.CONVERSATION_MEMORY_MINUTES = exports.appointmentConversationState = exp
 exports.extractPatientName = extractPatientName;
 exports.isUsablePatientName = isUsablePatientName;
 exports.isConversationStale = isConversationStale;
+exports.isHumanSupportRequest = isHumanSupportRequest;
 exports.parseAppointmentRequest = parseAppointmentRequest;
 exports.generateAppointmentCollectionPrompt = generateAppointmentCollectionPrompt;
 exports.updateAppointmentConversation = updateAppointmentConversation;
@@ -23,7 +24,7 @@ exports.CONVERSATION_MEMORY_MINUTES = 3;
 const DEFAULT_WELCOME = 'Welcome to Phadam Hospital. We are here to help you with your care needs. What is your name?';
 const NON_NAME_WORDS = new Set([
     'assign', 'me', 'help', 'please', 'book', 'appointment', 'appointments', 'need', 'visit',
-    'hello', 'hi', 'hey', 'thanks', 'thank', 'you', 'yes', 'no', 'okay',
+    'hello', 'hi', 'hey', 'thanks', 'thank', 'you', 'yes', 'no', 'okay', 'patient',
     'how', 'what', 'where', 'when', 'why', 'can', 'could', 'would',
 ]);
 function cleanText(value) {
@@ -70,6 +71,9 @@ function isUsablePatientName(name) {
 function isConversationStale(lastInteractionHours) {
     return Number.isFinite(lastInteractionHours) &&
         lastInteractionHours >= exports.CONVERSATION_MEMORY_MINUTES / 60;
+}
+function isHumanSupportRequest(message) {
+    return /\b(human|person|agent|staff|doctor|nurse|reception|receptionist|customer care|customer service|talk to|speak to|connect me|assign me|real person|live support|help desk)\b/i.test(message);
 }
 function parseAppointmentRequest(message) {
     const lower = normalizeKeyword(message);
@@ -254,7 +258,13 @@ function generateBotReply({ patientName, message, isReturning, lastInteractionHo
         return 'Please tell me what you need today. You can ask about appointments, services, SHA, locations, prices, or staff assistance.';
     }
     if (!patientName) {
+        if (isHumanSupportRequest(text)) {
+            return 'I can connect you with a human staff member. Please reply with your full name and briefly tell me what you need help with so I can send the request to the team.';
+        }
         return `${DEFAULT_WELCOME} You can reply with your full name.`;
+    }
+    if (isHumanSupportRequest(text)) {
+        return `Thank you, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`;
     }
     const isGreeting = /^(hi|hello|hey|good morning|good afternoon|good evening)\b/i.test(normalized);
     const appointmentRequest = parseAppointmentRequest(text);
