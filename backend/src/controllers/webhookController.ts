@@ -645,6 +645,11 @@ async function sendBotReply(
     }
 
     const { date, time, department } = appointmentState.data!;
+
+    if (!date || !time || !department) {
+      return;
+    }
+
     const slotTime = parseAppointmentDate(date, time);
 
     try {
