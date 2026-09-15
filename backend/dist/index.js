@@ -11,6 +11,7 @@ const node_cron_1 = __importDefault(require("node-cron"));
 const webhookRoutes_1 = __importDefault(require("./routes/webhookRoutes"));
 const publicApiRoutes_1 = __importDefault(require("./routes/publicApiRoutes"));
 const agentRoutes_1 = __importDefault(require("./routes/agentRoutes"));
+const dashboardRoutes_1 = __importDefault(require("./routes/dashboardRoutes"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const prisma_1 = require("./lib/prisma");
 const auth_1 = require("./lib/auth");
@@ -167,6 +168,7 @@ app.use('/api/auth', authRoutes_1.default);
  * POST /api/agent/reply
  */
 app.use('/api/agent', agentRoutes_1.default);
+app.use('/api/dashboard', dashboardRoutes_1.default);
 /* =========================================================
    ROOT HEALTH CHECK
    ========================================================= */

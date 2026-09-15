@@ -27,6 +27,8 @@ model Appointment {
   patient     Patient  @relation(fields: [patientId], references: [id])
   doctorName  String
   specialty   String
+  servicePrice String   @default("KSh 0")
+  consultationFee String @default("KSh 1,000")
   slotTime    DateTime
   status      String   @default("CONFIRMED")
   createdAt   DateTime @default(now())

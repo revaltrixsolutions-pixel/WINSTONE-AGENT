@@ -14,12 +14,15 @@ export type Appointment = {
   slotTime: string;
   status: string;
   createdAt?: string;
+  servicePrice?: string;
+  consultationFee?: string;
 };
 
 type AppointmentTableProps = {
   appointments?: Appointment[];
   apiUrl?: string;
   refreshInterval?: number;
+  onStatusChange?: (appointmentId: string, status: string) => void | Promise<void>;
 };
 
 type AppointmentApiResponse =
@@ -132,6 +135,7 @@ export const AppointmentTable: React.FC<
   appointments: initialAppointments,
   apiUrl = DEFAULT_API_URL,
   refreshInterval = 30_000,
+  onStatusChange,
 }) => {
   const [appointments, setAppointments] = useState<Appointment[]>(
     initialAppointments || [],
@@ -149,7 +153,7 @@ export const AppointmentTable: React.FC<
         setError(null);
 
         const response = await fetch(
-          `${apiUrl}/api/appointments`,
+          `${apiUrl}/api/dashboard/appointments`,
           {
             method: 'GET',
             headers: {
@@ -342,6 +346,10 @@ export const AppointmentTable: React.FC<
                       <th className="px-5 py-4 font-black">
                         Status
                       </th>
+                      <th className="px-5 py-4 font-black">
+                        Fees
+                      </th>
+                      <th className="px-5 py-4 font-black">Action</th>
                     </tr>
                   </thead>
 
@@ -350,6 +358,7 @@ export const AppointmentTable: React.FC<
                       <AppointmentRow
                         key={appointment.id}
                         appointment={appointment}
+                        onStatusChange={onStatusChange}
                       />
                     ))}
                   </tbody>
@@ -394,10 +403,12 @@ const SummaryCard: React.FC<SummaryCardProps> = ({
 
 type AppointmentRowProps = {
   appointment: Appointment;
+  onStatusChange?: (appointmentId: string, status: string) => void | Promise<void>;
 };
 
 const AppointmentRow: React.FC<AppointmentRowProps> = ({
   appointment,
+  onStatusChange,
 }) => {
   const dateTime = formatDateTime(appointment.slotTime);
 
@@ -441,6 +452,24 @@ const AppointmentRow: React.FC<AppointmentRowProps> = ({
         <StatusBadge
           status={appointment.status}
         />
+      </td>
+
+      <td className="px-5 py-4 text-xs text-slate-600">
+        <p>{appointment.servicePrice || 'KSh 0'}</p>
+        <p className="mt-1">Consultation: {appointment.consultationFee || 'KSh 1,000'}</p>
+      </td>
+      <td className="px-5 py-4">
+        {appointment.status.toUpperCase() === 'PENDING' && onStatusChange ? (
+          <button
+            type="button"
+            onClick={() => void onStatusChange(appointment.id, 'CONFIRMED')}
+            className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700"
+          >
+            Confirm
+          </button>
+        ) : (
+          <span className="text-xs text-slate-400">No action</span>
+        )}
       </td>
     </tr>
   );

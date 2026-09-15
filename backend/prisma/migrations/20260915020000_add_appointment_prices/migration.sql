@@ -1,0 +1,2 @@
+ALTER TABLE "Appointment" ADD COLUMN "servicePrice" TEXT NOT NULL DEFAULT 'KSh 0';
+ALTER TABLE "Appointment" ADD COLUMN "consultationFee" TEXT NOT NULL DEFAULT 'KSh 1,000';

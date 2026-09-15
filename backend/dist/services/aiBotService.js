@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CONVERSATION_MEMORY_MINUTES = exports.appointmentConversationState = exports.appointmentServiceOptions = void 0;
+exports.getServicePrice = getServicePrice;
 exports.extractPatientName = extractPatientName;
 exports.isUsablePatientName = isUsablePatientName;
 exports.isConversationStale = isConversationStale;
@@ -15,6 +16,11 @@ exports.appointmentServiceOptions = [
     ...Object.keys(hospitalData_1.hospitalKnowledge.departments),
     ...hospitalData_1.hospitalKnowledge.specialistClinics,
 ].filter((service, index, services) => services.indexOf(service) === index);
+function getServicePrice(service) {
+    const match = hospitalData_1.hospitalKnowledge.surgicalPrices.find((item) => item.procedure.toLowerCase().includes(service.toLowerCase()) ||
+        service.toLowerCase().includes(item.procedure.toLowerCase()));
+    return match?.price || 'Price on request';
+}
 function includesWholeTerm(text, term) {
     const normalizedTerm = normalizeKeyword(term);
     return new RegExp(`(?:^|\\s)${normalizedTerm.replace(/\\s+/g, '\\s+')}(?:$|\\s)`, 'i').test(text);

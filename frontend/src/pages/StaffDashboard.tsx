@@ -17,12 +17,16 @@ import {
   loginToDashboard,
   logoutDashboard,
   updateUserStatus,
+  updateAppointmentStatus,
 } from '../services/api';
+import type { Appointment, PatientRecord } from '../services/api';
 
 import {
   assignChatToAgent,
   fetchAgentChats,
   sendAgentReply,
+  fetchAppointments,
+  fetchPatients,
 } from '../services/api';
 
 type AudioContextWindow = Window & {
@@ -60,10 +64,13 @@ export const StaffDashboard: React.FC = () => {
     role: 'STAFF' as 'SUPER_ADMIN' | 'ADMIN' | 'STAFF',
   });
   const [adminBusy, setAdminBusy] = useState(false);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
 
   const previousChatIds = useRef<Set<string>>(new Set());
   const previousLatestMessages = useRef<Record<string, string>>({});
   const previousAssignments = useRef<Record<string, string | null>>({});
+  const previousAppointmentIds = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
   const isLoadingChatsRef = useRef(false);
 
@@ -252,6 +259,30 @@ export const StaffDashboard: React.FC = () => {
     }
   }, [currentUser, notifyBrowser, playNotificationSound]);
 
+  const loadDashboardRecords = useCallback(async () => {
+    try {
+      const [nextAppointments, nextPatients] = await Promise.all([
+        fetchAppointments(),
+        fetchPatients(),
+      ]);
+
+      const previousAppointmentIdsValue = previousAppointmentIds.current;
+      const hasNewAppointment = previousAppointmentIdsValue.size > 0 &&
+        nextAppointments.some((appointment) => !previousAppointmentIdsValue.has(appointment.id));
+
+      if (hasNewAppointment) {
+        playNotificationSound();
+        notifyBrowser(1);
+      }
+
+      previousAppointmentIds.current = new Set(nextAppointments.map((appointment) => appointment.id));
+      setAppointments(nextAppointments);
+      setPatients(nextPatients);
+    } catch (recordError) {
+      console.error('Failed to load dashboard records:', recordError);
+    }
+  }, [notifyBrowser, playNotificationSound]);
+
   const handleLogin = useCallback(async () => {
     try {
       void unlockNotificationAudio();
@@ -332,15 +363,17 @@ export const StaffDashboard: React.FC = () => {
     }
 
     void loadChats();
+    void loadDashboardRecords();
 
     const intervalId = window.setInterval(() => {
       void loadChats();
+      void loadDashboardRecords();
     }, 4000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentUser, loadChats]);
+  }, [currentUser, loadChats, loadDashboardRecords]);
 
   const handleCreateUser = useCallback(async () => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
@@ -372,6 +405,16 @@ export const StaffDashboard: React.FC = () => {
       setAdminBusy(false);
     }
   }, [adminForm, currentUser, loadAdminUsers]);
+
+  const handleAppointmentStatusChange = useCallback(async (appointmentId: string, status: string) => {
+    try {
+      const response = await updateAppointmentStatus(appointmentId, status);
+      if (!response.success) throw new Error(response.error || 'Unable to update appointment.');
+      await loadDashboardRecords();
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : 'Unable to update appointment.');
+    }
+  }, [loadDashboardRecords]);
 
   const handleToggleUser = useCallback(async (userId: string, isActive: boolean) => {
     try {
@@ -828,7 +871,7 @@ export const StaffDashboard: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto rounded-3xl border border-white/80 bg-white shadow-xl">
-                <AppointmentTable appointments={[]} />
+                <AppointmentTable appointments={appointments} onStatusChange={handleAppointmentStatusChange} />
               </div>
             </section>
           )}
@@ -854,19 +897,34 @@ export const StaffDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-3xl border-2 border-dashed border-slate-200 bg-white/80 p-8 text-center shadow-lg backdrop-blur md:p-14">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-100 text-3xl">
-                    📂
+                <div className="mt-5 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[760px] text-left text-sm">
+                      <thead className="bg-slate-900 text-xs uppercase tracking-wider text-white">
+                        <tr>
+                          <th className="px-5 py-4">Patient</th>
+                          <th className="px-5 py-4">Phone</th>
+                          <th className="px-5 py-4">Chat</th>
+                          <th className="px-5 py-4">Appointments</th>
+                          <th className="px-5 py-4">Assigned staff</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {patients.map((patient) => (
+                          <tr key={patient.id} className="hover:bg-slate-50">
+                            <td className="px-5 py-4 font-black text-slate-800">{patient.fullName || 'Name not provided'}</td>
+                            <td className="px-5 py-4 text-slate-600">{patient.phoneNumber}</td>
+                            <td className="px-5 py-4 text-slate-600">{patient.chatStatus.replaceAll('_', ' ')}</td>
+                            <td className="px-5 py-4 text-slate-600">{patient.appointmentCount}</td>
+                            <td className="px-5 py-4 text-slate-600">{patient.assignedTo || 'Awaiting staff'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-
-                  <h3 className="text-lg font-black text-slate-800">
-                    No records loaded
-                  </h3>
-
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                    External records are not currently available, or registry
-                    synchronization is still pending.
-                  </p>
+                  {patients.length === 0 && (
+                    <p className="p-8 text-center text-sm text-slate-500">No patient records yet. New WhatsApp patients will appear here automatically.</p>
+                  )}
                 </div>
               </div>
             </section>

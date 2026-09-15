@@ -774,6 +774,8 @@ export const AppointmentScalarFieldEnum = {
   patientId: 'patientId',
   doctorName: 'doctorName',
   specialty: 'specialty',
+  servicePrice: 'servicePrice',
+  consultationFee: 'consultationFee',
   slotTime: 'slotTime',
   status: 'status',
   createdAt: 'createdAt'

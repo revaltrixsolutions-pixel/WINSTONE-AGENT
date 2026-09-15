@@ -8,6 +8,7 @@ import cron from 'node-cron';
 import webhookRouter from './routes/webhookRoutes';
 import publicApiRouter from './routes/publicApiRoutes';
 import agentRouter from './routes/agentRoutes';
+import dashboardRouter from './routes/dashboardRoutes';
 import authRouter from './routes/authRoutes';
 
 import { prisma } from './lib/prisma';
@@ -215,6 +216,7 @@ app.use('/api/auth', authRouter);
  * POST /api/agent/reply
  */
 app.use('/api/agent', agentRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 /* =========================================================
    ROOT HEALTH CHECK

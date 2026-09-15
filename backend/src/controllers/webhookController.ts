@@ -7,6 +7,7 @@ import {
   extractPatientName,
   generateBotReply,
   getKenyaGreeting,
+  getServicePrice,
   isUsablePatientName,
   isConversationStale,
   isHumanSupportRequest,
@@ -328,7 +329,7 @@ function buildAppointmentInteractive(
     const rows = appointmentServiceOptions.map((service) => ({
       id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       title: service.slice(0, 24),
-      description: `Book ${service.slice(0, 52)}`,
+      description: `${getServicePrice(service)} + KSh 1,000 consultation`,
     }));
 
     return {
@@ -549,6 +550,8 @@ async function sendBotReply(
           patientId: patient.id,
           doctorName: 'To be assigned',
           specialty: department,
+          servicePrice: getServicePrice(department),
+          consultationFee: 'KSh 1,000',
           slotTime,
           status: 'CONFIRMED',
         },

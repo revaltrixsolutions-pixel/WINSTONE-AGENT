@@ -150,7 +150,7 @@ function buildAppointmentInteractive(prompt, appointmentState) {
         const rows = aiBotService_1.appointmentServiceOptions.map((service) => ({
             id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
             title: service.slice(0, 24),
-            description: `Book ${service.slice(0, 52)}`,
+            description: `${(0, aiBotService_1.getServicePrice)(service)} + KSh 1,000 consultation`,
         }));
         return {
             type: 'list',
@@ -333,6 +333,8 @@ async function sendBotReply(patient, incomingMessage) {
                     patientId: patient.id,
                     doctorName: 'To be assigned',
                     specialty: department,
+                    servicePrice: (0, aiBotService_1.getServicePrice)(department),
+                    consultationFee: 'KSh 1,000',
                     slotTime,
                     status: 'CONFIRMED',
                 },

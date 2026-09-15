@@ -57,6 +57,21 @@ export type Appointment = {
   slotTime: string;
   status: string;
   createdAt?: string;
+  servicePrice?: string;
+  consultationFee?: string;
+};
+
+export type PatientRecord = {
+  id: string;
+  fullName?: string | null;
+  phoneNumber: string;
+  chatStatus: string;
+  assignedTo?: string | null;
+  createdAt?: string;
+  messageCount: number;
+  appointmentCount: number;
+  lastMessage?: { body: string; timestamp: string } | null;
+  nextAppointment?: Appointment | null;
 };
 
 export type AuthUser = {
@@ -483,7 +498,7 @@ export async function fetchAppointments(
   signal?: AbortSignal | null,
 ): Promise<Appointment[]> {
   const response = await request<AppointmentResponse>(
-    '/api/appointments',
+    '/api/dashboard/appointments',
     {
       method: 'GET',
       signal,
@@ -513,6 +528,29 @@ export async function fetchAppointments(
   }
 
   return [];
+}
+
+export async function fetchPatients(signal?: AbortSignal | null): Promise<PatientRecord[]> {
+  const response = await request<{ success: boolean; patients?: PatientRecord[]; error?: string }>(
+    '/api/dashboard/patients',
+    { method: 'GET', signal },
+  );
+
+  if (!response.success) {
+    throw new Error(response.error || 'Unable to fetch patients.');
+  }
+
+  return response.patients || [];
+}
+
+export async function updateAppointmentStatus(
+  appointmentId: string,
+  status: string,
+): Promise<{ success: boolean; error?: string }> {
+  return request<{ success: boolean; error?: string }>(
+    `/api/dashboard/appointments/${encodeURIComponent(appointmentId)}/status`,
+    { method: 'PATCH', body: JSON.stringify({ status }) },
+  );
 }
 
 export async function loginToDashboard(

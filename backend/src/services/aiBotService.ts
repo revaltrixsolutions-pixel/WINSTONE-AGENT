@@ -19,6 +19,15 @@ export const appointmentServiceOptions = [
   ...hospitalKnowledge.specialistClinics,
 ].filter((service, index, services) => services.indexOf(service) === index);
 
+export function getServicePrice(service: string): string {
+  const match = hospitalKnowledge.surgicalPrices.find((item) =>
+    item.procedure.toLowerCase().includes(service.toLowerCase()) ||
+    service.toLowerCase().includes(item.procedure.toLowerCase()),
+  );
+
+  return match?.price || 'Price on request';
+}
+
 function includesWholeTerm(text: string, term: string): boolean {
   const normalizedTerm = normalizeKeyword(term);
   return new RegExp(`(?:^|\\s)${normalizedTerm.replace(/\\s+/g, '\\s+')}(?:$|\\s)`, 'i').test(text);
