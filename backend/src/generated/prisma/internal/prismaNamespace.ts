@@ -786,6 +786,7 @@ export type AppointmentScalarFieldEnum = (typeof AppointmentScalarFieldEnum)[key
 
 export const MessageLogScalarFieldEnum = {
   id: 'id',
+  whatsappMessageId: 'whatsappMessageId',
   patientId: 'patientId',
   sender: 'sender',
   body: 'body',

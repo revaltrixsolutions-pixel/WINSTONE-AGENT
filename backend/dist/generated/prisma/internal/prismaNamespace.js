@@ -140,6 +140,7 @@ exports.AppointmentScalarFieldEnum = {
 };
 exports.MessageLogScalarFieldEnum = {
     id: 'id',
+    whatsappMessageId: 'whatsappMessageId',
     patientId: 'patientId',
     sender: 'sender',
     body: 'body',

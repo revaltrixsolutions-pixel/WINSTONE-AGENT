@@ -26,6 +26,7 @@ export type AggregateMessageLog = {
 
 export type MessageLogMinAggregateOutputType = {
   id: string | null
+  whatsappMessageId: string | null
   patientId: string | null
   sender: string | null
   body: string | null
@@ -34,6 +35,7 @@ export type MessageLogMinAggregateOutputType = {
 
 export type MessageLogMaxAggregateOutputType = {
   id: string | null
+  whatsappMessageId: string | null
   patientId: string | null
   sender: string | null
   body: string | null
@@ -42,6 +44,7 @@ export type MessageLogMaxAggregateOutputType = {
 
 export type MessageLogCountAggregateOutputType = {
   id: number
+  whatsappMessageId: number
   patientId: number
   sender: number
   body: number
@@ -52,6 +55,7 @@ export type MessageLogCountAggregateOutputType = {
 
 export type MessageLogMinAggregateInputType = {
   id?: true
+  whatsappMessageId?: true
   patientId?: true
   sender?: true
   body?: true
@@ -60,6 +64,7 @@ export type MessageLogMinAggregateInputType = {
 
 export type MessageLogMaxAggregateInputType = {
   id?: true
+  whatsappMessageId?: true
   patientId?: true
   sender?: true
   body?: true
@@ -68,6 +73,7 @@ export type MessageLogMaxAggregateInputType = {
 
 export type MessageLogCountAggregateInputType = {
   id?: true
+  whatsappMessageId?: true
   patientId?: true
   sender?: true
   body?: true
@@ -149,6 +155,7 @@ export type MessageLogGroupByArgs<ExtArgs extends runtime.Types.Extensions.Inter
 
 export type MessageLogGroupByOutputType = {
   id: string
+  whatsappMessageId: string | null
   patientId: string | null
   sender: string
   body: string
@@ -178,6 +185,7 @@ export type MessageLogWhereInput = {
   OR?: Prisma.MessageLogWhereInput[]
   NOT?: Prisma.MessageLogWhereInput | Prisma.MessageLogWhereInput[]
   id?: Prisma.StringFilter<"MessageLog"> | string
+  whatsappMessageId?: Prisma.StringNullableFilter<"MessageLog"> | string | null
   patientId?: Prisma.StringNullableFilter<"MessageLog"> | string | null
   sender?: Prisma.StringFilter<"MessageLog"> | string
   body?: Prisma.StringFilter<"MessageLog"> | string
@@ -187,6 +195,7 @@ export type MessageLogWhereInput = {
 
 export type MessageLogOrderByWithRelationInput = {
   id?: Prisma.SortOrder
+  whatsappMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
   patientId?: Prisma.SortOrderInput | Prisma.SortOrder
   sender?: Prisma.SortOrder
   body?: Prisma.SortOrder
@@ -196,6 +205,7 @@ export type MessageLogOrderByWithRelationInput = {
 
 export type MessageLogWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  whatsappMessageId?: string
   AND?: Prisma.MessageLogWhereInput | Prisma.MessageLogWhereInput[]
   OR?: Prisma.MessageLogWhereInput[]
   NOT?: Prisma.MessageLogWhereInput | Prisma.MessageLogWhereInput[]
@@ -204,10 +214,11 @@ export type MessageLogWhereUniqueInput = Prisma.AtLeast<{
   body?: Prisma.StringFilter<"MessageLog"> | string
   timestamp?: Prisma.DateTimeFilter<"MessageLog"> | Date | string
   patient?: Prisma.XOR<Prisma.PatientNullableScalarRelationFilter, Prisma.PatientWhereInput> | null
-}, "id">
+}, "id" | "whatsappMessageId">
 
 export type MessageLogOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
+  whatsappMessageId?: Prisma.SortOrderInput | Prisma.SortOrder
   patientId?: Prisma.SortOrderInput | Prisma.SortOrder
   sender?: Prisma.SortOrder
   body?: Prisma.SortOrder
@@ -222,6 +233,7 @@ export type MessageLogScalarWhereWithAggregatesInput = {
   OR?: Prisma.MessageLogScalarWhereWithAggregatesInput[]
   NOT?: Prisma.MessageLogScalarWhereWithAggregatesInput | Prisma.MessageLogScalarWhereWithAggregatesInput[]
   id?: Prisma.StringWithAggregatesFilter<"MessageLog"> | string
+  whatsappMessageId?: Prisma.StringNullableWithAggregatesFilter<"MessageLog"> | string | null
   patientId?: Prisma.StringNullableWithAggregatesFilter<"MessageLog"> | string | null
   sender?: Prisma.StringWithAggregatesFilter<"MessageLog"> | string
   body?: Prisma.StringWithAggregatesFilter<"MessageLog"> | string
@@ -230,6 +242,7 @@ export type MessageLogScalarWhereWithAggregatesInput = {
 
 export type MessageLogCreateInput = {
   id?: string
+  whatsappMessageId?: string | null
   sender: string
   body: string
   timestamp?: Date | string
@@ -238,6 +251,7 @@ export type MessageLogCreateInput = {
 
 export type MessageLogUncheckedCreateInput = {
   id?: string
+  whatsappMessageId?: string | null
   patientId?: string | null
   sender: string
   body: string
@@ -246,6 +260,7 @@ export type MessageLogUncheckedCreateInput = {
 
 export type MessageLogUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  whatsappMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sender?: Prisma.StringFieldUpdateOperationsInput | string
   body?: Prisma.StringFieldUpdateOperationsInput | string
   timestamp?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -254,6 +269,7 @@ export type MessageLogUpdateInput = {
 
 export type MessageLogUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  whatsappMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   patientId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sender?: Prisma.StringFieldUpdateOperationsInput | string
   body?: Prisma.StringFieldUpdateOperationsInput | string
@@ -262,6 +278,7 @@ export type MessageLogUncheckedUpdateInput = {
 
 export type MessageLogCreateManyInput = {
   id?: string
+  whatsappMessageId?: string | null
   patientId?: string | null
   sender: string
   body: string
@@ -270,6 +287,7 @@ export type MessageLogCreateManyInput = {
 
 export type MessageLogUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  whatsappMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sender?: Prisma.StringFieldUpdateOperationsInput | string
   body?: Prisma.StringFieldUpdateOperationsInput | string
   timestamp?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -277,6 +295,7 @@ export type MessageLogUpdateManyMutationInput = {
 
 export type MessageLogUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  whatsappMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   patientId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sender?: Prisma.StringFieldUpdateOperationsInput | string
   body?: Prisma.StringFieldUpdateOperationsInput | string
@@ -295,6 +314,7 @@ export type MessageLogOrderByRelationAggregateInput = {
 
 export type MessageLogCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
+  whatsappMessageId?: Prisma.SortOrder
   patientId?: Prisma.SortOrder
   sender?: Prisma.SortOrder
   body?: Prisma.SortOrder
@@ -303,6 +323,7 @@ export type MessageLogCountOrderByAggregateInput = {
 
 export type MessageLogMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
+  whatsappMessageId?: Prisma.SortOrder
   patientId?: Prisma.SortOrder
   sender?: Prisma.SortOrder
   body?: Prisma.SortOrder
@@ -311,6 +332,7 @@ export type MessageLogMaxOrderByAggregateInput = {
 
 export type MessageLogMinOrderByAggregateInput = {
   id?: Prisma.SortOrder
+  whatsappMessageId?: Prisma.SortOrder
   patientId?: Prisma.SortOrder
   sender?: Prisma.SortOrder
   body?: Prisma.SortOrder
@@ -361,6 +383,7 @@ export type MessageLogUncheckedUpdateManyWithoutPatientNestedInput = {
 
 export type MessageLogCreateWithoutPatientInput = {
   id?: string
+  whatsappMessageId?: string | null
   sender: string
   body: string
   timestamp?: Date | string
@@ -368,6 +391,7 @@ export type MessageLogCreateWithoutPatientInput = {
 
 export type MessageLogUncheckedCreateWithoutPatientInput = {
   id?: string
+  whatsappMessageId?: string | null
   sender: string
   body: string
   timestamp?: Date | string
@@ -404,6 +428,7 @@ export type MessageLogScalarWhereInput = {
   OR?: Prisma.MessageLogScalarWhereInput[]
   NOT?: Prisma.MessageLogScalarWhereInput | Prisma.MessageLogScalarWhereInput[]
   id?: Prisma.StringFilter<"MessageLog"> | string
+  whatsappMessageId?: Prisma.StringNullableFilter<"MessageLog"> | string | null
   patientId?: Prisma.StringNullableFilter<"MessageLog"> | string | null
   sender?: Prisma.StringFilter<"MessageLog"> | string
   body?: Prisma.StringFilter<"MessageLog"> | string
@@ -412,6 +437,7 @@ export type MessageLogScalarWhereInput = {
 
 export type MessageLogCreateManyPatientInput = {
   id?: string
+  whatsappMessageId?: string | null
   sender: string
   body: string
   timestamp?: Date | string
@@ -419,6 +445,7 @@ export type MessageLogCreateManyPatientInput = {
 
 export type MessageLogUpdateWithoutPatientInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  whatsappMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sender?: Prisma.StringFieldUpdateOperationsInput | string
   body?: Prisma.StringFieldUpdateOperationsInput | string
   timestamp?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -426,6 +453,7 @@ export type MessageLogUpdateWithoutPatientInput = {
 
 export type MessageLogUncheckedUpdateWithoutPatientInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  whatsappMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sender?: Prisma.StringFieldUpdateOperationsInput | string
   body?: Prisma.StringFieldUpdateOperationsInput | string
   timestamp?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -433,6 +461,7 @@ export type MessageLogUncheckedUpdateWithoutPatientInput = {
 
 export type MessageLogUncheckedUpdateManyWithoutPatientInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
+  whatsappMessageId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sender?: Prisma.StringFieldUpdateOperationsInput | string
   body?: Prisma.StringFieldUpdateOperationsInput | string
   timestamp?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -442,6 +471,7 @@ export type MessageLogUncheckedUpdateManyWithoutPatientInput = {
 
 export type MessageLogSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
+  whatsappMessageId?: boolean
   patientId?: boolean
   sender?: boolean
   body?: boolean
@@ -451,6 +481,7 @@ export type MessageLogSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
 
 export type MessageLogSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
+  whatsappMessageId?: boolean
   patientId?: boolean
   sender?: boolean
   body?: boolean
@@ -460,6 +491,7 @@ export type MessageLogSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ex
 
 export type MessageLogSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
+  whatsappMessageId?: boolean
   patientId?: boolean
   sender?: boolean
   body?: boolean
@@ -469,13 +501,14 @@ export type MessageLogSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ex
 
 export type MessageLogSelectScalar = {
   id?: boolean
+  whatsappMessageId?: boolean
   patientId?: boolean
   sender?: boolean
   body?: boolean
   timestamp?: boolean
 }
 
-export type MessageLogOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "patientId" | "sender" | "body" | "timestamp", ExtArgs["result"]["messageLog"]>
+export type MessageLogOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "whatsappMessageId" | "patientId" | "sender" | "body" | "timestamp", ExtArgs["result"]["messageLog"]>
 export type MessageLogInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   patient?: boolean | Prisma.MessageLog$patientArgs<ExtArgs>
 }
@@ -493,6 +526,7 @@ export type $MessageLogPayload<ExtArgs extends runtime.Types.Extensions.Internal
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
+    whatsappMessageId: string | null
     patientId: string | null
     sender: string
     body: string
@@ -922,6 +956,7 @@ export interface Prisma__MessageLogClient<T, Null = never, ExtArgs extends runti
  */
 export interface MessageLogFieldRefs {
   readonly id: Prisma.FieldRef<"MessageLog", 'String'>
+  readonly whatsappMessageId: Prisma.FieldRef<"MessageLog", 'String'>
   readonly patientId: Prisma.FieldRef<"MessageLog", 'String'>
   readonly sender: Prisma.FieldRef<"MessageLog", 'String'>
   readonly body: Prisma.FieldRef<"MessageLog", 'String'>
