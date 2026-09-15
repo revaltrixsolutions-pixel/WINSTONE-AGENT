@@ -135,16 +135,16 @@ function parseAppointmentDate(dateText, timeText) {
 }
 function buildAppointmentInteractive(prompt, appointmentState) {
     if (appointmentState.awaitingConfirmation) {
-        return [{
-                type: 'button',
-                body: { text: prompt },
-                action: {
-                    buttons: [
-                        { type: 'reply', reply: { id: 'appointment_confirm', title: 'Confirm' } },
-                        { type: 'reply', reply: { id: 'appointment_change', title: 'Change details' } },
-                    ],
-                },
-            }];
+        return {
+            type: 'button',
+            body: { text: prompt },
+            action: {
+                buttons: [
+                    { type: 'reply', reply: { id: 'appointment_confirm', title: 'Confirm' } },
+                    { type: 'reply', reply: { id: 'appointment_change', title: 'Change details' } },
+                ],
+            },
+        };
     }
     if (!appointmentState.department) {
         const rows = aiBotService_1.appointmentServiceOptions.map((service) => ({
@@ -152,56 +152,54 @@ function buildAppointmentInteractive(prompt, appointmentState) {
             title: service.slice(0, 24),
             description: `Book ${service.slice(0, 52)}`,
         }));
-        const messages = [];
-        for (let index = 0; index < rows.length; index += 10) {
-            messages.push({
-                type: 'list',
-                body: { text: prompt },
-                action: {
-                    button: index === 0 ? 'Choose a service' : 'More services',
-                    sections: [{
-                            title: index === 0 ? 'Hospital services' : 'More services',
-                            rows: rows.slice(index, index + 10),
-                        }],
-                },
-            });
-        }
-        return messages;
+        return {
+            type: 'list',
+            body: {
+                text: `${prompt} The menu shows the most requested services. If yours is not listed, reply with the service name.`,
+            },
+            action: {
+                button: 'Choose a service',
+                sections: [{
+                        title: 'Hospital services',
+                        rows: rows.slice(0, 10),
+                    }],
+            },
+        };
     }
     if (!appointmentState.date) {
-        return [{
-                type: 'list',
-                body: { text: prompt },
-                action: {
-                    button: 'Choose a date',
-                    sections: [{
-                            title: 'Appointment date',
-                            rows: [
-                                { id: 'date_today', title: 'Today' },
-                                { id: 'date_tomorrow', title: 'Tomorrow' },
-                                { id: 'date_next_week', title: 'Next week' },
-                            ],
-                        }],
-                },
-            }];
+        return {
+            type: 'list',
+            body: { text: prompt },
+            action: {
+                button: 'Choose a date',
+                sections: [{
+                        title: 'Appointment date',
+                        rows: [
+                            { id: 'date_today', title: 'Today' },
+                            { id: 'date_tomorrow', title: 'Tomorrow' },
+                            { id: 'date_next_week', title: 'Next week' },
+                        ],
+                    }],
+            },
+        };
     }
     if (!appointmentState.time) {
-        return [{
-                type: 'list',
-                body: { text: prompt },
-                action: {
-                    button: 'Choose a time',
-                    sections: [{
-                            title: 'Available times',
-                            rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
-                                id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-                                title: time,
-                            })),
-                        }],
-                },
-            }];
+        return {
+            type: 'list',
+            body: { text: prompt },
+            action: {
+                button: 'Choose a time',
+                sections: [{
+                        title: 'Available times',
+                        rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
+                            id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                            title: time,
+                        })),
+                    }],
+            },
+        };
     }
-    return [];
+    return undefined;
 }
 async function sendBotReply(patient, incomingMessage) {
     const patientName = ((0, aiBotService_1.isUsablePatientName)(patient.fullName)
@@ -293,26 +291,16 @@ async function sendBotReply(patient, incomingMessage) {
         const appointmentState = (0, aiBotService_1.updateAppointmentConversation)(patient.id, patientName, incomingMessage);
         if (!appointmentState.completed) {
             const replyText = appointmentState.prompt;
-            const interactiveMessages = buildAppointmentInteractive(replyText, {
+            const interactive = buildAppointmentInteractive(replyText, {
                 ...appointmentState.data,
                 awaitingConfirmation: appointmentState.awaitingConfirmation,
             });
             try {
-                if (interactiveMessages.length) {
-                    for (const interactive of interactiveMessages) {
-                        await (0, whatsappService_1.sendWhatsAppMessage)({
-                            recipientPhone: patient.phoneNumber,
-                            messageText: replyText,
-                            interactive,
-                        });
-                    }
-                }
-                else {
-                    await (0, whatsappService_1.sendWhatsAppMessage)({
-                        recipientPhone: patient.phoneNumber,
-                        messageText: replyText,
-                    });
-                }
+                await (0, whatsappService_1.sendWhatsAppMessage)({
+                    recipientPhone: patient.phoneNumber,
+                    messageText: replyText,
+                    interactive,
+                });
                 await prisma_1.prisma.messageLog.create({
                     data: {
                         patientId: patient.id,
