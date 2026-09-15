@@ -1,0 +1,9 @@
+{
+  "name": "phadam-whatsapp",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix backend install && npm --prefix backend run build",
+    "start": "npm --prefix backend start",
+    "test": "npm --prefix backend test"
+  }
+}
