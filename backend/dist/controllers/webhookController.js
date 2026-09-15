@@ -132,15 +132,93 @@ function parseAppointmentDate(dateText, timeText) {
     dateOnly.setHours(hour, parsedMinute, 0, 0);
     return dateOnly;
 }
+function buildAppointmentInteractive(prompt, appointmentState) {
+    if (appointmentState.awaitingConfirmation) {
+        return {
+            type: 'button',
+            body: { text: prompt },
+            action: {
+                buttons: [
+                    { type: 'reply', reply: { id: 'appointment_confirm', title: 'Confirm' } },
+                    { type: 'reply', reply: { id: 'appointment_change', title: 'Change details' } },
+                ],
+            },
+        };
+    }
+    if (!appointmentState.department) {
+        const rows = aiBotService_1.appointmentServiceOptions.map((service) => ({
+            id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+            title: service.slice(0, 24),
+            description: `Book ${service.slice(0, 52)}`,
+        }));
+        const sections = [];
+        for (let index = 0; index < rows.length; index += 10) {
+            sections.push({
+                title: index === 0 ? 'Hospital services' : 'More services',
+                rows: rows.slice(index, index + 10),
+            });
+        }
+        return {
+            type: 'list',
+            body: { text: prompt },
+            action: {
+                button: 'Choose a service',
+                sections,
+            },
+        };
+    }
+    if (!appointmentState.date) {
+        return {
+            type: 'list',
+            body: { text: prompt },
+            action: {
+                button: 'Choose a date',
+                sections: [{
+                        title: 'Appointment date',
+                        rows: [
+                            { id: 'date_today', title: 'Today' },
+                            { id: 'date_tomorrow', title: 'Tomorrow' },
+                            { id: 'date_next_week', title: 'Next week' },
+                        ],
+                    }],
+            },
+        };
+    }
+    if (!appointmentState.time) {
+        return {
+            type: 'list',
+            body: { text: prompt },
+            action: {
+                button: 'Choose a time',
+                sections: [{
+                        title: 'Available times',
+                        rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
+                            id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+                            title: time,
+                        })),
+                    }],
+            },
+        };
+    }
+    return undefined;
+}
 async function sendBotReply(patient, incomingMessage) {
     const patientName = ((0, aiBotService_1.isUsablePatientName)(patient.fullName)
         ? patient.fullName
         : (0, aiBotService_1.extractPatientName)(incomingMessage)) || 'Patient';
     const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(incomingMessage);
     const hasPatientName = patientName !== 'Patient';
+    const appointmentDetails = (0, aiBotService_1.parseAppointmentRequest)(incomingMessage);
+    if (aiBotService_1.appointmentConversationState.has(patient.id) &&
+        !bookingIntent &&
+        !appointmentDetails.date &&
+        !appointmentDetails.time &&
+        !appointmentDetails.department) {
+        aiBotService_1.appointmentConversationState.delete(patient.id);
+    }
     if (patient.chatStatus === 'AGENT_ACTIVE') {
         const hoursSinceAgentMessage = await getLastAgentInteractionHours(patient.id);
-        if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < 6) {
+        if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < 3 / 60) {
             console.info('[WhatsApp Bot Suppressed] Chat is assigned to staff.', {
                 patientId: patient.id,
                 hoursSinceAgentMessage,
@@ -182,10 +260,15 @@ async function sendBotReply(patient, incomingMessage) {
         const appointmentState = (0, aiBotService_1.updateAppointmentConversation)(patient.id, patientName, incomingMessage);
         if (!appointmentState.completed) {
             const replyText = appointmentState.prompt;
+            const interactive = buildAppointmentInteractive(replyText, {
+                ...appointmentState.data,
+                awaitingConfirmation: appointmentState.awaitingConfirmation,
+            });
             try {
                 await (0, whatsappService_1.sendWhatsAppMessage)({
                     recipientPhone: patient.phoneNumber,
                     messageText: replyText,
+                    interactive,
                 });
                 await prisma_1.prisma.messageLog.create({
                     data: {

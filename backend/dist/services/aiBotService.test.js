@@ -70,11 +70,20 @@ const aiBotService_1 = require("./aiBotService");
     strict_1.default.equal((0, aiBotService_1.getKenyaGreeting)(new Date('2026-09-15T12:00:00.000Z')), 'Good afternoon');
     strict_1.default.equal((0, aiBotService_1.getKenyaGreeting)(new Date('2026-09-15T15:00:00.000Z')), 'Good evening');
 });
+(0, node_test_1.default)('conversation memory expires after three minutes', () => {
+    strict_1.default.equal((0, aiBotService_1.isConversationStale)((aiBotService_1.CONVERSATION_MEMORY_MINUTES - 1) / 60), false);
+    strict_1.default.equal((0, aiBotService_1.isConversationStale)(aiBotService_1.CONVERSATION_MEMORY_MINUTES / 60), true);
+});
 (0, node_test_1.default)('parses booking details from patient request', () => {
     const booking = (0, aiBotService_1.parseAppointmentRequest)('I want to book a visit tomorrow at 9am in maternity');
     strict_1.default.equal(booking.ready, true);
     strict_1.default.equal(booking.department, 'Maternity');
     strict_1.default.equal(booking.time, '09:00 AM');
+});
+(0, node_test_1.default)('does not confuse appointments with ENT', () => {
+    const booking = (0, aiBotService_1.parseAppointmentRequest)('I need appointments');
+    strict_1.default.equal(booking.department, undefined);
+    strict_1.default.equal(booking.ready, false);
 });
 (0, node_test_1.default)('asks for missing booking details', () => {
     const prompt = (0, aiBotService_1.generateAppointmentCollectionPrompt)('Mary', {
@@ -82,5 +91,5 @@ const aiBotService_1 = require("./aiBotService");
         time: '09:00 AM'
     });
     strict_1.default.match(prompt, /department/i);
-    strict_1.default.doesNotMatch(prompt, /date|time/i);
+    strict_1.default.match(prompt, /date|time/i);
 });

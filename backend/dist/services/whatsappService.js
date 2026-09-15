@@ -69,14 +69,14 @@ async function parseApiResponse(response) {
  * Free-form messages may only be sent during the active 24-hour customer
  * service window after the customer has messaged the business.
  */
-async function sendWhatsAppMessage({ recipientPhone, messageText, }) {
+async function sendWhatsAppMessage({ recipientPhone, messageText, interactive, }) {
     if (!recipientPhone?.trim()) {
         throw new Error('[WhatsApp API Error]: recipientPhone is required.');
     }
-    if (!messageText?.trim()) {
+    if (!messageText?.trim() && !interactive) {
         throw new Error('[WhatsApp API Error]: messageText is required.');
     }
-    if (messageText.length > MAX_TEXT_MESSAGE_LENGTH) {
+    if (messageText && messageText.length > MAX_TEXT_MESSAGE_LENGTH) {
         throw new Error(`[WhatsApp API Error]: Message exceeds the ${MAX_TEXT_MESSAGE_LENGTH}-character WhatsApp text limit. Split the response before sending.`);
     }
     const cleanPhone = normalizeWhatsAppPhone(recipientPhone);
@@ -85,7 +85,7 @@ async function sendWhatsAppMessage({ recipientPhone, messageText, }) {
         console.warn('[WhatsApp SIMULATION: message not sent]', {
             recipientPhone: cleanPhone,
             messageId,
-            messageLength: messageText.length,
+            messageLength: messageText?.length || interactive?.body.text.length || 0,
         });
         return {
             recipientPhone: cleanPhone,
@@ -110,11 +110,18 @@ async function sendWhatsAppMessage({ recipientPhone, messageText, }) {
             body: JSON.stringify({
                 messaging_product: 'whatsapp',
                 to: cleanPhone,
-                type: 'text',
-                text: {
-                    preview_url: false,
-                    body: messageText,
-                },
+                ...(interactive
+                    ? {
+                        type: 'interactive',
+                        interactive,
+                    }
+                    : {
+                        type: 'text',
+                        text: {
+                            preview_url: false,
+                            body: messageText,
+                        },
+                    }),
             }),
         });
         const data = await parseApiResponse(response);

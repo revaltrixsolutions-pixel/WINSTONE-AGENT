@@ -2,8 +2,32 @@
 
 export interface SendMessageOptions {
   recipientPhone: string;
-  messageText: string;
+  messageText?: string;
+  interactive?: WhatsAppInteractiveMessage;
 }
+
+export type WhatsAppInteractiveMessage =
+  | {
+      type: 'list';
+      body: { text: string };
+      action: {
+        button: string;
+        sections: Array<{
+          title: string;
+          rows: Array<{ id: string; title: string; description?: string }>;
+        }>;
+      };
+    }
+  | {
+      type: 'button';
+      body: { text: string };
+      action: {
+        buttons: Array<{
+          type: 'reply';
+          reply: { id: string; title: string };
+        }>;
+      };
+    };
 
 export interface WhatsAppContact {
   input: string;
@@ -145,6 +169,7 @@ async function parseApiResponse(
 export async function sendWhatsAppMessage({
   recipientPhone,
   messageText,
+  interactive,
 }: SendMessageOptions): Promise<SentWhatsAppMessage> {
   if (!recipientPhone?.trim()) {
     throw new Error(
@@ -152,13 +177,13 @@ export async function sendWhatsAppMessage({
     );
   }
 
-  if (!messageText?.trim()) {
+  if (!messageText?.trim() && !interactive) {
     throw new Error(
       '[WhatsApp API Error]: messageText is required.',
     );
   }
 
-  if (messageText.length > MAX_TEXT_MESSAGE_LENGTH) {
+  if (messageText && messageText.length > MAX_TEXT_MESSAGE_LENGTH) {
     throw new Error(
       `[WhatsApp API Error]: Message exceeds the ${MAX_TEXT_MESSAGE_LENGTH}-character WhatsApp text limit. Split the response before sending.`,
     );
@@ -172,7 +197,7 @@ export async function sendWhatsAppMessage({
     console.warn('[WhatsApp SIMULATION: message not sent]', {
       recipientPhone: cleanPhone,
       messageId,
-      messageLength: messageText.length,
+      messageLength: messageText?.length || interactive?.body.text.length || 0,
     });
 
     return {
@@ -203,11 +228,18 @@ export async function sendWhatsAppMessage({
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to: cleanPhone,
-        type: 'text',
-        text: {
-          preview_url: false,
-          body: messageText,
-        },
+        ...(interactive
+          ? {
+              type: 'interactive',
+              interactive,
+            }
+          : {
+              type: 'text',
+              text: {
+                preview_url: false,
+                body: messageText,
+              },
+            }),
       }),
     });
 

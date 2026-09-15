@@ -63,7 +63,7 @@ async function getCurrentUser(req, res) {
 async function listUsers(req, res) {
     return res.status(200).json({
         success: true,
-        users: (0, auth_1.getUsers)(),
+        users: await (0, auth_1.getUsers)(),
     });
 }
 async function createAccount(req, res) {
@@ -75,7 +75,7 @@ async function createAccount(req, res) {
         });
     }
     try {
-        const user = (0, auth_1.createUser)({
+        const user = await (0, auth_1.createUser)({
             name,
             email,
             password,

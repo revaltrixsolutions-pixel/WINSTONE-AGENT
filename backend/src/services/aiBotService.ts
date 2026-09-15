@@ -14,6 +14,16 @@ export type AppointmentRequestData = {
   ready: boolean;
 };
 
+export const appointmentServiceOptions = [
+  ...Object.keys(hospitalKnowledge.departments),
+  ...hospitalKnowledge.specialistClinics,
+].filter((service, index, services) => services.indexOf(service) === index);
+
+function includesWholeTerm(text: string, term: string): boolean {
+  const normalizedTerm = normalizeKeyword(term);
+  return new RegExp(`(?:^|\\s)${normalizedTerm.replace(/\\s+/g, '\\s+')}(?:$|\\s)`, 'i').test(text);
+}
+
 export const appointmentConversationState = new Map<string, Partial<AppointmentRequestData>>();
 
 export const CONVERSATION_MEMORY_MINUTES = 3;
@@ -22,7 +32,7 @@ const DEFAULT_WELCOME =
   'Welcome to Phadam Hospital. We are here to help you with your care needs. What is your name?';
 
 const NON_NAME_WORDS = new Set([
-  'assign', 'me', 'help', 'please', 'book', 'appointment', 'visit',
+  'assign', 'me', 'help', 'please', 'book', 'appointment', 'appointments', 'need', 'visit',
   'hello', 'hi', 'hey', 'thanks', 'thank', 'you', 'yes', 'no', 'okay',
   'how', 'what', 'where', 'when', 'why', 'can', 'could', 'would',
 ]);
@@ -83,12 +93,13 @@ export function isConversationStale(lastInteractionHours: number): boolean {
 export function parseAppointmentRequest(message: string): AppointmentRequestData {
   const lower = normalizeKeyword(message);
   const departmentMatch =
-    Object.keys(hospitalKnowledge.departments).find((department) => lower.includes(normalizeKeyword(department))) ||
-    (lower.includes('maternity') ? 'Maternity' : undefined) ||
-    (lower.includes('pediatric') || lower.includes('paediatric') ? 'Pediatrics' : undefined) ||
-    (lower.includes('emergency') ? 'Emergency' : undefined) ||
-    (lower.includes('laboratory') || lower.includes('lab') ? 'Laboratory' : undefined) ||
-    (lower.includes('pharmacy') ? 'Pharmacy' : undefined);
+    Object.keys(hospitalKnowledge.departments).find((department) => includesWholeTerm(lower, department)) ||
+    (includesWholeTerm(lower, 'maternity') ? 'Maternity' : undefined) ||
+    (includesWholeTerm(lower, 'pediatric') || includesWholeTerm(lower, 'paediatric') ? 'Pediatrics' : undefined) ||
+    (includesWholeTerm(lower, 'emergency') ? 'Emergency' : undefined) ||
+    (includesWholeTerm(lower, 'laboratory') || includesWholeTerm(lower, 'lab') ? 'Laboratory' : undefined) ||
+    (includesWholeTerm(lower, 'pharmacy') ? 'Pharmacy' : undefined) ||
+    appointmentServiceOptions.find((service) => includesWholeTerm(lower, service));
 
   const timeMatch = lower.match(/(\d{1,2})(?::?(\d{2}))?\s*(am|pm|a\.m|p\.m)?/i);
   const dateMatch =
@@ -127,7 +138,7 @@ export function generateAppointmentCollectionPrompt(
     ? `Please tell me the ${missing[0]} for your appointment.`
     : `Please tell me the ${missing.join(', ')} for your appointment.`;
 
-  return `${patientName}, ${message} You can reply with all three together, for example: tomorrow at 9am in Maternity.`;
+  return `Yes, ${patientName}, you can book an appointment here. ${message} You can choose a service from the menu, then reply with a date and time. You can also reply with all three together, for example: tomorrow at 9am in Maternity.`;
 }
 
 export function updateAppointmentConversation(
@@ -155,7 +166,17 @@ export function updateAppointmentConversation(
 
   const shouldConfirm = Boolean(next.date && next.time && next.department);
 
-  if (message.toLowerCase().includes('confirm') || message.toLowerCase().includes('yes')) {
+  const normalizedMessage = normalizeKeyword(message);
+
+  if (normalizedMessage.includes('change details') || normalizedMessage.includes('start over')) {
+    appointmentConversationState.delete(patientId);
+    return {
+      prompt: `Okay, ${patientName}. Let us start your appointment request again. Please choose a service, then provide your preferred date and time.`,
+      completed: false,
+    };
+  }
+
+  if (normalizedMessage.includes('confirm') || normalizedMessage === 'yes') {
     appointmentConversationState.delete(patientId);
     return {
       prompt: `Thank you, ${patientName}. Your appointment is now booked for ${next.date} at ${next.time} in ${next.department}.`,

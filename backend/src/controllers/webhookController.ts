@@ -3,16 +3,19 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import {
+  appointmentServiceOptions,
   extractPatientName,
   generateBotReply,
   getKenyaGreeting,
   isUsablePatientName,
   isConversationStale,
+  parseAppointmentRequest,
   appointmentConversationState,
   updateAppointmentConversation,
 } from '../services/aiBotService';
 import {
   sendWhatsAppMessage,
+  type WhatsAppInteractiveMessage as WhatsAppInteractivePayload,
   WhatsAppApiError,
 } from '../services/whatsappService';
 
@@ -297,6 +300,91 @@ function parseAppointmentDate(dateText: string, timeText: string): Date {
   return dateOnly;
 }
 
+function buildAppointmentInteractive(
+  prompt: string,
+  appointmentState: {
+    date?: string;
+    time?: string;
+    department?: string;
+    awaitingConfirmation?: boolean;
+  },
+): WhatsAppInteractivePayload | undefined {
+  if (appointmentState.awaitingConfirmation) {
+    return {
+      type: 'button',
+      body: { text: prompt },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'appointment_confirm', title: 'Confirm' } },
+          { type: 'reply', reply: { id: 'appointment_change', title: 'Change details' } },
+        ],
+      },
+    };
+  }
+
+  if (!appointmentState.department) {
+    const rows = appointmentServiceOptions.map((service) => ({
+      id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+      title: service.slice(0, 24),
+      description: `Book ${service.slice(0, 52)}`,
+    }));
+
+    const sections = [];
+    for (let index = 0; index < rows.length; index += 10) {
+      sections.push({
+        title: index === 0 ? 'Hospital services' : 'More services',
+        rows: rows.slice(index, index + 10),
+      });
+    }
+
+    return {
+      type: 'list',
+      body: { text: prompt },
+      action: {
+        button: 'Choose a service',
+        sections,
+      },
+    };
+  }
+
+  if (!appointmentState.date) {
+    return {
+      type: 'list',
+      body: { text: prompt },
+      action: {
+        button: 'Choose a date',
+        sections: [{
+          title: 'Appointment date',
+          rows: [
+            { id: 'date_today', title: 'Today' },
+            { id: 'date_tomorrow', title: 'Tomorrow' },
+            { id: 'date_next_week', title: 'Next week' },
+          ],
+        }],
+      },
+    };
+  }
+
+  if (!appointmentState.time) {
+    return {
+      type: 'list',
+      body: { text: prompt },
+      action: {
+        button: 'Choose a time',
+        sections: [{
+          title: 'Available times',
+          rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
+            id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+            title: time,
+          })),
+        }],
+      },
+    };
+  }
+
+  return undefined;
+}
+
 async function sendBotReply(
   patient: {
     id: string;
@@ -311,6 +399,17 @@ async function sendBotReply(
     : extractPatientName(incomingMessage)) || 'Patient';
   const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(incomingMessage);
   const hasPatientName = patientName !== 'Patient';
+  const appointmentDetails = parseAppointmentRequest(incomingMessage);
+
+  if (
+    appointmentConversationState.has(patient.id) &&
+    !bookingIntent &&
+    !appointmentDetails.date &&
+    !appointmentDetails.time &&
+    !appointmentDetails.department
+  ) {
+    appointmentConversationState.delete(patient.id);
+  }
 
   if (patient.chatStatus === 'AGENT_ACTIVE') {
     const hoursSinceAgentMessage = await getLastAgentInteractionHours(patient.id);
@@ -367,11 +466,16 @@ async function sendBotReply(
 
     if (!appointmentState.completed) {
       const replyText = appointmentState.prompt;
+      const interactive = buildAppointmentInteractive(replyText, {
+        ...appointmentState.data,
+        awaitingConfirmation: appointmentState.awaitingConfirmation,
+      });
 
       try {
         await sendWhatsAppMessage({
           recipientPhone: patient.phoneNumber,
           messageText: replyText,
+          interactive,
         });
 
         await prisma.messageLog.create({

@@ -102,6 +102,12 @@ test('parses booking details from patient request', () => {
   assert.equal(booking.time, '09:00 AM');
 });
 
+test('does not confuse appointments with ENT', () => {
+  const booking = parseAppointmentRequest('I need appointments');
+  assert.equal(booking.department, undefined);
+  assert.equal(booking.ready, false);
+});
+
 test('asks for missing booking details', () => {
   const prompt = generateAppointmentCollectionPrompt('Mary', {
     date: 'tomorrow',
@@ -109,5 +115,5 @@ test('asks for missing booking details', () => {
   });
 
   assert.match(prompt, /department/i);
-  assert.doesNotMatch(prompt, /date|time/i);
+  assert.match(prompt, /date|time/i);
 });
