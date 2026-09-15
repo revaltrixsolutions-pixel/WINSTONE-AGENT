@@ -43,7 +43,7 @@ export const StaffDashboard: React.FC = () => {
     email: string;
     role: 'SUPER_ADMIN' | 'ADMIN' | 'STAFF';
   } | null>(null);
-  const [loginForm, setLoginForm] = useState({ email: 'superadmin@phadam.com', password: 'Phadam123!' });
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [adminUsers, setAdminUsers] = useState<Array<{
     id: string;
     name: string;
@@ -123,6 +123,27 @@ export const StaffDashboard: React.FC = () => {
     }
   }, []);
 
+  const unlockNotificationAudio = useCallback(async () => {
+    try {
+      const audioWindow = window as AudioContextWindow;
+      const AudioContextClass =
+        window.AudioContext || audioWindow.webkitAudioContext;
+
+      if (!AudioContextClass) return;
+
+      const audioContext =
+        audioContextRef.current || new AudioContextClass();
+
+      audioContextRef.current = audioContext;
+
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+    } catch (soundError) {
+      console.warn('Notification audio could not be enabled:', soundError);
+    }
+  }, []);
+
   const loadChats = useCallback(async () => {
     if (isLoadingChatsRef.current) return;
 
@@ -172,6 +193,7 @@ export const StaffDashboard: React.FC = () => {
 
   const handleLogin = useCallback(async () => {
     try {
+      void unlockNotificationAudio();
       setAuthError(null);
       const response = await loginToDashboard(loginForm.email, loginForm.password);
 
@@ -187,7 +209,7 @@ export const StaffDashboard: React.FC = () => {
       const message = loginError instanceof Error ? loginError.message : 'Login failed.';
       setAuthError(message);
     }
-  }, [loadChats, loginForm.email, loginForm.password, requestNotificationPermission]);
+  }, [loadChats, loginForm.email, loginForm.password, requestNotificationPermission, unlockNotificationAudio]);
 
   const handleLogout = useCallback(() => {
     logoutDashboard();
@@ -568,7 +590,10 @@ export const StaffDashboard: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => void requestNotificationPermission()}
+                onClick={() => {
+                  void unlockNotificationAudio();
+                  void requestNotificationPermission();
+                }}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
               >
                 Enable alerts
