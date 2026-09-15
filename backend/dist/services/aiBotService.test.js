@@ -51,6 +51,25 @@ const aiBotService_1 = require("./aiBotService");
     const name = (0, aiBotService_1.extractPatientName)('my name is John Kamau');
     strict_1.default.equal(name, 'John Kamau');
 });
+(0, node_test_1.default)('does not treat a command as a patient name', () => {
+    strict_1.default.equal((0, aiBotService_1.extractPatientName)('Assign me'), null);
+    strict_1.default.equal((0, aiBotService_1.isUsablePatientName)('Assign'), false);
+});
+(0, node_test_1.default)('named greetings provide Kenya time and next actions', () => {
+    const reply = (0, aiBotService_1.generateBotReply)({
+        patientName: 'Mary',
+        message: 'Hi',
+        isReturning: false,
+        lastInteractionHours: 0,
+    });
+    strict_1.default.match(reply, /Mary/i);
+    strict_1.default.match(reply, /appointment|service|staff/i);
+});
+(0, node_test_1.default)('formats Kenya greeting periods', () => {
+    strict_1.default.equal((0, aiBotService_1.getKenyaGreeting)(new Date('2026-09-15T08:00:00.000Z')), 'Good morning');
+    strict_1.default.equal((0, aiBotService_1.getKenyaGreeting)(new Date('2026-09-15T12:00:00.000Z')), 'Good afternoon');
+    strict_1.default.equal((0, aiBotService_1.getKenyaGreeting)(new Date('2026-09-15T15:00:00.000Z')), 'Good evening');
+});
 (0, node_test_1.default)('parses booking details from patient request', () => {
     const booking = (0, aiBotService_1.parseAppointmentRequest)('I want to book a visit tomorrow at 9am in maternity');
     strict_1.default.equal(booking.ready, true);

@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma';
 import {
   extractPatientName,
   generateBotReply,
+  getKenyaGreeting,
+  isUsablePatientName,
   isConversationStale,
   appointmentConversationState,
   updateAppointmentConversation,
@@ -174,6 +176,69 @@ async function getLastInteractionHours(
   return diffMs / (1000 * 60 * 60);
 }
 
+async function getLastAgentInteractionHours(
+  patientId: string,
+): Promise<number> {
+  const lastAgentMessage = await prisma.messageLog.findFirst({
+    where: { patientId, sender: 'AGENT' },
+    orderBy: { timestamp: 'desc' },
+    select: { timestamp: true },
+  });
+
+  if (!lastAgentMessage?.timestamp) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return (Date.now() - new Date(lastAgentMessage.timestamp).getTime()) /
+    (1000 * 60 * 60);
+}
+
+function isAppointmentLookupRequest(message: string): boolean {
+  return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
+    /\b(appointment|booking|visit)\b.*\b(details|status|when|date|time|schedule|scheduled)\b/i.test(message) ||
+    /\bwhen\b.*\b(appointment|visit|see the doctor)\b/i.test(message);
+}
+
+function formatKenyaDateTime(date: Date): string {
+  return new Intl.DateTimeFormat('en-KE', {
+    timeZone: 'Africa/Nairobi',
+    dateStyle: 'full',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+async function getAppointmentLookupReply(
+  patientId: string,
+  patientName: string,
+  message: string,
+): Promise<string | null> {
+  if (!isAppointmentLookupRequest(message)) return null;
+
+  const appointments = await prisma.appointment.findMany({
+    where: {
+      patientId,
+      slotTime: { gte: new Date() },
+      status: { not: 'CANCELLED' },
+    },
+    orderBy: { slotTime: 'asc' },
+    take: 5,
+  });
+
+  if (!appointments.length) {
+    return `${patientName}, I could not find an upcoming appointment under this WhatsApp number. Would you like to book one? Please send the date, time, and department, for example: tomorrow at 9am in Maternity.`;
+  }
+
+  const details = appointments.map((appointment, index) => [
+    `${index + 1}. ${formatKenyaDateTime(appointment.slotTime)}`,
+    `Department: ${appointment.specialty}`,
+    `Doctor: ${appointment.doctorName}`,
+    `Status: ${appointment.status}`,
+    `Reference: ${appointment.id.slice(0, 8)}`,
+  ].join('\n')).join('\n\n');
+
+  return `${getKenyaGreeting()}, ${patientName}. Here are your upcoming appointment details:\n\n${details}\n\nWhat would you like to do next: keep this appointment, book another one, or speak with staff?`;
+}
+
 function parseAppointmentDate(dateText: string, timeText: string): Date {
   const normalizedDate = dateText.toLowerCase();
   const normalizedTime = timeText.toLowerCase();
@@ -237,13 +302,67 @@ async function sendBotReply(
     id: string;
     phoneNumber: string;
     fullName?: string | null;
+    chatStatus?: string;
   },
   incomingMessage: string,
 ): Promise<void> {
-  const patientName = patient.fullName || extractPatientName(incomingMessage) || 'Patient';
+  const patientName = (isUsablePatientName(patient.fullName)
+    ? patient.fullName
+    : extractPatientName(incomingMessage)) || 'Patient';
   const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(incomingMessage);
+  const hasPatientName = patientName !== 'Patient';
 
-  if (bookingIntent || appointmentConversationState.has(patient.id)) {
+  if (patient.chatStatus === 'AGENT_ACTIVE') {
+    const hoursSinceAgentMessage = await getLastAgentInteractionHours(patient.id);
+
+    if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < 6) {
+      console.info('[WhatsApp Bot Suppressed] Chat is assigned to staff.', {
+        patientId: patient.id,
+        hoursSinceAgentMessage,
+      });
+      return;
+    }
+  }
+
+  const appointmentLookupReply = hasPatientName
+    ? await getAppointmentLookupReply(
+        patient.id,
+        patientName,
+        incomingMessage,
+      )
+    : null;
+
+  if (appointmentLookupReply) {
+    try {
+      const whatsappResult = await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText: appointmentLookupReply,
+      });
+
+      await prisma.messageLog.create({
+        data: {
+          patientId: patient.id,
+          sender: 'BOT',
+          body: appointmentLookupReply,
+          timestamp: new Date(),
+        },
+      });
+
+      console.info('[WhatsApp Appointment Lookup Reply Sent]', {
+        patientId: patient.id,
+        messageId: whatsappResult.messageId,
+      });
+    } catch (error) {
+      console.error('[WhatsApp Appointment Lookup Reply Failed]', {
+        patientId: patient.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+
+    return;
+  }
+
+  if (hasPatientName && (bookingIntent || appointmentConversationState.has(patient.id))) {
     const appointmentState = updateAppointmentConversation(patient.id, patientName, incomingMessage);
 
     if (!appointmentState.completed) {
@@ -736,9 +855,12 @@ export async function handleWhatsAppWebhook(
             });
           }
 
-          const detectedName = patient.fullName || extractPatientName(messageBody);
+          const storedName = isUsablePatientName(patient.fullName)
+            ? patient.fullName
+            : null;
+          const detectedName = storedName || extractPatientName(messageBody);
 
-          if (detectedName && !patient.fullName) {
+          if (detectedName !== patient.fullName) {
             patient = await prisma.patient.update({
               where: {
                 id: patient.id,
@@ -847,6 +969,7 @@ export async function handleWhatsAppWebhook(
               id: patient.id,
               phoneNumber: patient.phoneNumber,
               fullName: patient.fullName || detectedName || null,
+              chatStatus: patient.chatStatus,
             },
             messageBody,
           );

@@ -7,6 +7,8 @@ import {
   isConversationStale,
   parseAppointmentRequest,
   generateAppointmentCollectionPrompt,
+  getKenyaGreeting,
+  isUsablePatientName,
 } from './aiBotService';
 
 test('welcome message asks for patient name', () => {
@@ -62,6 +64,29 @@ test('stale conversation triggers follow-up welcome', () => {
 test('extracts patient name from message', () => {
   const name = extractPatientName('my name is John Kamau');
   assert.equal(name, 'John Kamau');
+});
+
+test('does not treat a command as a patient name', () => {
+  assert.equal(extractPatientName('Assign me'), null);
+  assert.equal(isUsablePatientName('Assign'), false);
+});
+
+test('named greetings provide Kenya time and next actions', () => {
+  const reply = generateBotReply({
+    patientName: 'Mary',
+    message: 'Hi',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /Mary/i);
+  assert.match(reply, /appointment|service|staff/i);
+});
+
+test('formats Kenya greeting periods', () => {
+  assert.equal(getKenyaGreeting(new Date('2026-09-15T08:00:00.000Z')), 'Good morning');
+  assert.equal(getKenyaGreeting(new Date('2026-09-15T12:00:00.000Z')), 'Good afternoon');
+  assert.equal(getKenyaGreeting(new Date('2026-09-15T15:00:00.000Z')), 'Good evening');
 });
 
 test('parses booking details from patient request', () => {

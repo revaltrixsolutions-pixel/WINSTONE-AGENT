@@ -2,14 +2,21 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.appointmentConversationState = void 0;
 exports.extractPatientName = extractPatientName;
+exports.isUsablePatientName = isUsablePatientName;
 exports.isConversationStale = isConversationStale;
 exports.parseAppointmentRequest = parseAppointmentRequest;
 exports.generateAppointmentCollectionPrompt = generateAppointmentCollectionPrompt;
 exports.updateAppointmentConversation = updateAppointmentConversation;
+exports.getKenyaGreeting = getKenyaGreeting;
 exports.generateBotReply = generateBotReply;
 const hospitalData_1 = require("../knowledge/hospitalData");
 exports.appointmentConversationState = new Map();
 const DEFAULT_WELCOME = 'Welcome to Phadam Hospital. We are here to help you with your care needs. What is your name?';
+const NON_NAME_WORDS = new Set([
+    'assign', 'me', 'help', 'please', 'book', 'appointment', 'visit',
+    'hello', 'hi', 'hey', 'thanks', 'thank', 'you', 'yes', 'no', 'okay',
+    'how', 'what', 'where', 'when', 'why', 'can', 'could', 'would',
+]);
 function cleanText(value) {
     return value.replace(/\s+/g, ' ').trim();
 }
@@ -25,8 +32,7 @@ function normalizeKeyword(text) {
 function extractPatientName(message) {
     const text = normalizeKeyword(message);
     const patterns = [
-        /(?:my name is|i am|i'm|call me|this is)\s+([a-z0-9 ]+)/i,
-        /(?:name is)\s+([a-z0-9 ]+)/i,
+        /(?:my name is|i am|i'm|call me|this is|name is)\s+([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,3})/i,
     ];
     for (const pattern of patterns) {
         const match = message.match(pattern);
@@ -37,12 +43,20 @@ function extractPatientName(message) {
             }
         }
     }
-    const words = text.split(' ');
-    if (words.length >= 2) {
-        const candidate = words.filter((w) => w.length > 2 && !['hi', 'hello', 'hey', 'good', 'morning', 'afternoon', 'evening', 'my', 'name', 'is', 'i', 'am', 'im', 'call', 'me', 'this'].includes(w)).slice(0, 4).join(' ');
-        return candidate ? candidate.replace(/\b\w/g, (ch) => ch.toUpperCase()) : null;
+    const words = text.split(' ').filter(Boolean);
+    if (words.length >= 2 && words.length <= 4 && !words.some((word) => NON_NAME_WORDS.has(word))) {
+        return words.map((word) => word.replace(/^\w/, (ch) => ch.toUpperCase())).join(' ');
     }
     return null;
+}
+function isUsablePatientName(name) {
+    if (!name)
+        return false;
+    const words = normalizeKeyword(name).split(' ').filter(Boolean);
+    return words.length >= 1 &&
+        words.length <= 4 &&
+        words.every((word) => /^[a-z][a-z'-]*$/i.test(word)) &&
+        !words.some((word) => NON_NAME_WORDS.has(word));
 }
 function isConversationStale(lastInteractionHours) {
     return Number.isFinite(lastInteractionHours) && lastInteractionHours >= 6;
@@ -83,7 +97,7 @@ function generateAppointmentCollectionPrompt(patientName, currentData = {}) {
     const message = missing.length === 1
         ? `Please tell me the ${missing[0]} for your appointment.`
         : `Please tell me the ${missing.join(', ')} for your appointment.`;
-    return `${patientName}, ${message}`;
+    return `${patientName}, ${message} You can reply with all three together, for example: tomorrow at 9am in Maternity.`;
 }
 function updateAppointmentConversation(patientId, patientName, message) {
     const current = exports.appointmentConversationState.get(patientId) ?? {};
@@ -144,6 +158,24 @@ function getAnswerFromKnowledgeBase(message) {
     }
     const normalized = normalizeKeyword(message);
     const lower = normalized.toLowerCase();
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b/i.test(lower)) {
+        return null;
+    }
+    if (lower.includes('assign') || lower.includes('staff') || lower.includes('doctor')) {
+        return 'I can connect you with our staff. Please tell me your name and briefly describe what you need help with. A staff member will then assist you.';
+    }
+    if (lower.includes('how is this') || lower.includes('how are you') || lower === 'how is it') {
+        return 'I am here and ready to help. You can ask about services, SHA or insurance, locations, appointments, departments, prices, or request a staff member. What would you like help with?';
+    }
+    if (lower.includes('price') || lower.includes('cost') || lower.includes('fee') || lower.includes('charge')) {
+        return 'I can help you check available service information and current surgical prices. Please tell me the procedure or department you are asking about, or ask to speak with staff for the latest quote.';
+    }
+    if (lower.includes('open') || lower.includes('hours') || lower.includes('24') || lower.includes('emergency')) {
+        return 'Our Emergency and Ambulance Unit operates 24/7. For a scheduled service, tell me the department and I will guide you on the next step.';
+    }
+    if (lower.includes('contact') || lower.includes('phone') || lower.includes('call')) {
+        return `You can contact Phadam Hospital Nasra on ${hospitalData_1.hospitalKnowledge.locations[0].phoneNumbers.join(', ')} or Umoja on ${hospitalData_1.hospitalKnowledge.locations[1].phoneNumbers.join(', ')}. Which branch or service do you need?`;
+    }
     if (lower.includes('sha') || lower.includes('insurance') || lower.includes('cover')) {
         return [
             'Yes, we accept SHA and several other medical insurance partners.',
@@ -184,23 +216,43 @@ function getAnswerFromKnowledgeBase(message) {
     }
     return null;
 }
+function getKenyaGreeting(date = new Date()) {
+    const hour = Number(new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Africa/Nairobi',
+        hour: '2-digit',
+        hourCycle: 'h23',
+    }).format(date));
+    if (hour < 12)
+        return 'Good morning';
+    if (hour < 17)
+        return 'Good afternoon';
+    return 'Good evening';
+}
 function generateBotReply({ patientName, message, isReturning, lastInteractionHours, }) {
     const text = cleanText(message || '');
     const normalized = normalizeKeyword(text);
     if (!text) {
-        return 'Welcome to Phadam Hospital. Please tell us what you need today.';
+        return 'Please tell me what you need today. You can ask about appointments, services, SHA, locations, prices, or staff assistance.';
     }
     if (!patientName) {
-        return 'Welcome to Phadam Hospital. We are happy to help you. What is your name?';
+        return `${DEFAULT_WELCOME} You can reply with your full name.`;
     }
-    if (isReturning || isConversationStale(lastInteractionHours)) {
+    const isGreeting = /^(hi|hello|hey|good morning|good afternoon|good evening)\b/i.test(normalized);
+    const appointmentRequest = parseAppointmentRequest(text);
+    if (isGreeting && (isReturning || isConversationStale(lastInteractionHours))) {
         return [
-            `Welcome back, ${patientName}.`,
+            `${getKenyaGreeting()}, ${patientName}. Welcome back to Phadam Hospital.`,
             '',
-            'We are here to continue with your conversation. Would you like to continue with your enquiry?',
+            'What would you like to do next: book an appointment, ask about a service, check an appointment, or speak with staff?',
         ].join('\n');
     }
-    const appointmentRequest = parseAppointmentRequest(text);
+    if (isGreeting) {
+        return [
+            `${getKenyaGreeting()}, ${patientName}.`,
+            '',
+            'How can I help you next? You can book an appointment, ask about a service, check an appointment, or speak with staff.',
+        ].join('\n');
+    }
     if (appointmentRequest.ready) {
         return `Thank you, ${patientName}. I have noted your appointment for ${appointmentRequest.date} at ${appointmentRequest.time} in the ${appointmentRequest.department} department. Please confirm, and I will book it for you.`;
     }
@@ -209,7 +261,7 @@ function generateBotReply({ patientName, message, isReturning, lastInteractionHo
         const lines = answer.split('\n');
         const final = lines.map((line) => line.trim()).filter(Boolean);
         if (final[0]?.toLowerCase().includes('yes') || final[0]?.toLowerCase().includes('we are located')) {
-            return answer;
+            return `${answer}\n\nWhat would you like to do next? I can help with an appointment, another department, or staff assistance.`;
         }
         if (normalized.includes('sha') || normalized.includes('insurance') || normalized.includes('cover')) {
             return [
@@ -224,7 +276,7 @@ function generateBotReply({ patientName, message, isReturning, lastInteractionHo
             normalized.includes('location') ||
             normalized.includes('address') ||
             normalized.includes('branch')) {
-            return `${patientName}, we are located at Phadam Hospital.\n\n${answer}`;
+            return `${patientName}, we are located at Phadam Hospital.\n\n${answer}\n\nWhich branch or service would you like help with next?`;
         }
         if (normalized.includes('appointment') ||
             normalized.includes('visit') ||
@@ -236,13 +288,13 @@ function generateBotReply({ patientName, message, isReturning, lastInteractionHo
                 department: appointmentRequest.department,
             });
         }
-        return answer;
+        return `${answer}\n\nWhat would you like to do next?`;
     }
     const fallback = [
         `Thank you, ${patientName}.`,
         '',
         'I am sorry, I may not have enough information for that question.',
-        'Please kindly speak to one of our doctors or staff members for the best assistance.',
+        'Please speak with one of our doctors or staff members if you need personal medical guidance. You can also ask about appointments, services, SHA or insurance, locations, departments, or prices. What would you like help with next?',
     ].join('\n');
     return fallback;
 }
