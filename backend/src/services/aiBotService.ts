@@ -724,9 +724,11 @@ function parseTimeFromMessage(message: string): string | undefined {
   if (/\bmidnight\b/.test(text)) return "12:00 AM";
   if (/\bnoon\b/.test(text)) return "12:00 PM";
 
-  const explicit = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  const explicit = text.match(/\b(\d{1,2})(?::(\d{2}))?(?:\s+(\d{2}))?\s*(am|pm)\b/i);
   if (explicit) {
-    return normalizeTime(Number(explicit[1]), Number(explicit[2] || 0), explicit[3]);
+    const hour = Number(explicit[1]);
+    const minute = explicit[2] ? Number(explicit[2]) : explicit[3] ? Number(explicit[3]) : 0;
+    return normalizeTime(hour, minute, explicit[4]);
   }
 
   const twentyFourHour = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);

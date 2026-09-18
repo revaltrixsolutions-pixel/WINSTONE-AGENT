@@ -202,6 +202,13 @@ test('parses booking details from patient request', () => {
   assert.equal(booking.time, '09:00 AM');
 });
 
+test('parses interactive menu time values like 09 00 am', () => {
+  const booking = parseAppointmentRequest('tomorrow 09 00 am in maternity');
+  assert.equal(booking.department, 'Maternity');
+  assert.equal(booking.time, '09:00 AM');
+  assert.equal(booking.ready, true);
+});
+
 test('does not confuse appointments with ENT', () => {
   const booking = parseAppointmentRequest('I need appointments');
   assert.equal(booking.department, undefined);
