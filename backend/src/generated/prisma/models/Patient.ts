@@ -32,6 +32,7 @@ export type PatientMinAggregateOutputType = {
   isVerified: boolean | null
   chatStatus: string | null
   assignedTo: string | null
+  agentLastActiveAt: Date | null
   createdAt: Date | null
 }
 
@@ -43,6 +44,7 @@ export type PatientMaxAggregateOutputType = {
   isVerified: boolean | null
   chatStatus: string | null
   assignedTo: string | null
+  agentLastActiveAt: Date | null
   createdAt: Date | null
 }
 
@@ -54,6 +56,7 @@ export type PatientCountAggregateOutputType = {
   isVerified: number
   chatStatus: number
   assignedTo: number
+  agentLastActiveAt: number
   createdAt: number
   _all: number
 }
@@ -67,6 +70,7 @@ export type PatientMinAggregateInputType = {
   isVerified?: true
   chatStatus?: true
   assignedTo?: true
+  agentLastActiveAt?: true
   createdAt?: true
 }
 
@@ -78,6 +82,7 @@ export type PatientMaxAggregateInputType = {
   isVerified?: true
   chatStatus?: true
   assignedTo?: true
+  agentLastActiveAt?: true
   createdAt?: true
 }
 
@@ -89,6 +94,7 @@ export type PatientCountAggregateInputType = {
   isVerified?: true
   chatStatus?: true
   assignedTo?: true
+  agentLastActiveAt?: true
   createdAt?: true
   _all?: true
 }
@@ -173,6 +179,7 @@ export type PatientGroupByOutputType = {
   isVerified: boolean
   chatStatus: string
   assignedTo: string | null
+  agentLastActiveAt: Date | null
   createdAt: Date
   _count: PatientCountAggregateOutputType | null
   _min: PatientMinAggregateOutputType | null
@@ -205,6 +212,7 @@ export type PatientWhereInput = {
   isVerified?: Prisma.BoolFilter<"Patient"> | boolean
   chatStatus?: Prisma.StringFilter<"Patient"> | string
   assignedTo?: Prisma.StringNullableFilter<"Patient"> | string | null
+  agentLastActiveAt?: Prisma.DateTimeNullableFilter<"Patient"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Patient"> | Date | string
   appointments?: Prisma.AppointmentListRelationFilter
   messages?: Prisma.MessageLogListRelationFilter
@@ -218,6 +226,7 @@ export type PatientOrderByWithRelationInput = {
   isVerified?: Prisma.SortOrder
   chatStatus?: Prisma.SortOrder
   assignedTo?: Prisma.SortOrderInput | Prisma.SortOrder
+  agentLastActiveAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   appointments?: Prisma.AppointmentOrderByRelationAggregateInput
   messages?: Prisma.MessageLogOrderByRelationAggregateInput
@@ -234,6 +243,7 @@ export type PatientWhereUniqueInput = Prisma.AtLeast<{
   isVerified?: Prisma.BoolFilter<"Patient"> | boolean
   chatStatus?: Prisma.StringFilter<"Patient"> | string
   assignedTo?: Prisma.StringNullableFilter<"Patient"> | string | null
+  agentLastActiveAt?: Prisma.DateTimeNullableFilter<"Patient"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Patient"> | Date | string
   appointments?: Prisma.AppointmentListRelationFilter
   messages?: Prisma.MessageLogListRelationFilter
@@ -247,6 +257,7 @@ export type PatientOrderByWithAggregationInput = {
   isVerified?: Prisma.SortOrder
   chatStatus?: Prisma.SortOrder
   assignedTo?: Prisma.SortOrderInput | Prisma.SortOrder
+  agentLastActiveAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.PatientCountOrderByAggregateInput
   _max?: Prisma.PatientMaxOrderByAggregateInput
@@ -264,6 +275,7 @@ export type PatientScalarWhereWithAggregatesInput = {
   isVerified?: Prisma.BoolWithAggregatesFilter<"Patient"> | boolean
   chatStatus?: Prisma.StringWithAggregatesFilter<"Patient"> | string
   assignedTo?: Prisma.StringNullableWithAggregatesFilter<"Patient"> | string | null
+  agentLastActiveAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Patient"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Patient"> | Date | string
 }
 
@@ -275,6 +287,7 @@ export type PatientCreateInput = {
   isVerified?: boolean
   chatStatus?: string
   assignedTo?: string | null
+  agentLastActiveAt?: Date | string | null
   createdAt?: Date | string
   appointments?: Prisma.AppointmentCreateNestedManyWithoutPatientInput
   messages?: Prisma.MessageLogCreateNestedManyWithoutPatientInput
@@ -288,6 +301,7 @@ export type PatientUncheckedCreateInput = {
   isVerified?: boolean
   chatStatus?: string
   assignedTo?: string | null
+  agentLastActiveAt?: Date | string | null
   createdAt?: Date | string
   appointments?: Prisma.AppointmentUncheckedCreateNestedManyWithoutPatientInput
   messages?: Prisma.MessageLogUncheckedCreateNestedManyWithoutPatientInput
@@ -301,6 +315,7 @@ export type PatientUpdateInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   appointments?: Prisma.AppointmentUpdateManyWithoutPatientNestedInput
   messages?: Prisma.MessageLogUpdateManyWithoutPatientNestedInput
@@ -314,6 +329,7 @@ export type PatientUncheckedUpdateInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   appointments?: Prisma.AppointmentUncheckedUpdateManyWithoutPatientNestedInput
   messages?: Prisma.MessageLogUncheckedUpdateManyWithoutPatientNestedInput
@@ -327,6 +343,7 @@ export type PatientCreateManyInput = {
   isVerified?: boolean
   chatStatus?: string
   assignedTo?: string | null
+  agentLastActiveAt?: Date | string | null
   createdAt?: Date | string
 }
 
@@ -338,6 +355,7 @@ export type PatientUpdateManyMutationInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -349,6 +367,7 @@ export type PatientUncheckedUpdateManyInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -360,6 +379,7 @@ export type PatientCountOrderByAggregateInput = {
   isVerified?: Prisma.SortOrder
   chatStatus?: Prisma.SortOrder
   assignedTo?: Prisma.SortOrder
+  agentLastActiveAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -371,6 +391,7 @@ export type PatientMaxOrderByAggregateInput = {
   isVerified?: Prisma.SortOrder
   chatStatus?: Prisma.SortOrder
   assignedTo?: Prisma.SortOrder
+  agentLastActiveAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -382,6 +403,7 @@ export type PatientMinOrderByAggregateInput = {
   isVerified?: Prisma.SortOrder
   chatStatus?: Prisma.SortOrder
   assignedTo?: Prisma.SortOrder
+  agentLastActiveAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -405,6 +427,10 @@ export type NullableStringFieldUpdateOperationsInput = {
 
 export type BoolFieldUpdateOperationsInput = {
   set?: boolean
+}
+
+export type NullableDateTimeFieldUpdateOperationsInput = {
+  set?: Date | string | null
 }
 
 export type DateTimeFieldUpdateOperationsInput = {
@@ -449,6 +475,7 @@ export type PatientCreateWithoutAppointmentsInput = {
   isVerified?: boolean
   chatStatus?: string
   assignedTo?: string | null
+  agentLastActiveAt?: Date | string | null
   createdAt?: Date | string
   messages?: Prisma.MessageLogCreateNestedManyWithoutPatientInput
 }
@@ -461,6 +488,7 @@ export type PatientUncheckedCreateWithoutAppointmentsInput = {
   isVerified?: boolean
   chatStatus?: string
   assignedTo?: string | null
+  agentLastActiveAt?: Date | string | null
   createdAt?: Date | string
   messages?: Prisma.MessageLogUncheckedCreateNestedManyWithoutPatientInput
 }
@@ -489,6 +517,7 @@ export type PatientUpdateWithoutAppointmentsInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   messages?: Prisma.MessageLogUpdateManyWithoutPatientNestedInput
 }
@@ -501,6 +530,7 @@ export type PatientUncheckedUpdateWithoutAppointmentsInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   messages?: Prisma.MessageLogUncheckedUpdateManyWithoutPatientNestedInput
 }
@@ -513,6 +543,7 @@ export type PatientCreateWithoutMessagesInput = {
   isVerified?: boolean
   chatStatus?: string
   assignedTo?: string | null
+  agentLastActiveAt?: Date | string | null
   createdAt?: Date | string
   appointments?: Prisma.AppointmentCreateNestedManyWithoutPatientInput
 }
@@ -525,6 +556,7 @@ export type PatientUncheckedCreateWithoutMessagesInput = {
   isVerified?: boolean
   chatStatus?: string
   assignedTo?: string | null
+  agentLastActiveAt?: Date | string | null
   createdAt?: Date | string
   appointments?: Prisma.AppointmentUncheckedCreateNestedManyWithoutPatientInput
 }
@@ -553,6 +585,7 @@ export type PatientUpdateWithoutMessagesInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   appointments?: Prisma.AppointmentUpdateManyWithoutPatientNestedInput
 }
@@ -565,6 +598,7 @@ export type PatientUncheckedUpdateWithoutMessagesInput = {
   isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   chatStatus?: Prisma.StringFieldUpdateOperationsInput | string
   assignedTo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  agentLastActiveAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   appointments?: Prisma.AppointmentUncheckedUpdateManyWithoutPatientNestedInput
 }
@@ -617,6 +651,7 @@ export type PatientSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   isVerified?: boolean
   chatStatus?: boolean
   assignedTo?: boolean
+  agentLastActiveAt?: boolean
   createdAt?: boolean
   appointments?: boolean | Prisma.Patient$appointmentsArgs<ExtArgs>
   messages?: boolean | Prisma.Patient$messagesArgs<ExtArgs>
@@ -631,6 +666,7 @@ export type PatientSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   isVerified?: boolean
   chatStatus?: boolean
   assignedTo?: boolean
+  agentLastActiveAt?: boolean
   createdAt?: boolean
 }, ExtArgs["result"]["patient"]>
 
@@ -642,6 +678,7 @@ export type PatientSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   isVerified?: boolean
   chatStatus?: boolean
   assignedTo?: boolean
+  agentLastActiveAt?: boolean
   createdAt?: boolean
 }, ExtArgs["result"]["patient"]>
 
@@ -653,10 +690,11 @@ export type PatientSelectScalar = {
   isVerified?: boolean
   chatStatus?: boolean
   assignedTo?: boolean
+  agentLastActiveAt?: boolean
   createdAt?: boolean
 }
 
-export type PatientOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "phoneNumber" | "fullName" | "fileNumber" | "isVerified" | "chatStatus" | "assignedTo" | "createdAt", ExtArgs["result"]["patient"]>
+export type PatientOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "phoneNumber" | "fullName" | "fileNumber" | "isVerified" | "chatStatus" | "assignedTo" | "agentLastActiveAt" | "createdAt", ExtArgs["result"]["patient"]>
 export type PatientInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   appointments?: boolean | Prisma.Patient$appointmentsArgs<ExtArgs>
   messages?: boolean | Prisma.Patient$messagesArgs<ExtArgs>
@@ -679,6 +717,7 @@ export type $PatientPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     isVerified: boolean
     chatStatus: string
     assignedTo: string | null
+    agentLastActiveAt: Date | null
     createdAt: Date
   }, ExtArgs["result"]["patient"]>
   composites: {}
@@ -1112,6 +1151,7 @@ export interface PatientFieldRefs {
   readonly isVerified: Prisma.FieldRef<"Patient", 'Boolean'>
   readonly chatStatus: Prisma.FieldRef<"Patient", 'String'>
   readonly assignedTo: Prisma.FieldRef<"Patient", 'String'>
+  readonly agentLastActiveAt: Prisma.FieldRef<"Patient", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"Patient", 'DateTime'>
 }
     

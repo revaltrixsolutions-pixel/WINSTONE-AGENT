@@ -15,6 +15,7 @@ model Patient {
   isVerified   Boolean       @default(false)
   chatStatus   String        @default("BOT") // "BOT", "PENDING_AGENT", "AGENT_ACTIVE"
   assignedTo   String?       // Doctor or Agent name/ID
+  agentLastActiveAt DateTime?
   createdAt    DateTime      @default(now())
   appointments Appointment[]
   messages     MessageLog[]

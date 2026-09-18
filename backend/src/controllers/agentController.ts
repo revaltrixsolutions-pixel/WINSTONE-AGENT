@@ -119,6 +119,7 @@ export async function assignChat(
       data: {
         chatStatus: 'AGENT_ACTIVE',
         assignedTo: staffUser.name,
+        agentLastActiveAt: new Date(),
       },
     });
 
@@ -228,6 +229,7 @@ export async function sendAgentReply(
         data: {
           chatStatus: 'AGENT_ACTIVE',
           assignedTo: patient.assignedTo || trimmedAgentName,
+          agentLastActiveAt: new Date(),
         },
       }),
     ]);

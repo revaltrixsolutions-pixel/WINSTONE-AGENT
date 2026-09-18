@@ -913,6 +913,7 @@ export const PatientScalarFieldEnum = {
   isVerified: 'isVerified',
   chatStatus: 'chatStatus',
   assignedTo: 'assignedTo',
+  agentLastActiveAt: 'agentLastActiveAt',
   createdAt: 'createdAt'
 } as const
 
