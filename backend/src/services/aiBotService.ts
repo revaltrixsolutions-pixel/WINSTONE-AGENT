@@ -1,10 +1,6 @@
 import { hospitalKnowledge, searchKnowledgeBase } from "../knowledge/hospitalData.js";
 
-/* =========================================================
-   CONFIG
-========================================================= */
-
-export const CONVERSATION_MEMORY_MINUTES = 3;
+export const CONVERSATION_MEMORY_MINUTES = 15;
 
 const sessions = new Map<string, PatientSession>();
 
@@ -50,6 +46,12 @@ export type AppointmentConversationState = {
   awaitingConfirmation: boolean;
 };
 
+/**
+ * Kept for backward compatibility with any caller that reads this map
+ * directly. It is now written as a mirror of `sessions` every time
+ * `updateAppointmentConversation` runs, rather than being its own
+ * independent store — see the CHANGELOG above for why that mattered.
+ */
 export const appointmentConversationState =
   new Map<string, AppointmentConversationState>();
 
@@ -74,18 +76,19 @@ export const appointmentServiceOptions: string[] = Array.from(
 );
 
 /**
- * Returns the published price for a bookable department/service, or null
- * when no price has been supplied. Consultation and most non-surgical
- * service fees were never given to us — we say so rather than implying
- * they're free or guessing a number. Surgical procedure prices are
- * handled separately via the knowledge base's procedure-price search.
+ * Returns the standard consultation-fee quote for a bookable
+ * department/service, or null for a department this hospital doesn't
+ * take bookings for (or one that isn't a "consultation" in the usual
+ * sense, e.g. Pharmacy). This used to unconditionally return null,
+ * which is why booking flows were displaying the literal text "null"
+ * next to a chosen department. Surgical procedure prices are handled
+ * separately via the knowledge base's procedure-price search, since
+ * those vary per procedure rather than being a flat fee.
  */
-export function getServicePrice(_department?: string): string | null {
-  // No consultation/clinic-visit price list was supplied for any
-  // department. Returning null (rather than a fabricated "0" or a
-  // number) lets callers correctly say "please confirm with reception"
-  // instead of implying the visit is free.
-  return null;
+export function getServicePrice(department?: string): string | null {
+  if (!department) return null;
+  if (!appointmentServiceOptions.includes(department)) return null;
+  return hospitalKnowledge.consultationFee;
 }
 
 /* =========================================================
@@ -276,6 +279,83 @@ const HUMAN_SUPPORT_PATTERNS: RegExp[] = [
 
 export function isHumanSupportRequest(message: string): boolean {
   return HUMAN_SUPPORT_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+/* =========================================================
+   MEDICAL ADVICE / SYMPTOM REDIRECT
+
+   This bot answers questions about the hospital (services, prices,
+   locations, insurance, booking). It does not, and should not, attempt
+   to give medical advice, a diagnosis, or treatment/medication guidance
+   over chat. Any message that looks like a symptom report or a request
+   for medical advice is redirected straight to hospital staff, with
+   direct facility contact numbers, instead of being sent through the
+   knowledge base or the generic fallback reply.
+========================================================= */
+
+const SYMPTOM_PATTERNS: RegExp[] = [
+  /\bi feel\b/i,
+  /\bi'?m feeling\b/i,
+  /\bi have (a |an )?(pain|fever|headache|cough|cold|flu|rash|swelling|dizziness|nausea|infection)\b/i,
+  /\bdizzy|dizziness\b/i,
+  /\bheadache(s)?\b/i,
+  /\bfever(ish)?\b/i,
+  /\bvomit(ing)?\b/i,
+  /\bnausea(ted)?\b/i,
+  /\bpain(ful)?\b/i,
+  /\bbleeding\b/i,
+  /\bswelling|swollen\b/i,
+  /\bsymptom(s)?\b/i,
+  /\bunwell\b/i,
+  /\b(i'?m|feeling) sick\b/i,
+  /\bwhat (can|should) i (do|take)\b/i,
+  /\bis it normal (to|that)\b/i,
+  /\bshortness of breath|can'?t breathe|difficulty breathing\b/i,
+  /\bchest pain\b/i,
+  /\bwhat medicine (should|can) i\b/i,
+  /\bwhat (drug|dosage|dose) (should|can) i\b/i,
+  /\bdiagnos(e|is|ed)\b/i,
+  /\brash\b/i,
+  /\bstomach ache|stomachache|abdominal pain\b/i,
+];
+
+const URGENT_SYMPTOM_PATTERNS: RegExp[] = [
+  /\bchest pain\b/i,
+  /\bcan'?t breathe|difficulty breathing|shortness of breath\b/i,
+  /\bunconscious|passed out|fainted|not responding\b/i,
+  /\bsevere bleeding|bleeding heavily|heavy bleeding|won'?t stop bleeding\b/i,
+  /\bsuicid|self[\s-]?harm\b/i,
+  /\bstroke|seizure|convuls/i,
+  /\bsevere allergic reaction|anaphyla/i,
+  /\bin labou?r\b/i,
+];
+
+export function isMedicalSymptomRequest(message: string): boolean {
+  return SYMPTOM_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function isUrgentSymptomRequest(message: string): boolean {
+  return URGENT_SYMPTOM_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function formatMedicalAdviceRedirect(name: string, message: string): string {
+  const contactLines = hospitalKnowledge.locations
+    .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(", ")}`)
+    .join("\n");
+
+  if (isUrgentSymptomRequest(message)) {
+    return (
+      `${name}, this sounds urgent. Please call our Emergency line or go to the nearest branch right away — I can't provide emergency medical care over chat.\n\n` +
+      `📞 *Emergency Contacts*\n${contactLines}\n\n` +
+      `If you or someone with you is in immediate danger, please contact emergency services or go to the nearest hospital now.`
+    );
+  }
+
+  return (
+    `${name}, I'm not able to give medical advice or a diagnosis over chat — for your safety, please speak directly with one of our clinicians.\n\n` +
+    `📞 *Talk to Our Team*\n${contactLines}\n\n` +
+    `You can also reply "book appointment" and I'll help you schedule a consultation, or "menu" to see what else I can help with.`
+  );
 }
 
 /* =========================================================
@@ -675,6 +755,31 @@ function departmentHint(department?: string): string {
   return description ? ` (${description.split(". ")[0]}.)` : "";
 }
 
+/**
+ * Friendly one-line acknowledgement shown as soon as a department is
+ * known, quoting its consultation fee. This is what replaces the old
+ * "null + KSh 1,000 consultation" text: `getServicePrice` no longer
+ * returns null for a bookable department, and this line is generated
+ * centrally instead of being pieced together at each call site.
+ */
+function departmentPriceLine(department?: string): string {
+  if (!department) return "";
+
+  const price = getServicePrice(department);
+
+  return price
+    ? `Great, ${department} it is! Standard consultation fee: ${price} (this excludes tests, procedures, or medication). `
+    : `Great, ${department} it is! `;
+}
+
+function fullDepartmentListBlock(): string {
+  return (
+    `\n\nHere is our full list of bookable services/departments:\n` +
+    appointmentServiceOptions.map((department) => `• ${department}`).join("\n") +
+    `\n\nJust reply with the one you'd like.`
+  );
+}
+
 export function generateAppointmentCollectionPrompt(
   patientName: string,
   appointment: Partial<AppointmentRequestData>,
@@ -685,32 +790,55 @@ export function generateAppointmentCollectionPrompt(
   if (!appointment.date) missing.push("date");
   if (!appointment.time) missing.push("time");
 
+  const priceLine = departmentPriceLine(appointment.department);
+
   if (missing.length === 0) {
-    return `Thank you, ${patientName}. Please confirm your appointment details.`;
+    return `${priceLine}Thank you, ${patientName}. Please confirm your appointment details.`;
   }
 
   if (missing.length === 1) {
     if (missing[0] === "department") {
       return (
         `Thank you, ${patientName}. I have your preferred date and time. ` +
-        `Which department or clinic would you like to see (e.g. Maternity, Pediatrics, Dental, Optical)?`
+        `Which department or clinic would you like to see?` +
+        fullDepartmentListBlock()
       );
     }
 
-    return `Thank you, ${patientName}. What ${missing[0]} would you like for your ${appointment.department} appointment?${departmentHint(
-      appointment.department,
-    )}`;
+    return (
+      `${priceLine}Now, what ${missing[0]} would you like for your ${appointment.department} appointment?` +
+      departmentHint(appointment.department)
+    );
   }
 
   if (missing.length === 2) {
-    return `Thank you, ${patientName}. Please share the ${missing[0]} and ${missing[1]} for your appointment (e.g. "Maternity tomorrow at 10am").`;
+    if (missing.includes("department")) {
+      const other = missing.find((item) => item !== "department") as string;
+      return (
+        `Thank you, ${patientName}. Please share your preferred ${other}, and let me know which department or clinic you'd like to see.` +
+        fullDepartmentListBlock()
+      );
+    }
+
+    return `${priceLine}Please share the ${missing[0]} and ${missing[1]} for your appointment (e.g. "tomorrow at 10am").`;
   }
 
-  return `Sure, ${patientName}. I can help you book an appointment. Please tell me the department, preferred date, and preferred time — for example: "Dental appointment on Friday at 2pm".`;
+  return (
+    `Sure, ${patientName}. I can help you book an appointment. ` +
+    `Please tell me the department, preferred date, and preferred time — for example: "Dental appointment on Friday at 2pm".` +
+    fullDepartmentListBlock() +
+    `\n\n(Standard consultation fee: ${hospitalKnowledge.consultationFee}. Surgical/theatre procedures are priced separately — ask me any time for a specific procedure's price.)`
+  );
 }
 
 /* =========================================================
    APPOINTMENT CONVERSATION STATE (standalone helper API)
+
+   Kept for backward compatibility with any code calling this function
+   directly instead of `generateBotReply`. It now reads and writes
+   through the same `sessions` map that `generateBotReply` uses, so the
+   two entry points can never end up with a different view of a given
+   patient's in-progress booking.
 ========================================================= */
 
 export function updateAppointmentConversation(
@@ -718,11 +846,29 @@ export function updateAppointmentConversation(
   patientName: string,
   message: string,
 ): AppointmentConversationState {
-  const existing = appointmentConversationState.get(patientId);
+  const now = Date.now();
+  let session = sessions.get(patientId);
+
+  if (session && now - session.lastInteraction > CONVERSATION_MEMORY_MINUTES * 60 * 1000) {
+    session = undefined;
+  }
+
+  if (!session) {
+    session = {
+      patientName,
+      lastInteraction: now,
+      stage: "collecting_appointment",
+      appointment: {},
+    };
+  } else {
+    session.patientName = session.patientName || patientName;
+    session.lastInteraction = now;
+  }
+
   const parsed = parseAppointmentRequest(message);
 
   const appointment: Partial<AppointmentRequestData> = {
-    ...(existing?.appointment || {}),
+    ...session.appointment,
     ...(parsed.date ? { date: parsed.date } : {}),
     ...(parsed.time ? { time: parsed.time } : {}),
     ...(parsed.department ? { department: parsed.department } : {}),
@@ -735,10 +881,15 @@ export function updateAppointmentConversation(
 
   if (!completed) {
     prompt = generateAppointmentCollectionPrompt(patientName, appointment);
+    session.stage = "collecting_appointment";
   } else {
     prompt = renderAppointmentSummary(patientName, appointment);
+    session.stage = "confirming_appointment";
     awaitingConfirmation = true;
   }
+
+  session.appointment = appointment;
+  sessions.set(patientId, session);
 
   const state: AppointmentConversationState = {
     patientName,
@@ -749,6 +900,7 @@ export function updateAppointmentConversation(
     awaitingConfirmation,
   };
 
+  // Mirrored for backward compatibility only — `sessions` is authoritative.
   appointmentConversationState.set(patientId, state);
 
   return state;
@@ -758,13 +910,51 @@ function renderAppointmentSummary(
   name: string,
   appointment: Partial<AppointmentRequestData>,
 ): string {
+  const price = getServicePrice(appointment.department);
+
   return (
     `Thank you, ${name}. Here is your appointment request:\n\n` +
     `• Department: ${appointment.department}\n` +
     `• Date: ${appointment.date}\n` +
-    `• Time: ${appointment.time}\n\n` +
-    `Note: exact consultation fees were not published to me — reception will confirm the cost when you arrive or call ahead.\n\n` +
+    `• Time: ${appointment.time}\n` +
+    (price ? `• Standard consultation fee: ${price}\n` : '') +
+    `\nNote: this covers a standard consultation only — lab tests, procedures, admission, or medication are charged separately and confirmed by reception.\n\n` +
     `Is this correct? Reply *Yes* to confirm or *No* to change it.`
+  );
+}
+
+function generateBookingReference(): string {
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `PH-${random}`;
+}
+
+/**
+ * Final success message sent once the patient confirms their appointment
+ * details. Previously this was a single generic sentence with no details
+ * in it at all ("Your appointment request has been confirmed..."), which
+ * is what made bookings feel like they hadn't actually gone through.
+ */
+function renderAppointmentSuccess(
+  name: string,
+  appointment: Partial<AppointmentRequestData>,
+): string {
+  const reference = generateBookingReference();
+  const price = getServicePrice(appointment.department);
+  const contactLines = hospitalKnowledge.locations
+    .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(", ")}`)
+    .join("\n");
+
+  return (
+    `✅ *Appointment Confirmed*\n\n` +
+    `Thank you, ${name} — your appointment request has been received and sent to our hospital team for processing.\n\n` +
+    `• Booking reference: *${reference}*\n` +
+    `• Department: ${appointment.department}\n` +
+    `• Date: ${appointment.date}\n` +
+    `• Time: ${appointment.time}\n` +
+    (price ? `• Standard consultation fee: ${price} (excludes tests, procedures, or medication)\n` : '') +
+    `\nOur staff will reach out to finalize your slot. If you need to reach us sooner, please call your nearest branch:\n` +
+    contactLines +
+    `\n\nSay "menu" any time if you need anything else.`
   );
 }
 
@@ -797,11 +987,13 @@ const MENU_PROMPT = (name: string) =>
   `${getKenyaGreeting()}, ${name}. How can I help you today?\n\n` +
   `You can ask me about:\n` +
   `• Our services, departments, or specialist clinics\n` +
-  `• Surgical procedure prices (e.g. "cost of a caesarean section")\n` +
+  `• Surgical procedure prices (e.g. "cost of a caesarean section"), or say "price list" for the full list\n` +
+  `• Consultation fees\n` +
   `• Locations and contacts (Nasra or Umoja)\n` +
   `• SHA / insurance partners\n` +
   `• Booking an appointment\n` +
-  `• Speaking with our hospital staff`;
+  `• Speaking with our hospital staff\n\n` +
+  `If you're feeling unwell or need medical advice, just tell me and I'll connect you directly with our clinical team instead of guessing.`;
 
 function isGreeting(message: string): boolean {
   return /^(hi|hello|hey|good morning|good afternoon|good evening|mambo|sasa|habari)\b/i.test(
@@ -912,10 +1104,27 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     };
   }
 
+  // Medical symptom / advice questions are redirected to human clinical
+  // staff rather than answered here. Skipped while the patient is already
+  // mid-way through booking an appointment, so a stray word like "pain"
+  // in an appointment reason doesn't derail an in-progress booking.
+  if (
+    state.stage !== "collecting_appointment" &&
+    state.stage !== "confirming_appointment" &&
+    !isBookingIntent(message) &&
+    isMedicalSymptomRequest(message)
+  ) {
+    return {
+      reply: formatMedicalAdviceRedirect(name, message),
+      state: { ...state, stage: "menu" },
+    };
+  }
+
   if (state.stage === "confirming_appointment") {
     if (isAffirmative(message)) {
+      const confirmedAppointment = state.appointment;
       return {
-        reply: `Thank you, ${name}. Your appointment request has been confirmed and sent to the hospital team for processing.`,
+        reply: renderAppointmentSuccess(name, confirmedAppointment),
         state: { ...state, stage: "menu", appointment: {} },
       };
     }
@@ -984,6 +1193,13 @@ export function generateBotReply(input: BotReplyInput): string {
    * When no patientId is supplied, patientName is used to seed a
    * one-off turn so existing unit tests and simple integrations work
    * without session storage. No conversation memory persists here.
+   *
+   * IMPORTANT: production/WhatsApp integrations must always pass a
+   * stable `patientId` for every message from the same conversation.
+   * Without it, each call starts from a blank slate (stage "menu",
+   * appointment {}), so a multi-step booking (department → date → time
+   * → confirm) can never actually complete — every reply after the
+   * first will look like a brand-new request instead of a continuation.
    */
   if (!input.patientId) {
     if (!input.patientName) {
