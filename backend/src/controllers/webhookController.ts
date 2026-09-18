@@ -658,7 +658,7 @@ async function sendBotReply(
           patientId: patient.id,
           doctorName: 'To be assigned',
           specialty: department,
-          servicePrice: getServicePrice(department),
+          servicePrice: getServicePrice(department) ?? undefined,
           consultationFee: 'KSh 1,000',
           slotTime,
           status: 'CONFIRMED',

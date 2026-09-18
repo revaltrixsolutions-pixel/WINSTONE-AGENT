@@ -1,1612 +1,845 @@
-import {
-  hospitalKnowledge,
-  searchKnowledgeBase,
-} from '../knowledge/hospitalData';
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.appointmentServiceOptions = exports.appointmentConversationState = exports.CONVERSATION_MEMORY_MINUTES = void 0;
+exports.getServicePrice = getServicePrice;
+exports.isConversationStale = isConversationStale;
+exports.resetPatientSession = resetPatientSession;
+exports.getPatientSession = getPatientSession;
+exports.getPatientSessionSnapshot = getPatientSessionSnapshot;
+exports.isUsablePatientName = isUsablePatientName;
+exports.extractPatientName = extractPatientName;
+exports.isHumanSupportRequest = isHumanSupportRequest;
+exports.parseAppointmentRequest = parseAppointmentRequest;
+exports.generateAppointmentCollectionPrompt = generateAppointmentCollectionPrompt;
+exports.updateAppointmentConversation = updateAppointmentConversation;
+exports.getKenyaGreeting = getKenyaGreeting;
+exports.generateBotReply = generateBotReply;
+const hospitalData_js_1 = require("../knowledge/hospitalData.js");
 /* =========================================================
-   TYPES
+   CONFIG
 ========================================================= */
-
-export type BotReplyInput = {
-  patientId?: string;
-  patientName?: string | null;
-  message: string;
-  isReturning?: boolean;
-  lastInteractionHours?: number;
-};
-
-export type AppointmentRequestData = {
-  date?: string;
-  time?: string;
-  department?: string;
-  ready: boolean;
-};
-
-type ConversationStage =
-  | 'awaiting_name'
-  | 'menu'
-  | 'collecting_appointment'
-  | 'confirming_appointment'
-  | 'human_handoff';
-
-export type PatientSession = {
-  name: string | null;
-  stage: ConversationStage;
-  appointment: Partial<AppointmentRequestData>;
-  confirmedAppointment: AppointmentRequestData | null;
-  lastActivityAt: number;
-  contacted: boolean;
-};
-
-export type AppointmentConversationState = {
-  patientName: string;
-  appointment: Partial<AppointmentRequestData>;
-};
-
+exports.CONVERSATION_MEMORY_MINUTES = 3;
+const sessions = new Map();
+exports.appointmentConversationState = new Map();
 /* =========================================================
-   SETTINGS
+   BOOKABLE DEPARTMENTS
+   Derived from the real hospital knowledge base so the booking
+   flow never drifts out of sync with what the hospital actually
+   offers. No department name here is invented.
 ========================================================= */
-
-export const CONVERSATION_MEMORY_MINUTES = 3;
-
-const SESSION_IDLE_MS =
-  CONVERSATION_MEMORY_MINUTES * 60 * 1000;
-
-const NAME_PROMPT =
-  'Before we continue, please tell me your full name.';
-
-const DEFAULT_WELCOME =
-  `Welcome to Phadam Hospital. ${NAME_PROMPT}`;
-
-const MENU_LINE =
-  'You can book an appointment, ask about a department or service, check prices, get our locations, ask about SHA/insurance, or request a staff member.';
-
-/* =========================================================
-   SESSION STORE
-========================================================= */
-
-const sessions = new Map<string, PatientSession>();
-
-export const appointmentConversationState =
-  new Map<string, AppointmentConversationState>();
-
-function createSession(): PatientSession {
-  return {
-    name: null,
-    stage: 'awaiting_name',
-    appointment: {},
-    confirmedAppointment: null,
-    lastActivityAt: Date.now(),
-    contacted: false,
-  };
-}
-
-function getSession(patientId: string): PatientSession {
-  let session = sessions.get(patientId);
-
-  if (!session) {
-    session = createSession();
-    sessions.set(patientId, session);
-  }
-
-  return session;
-}
-
-export function resetPatientSession(
-  patientId: string,
-): void {
-  sessions.delete(patientId);
-  appointmentConversationState.delete(patientId);
-}
-
-export function getPatientSessionSnapshot(
-  patientId: string,
-): PatientSession | null {
-  const session = sessions.get(patientId);
-
-  if (!session) {
+exports.appointmentServiceOptions = Array.from(new Set([
+    "Maternity",
+    "Pediatrics",
+    "Emergency",
+    "Laboratory",
+    "Pharmacy",
+    "Radiology",
+    "Physiotherapy",
+    ...hospitalData_js_1.hospitalKnowledge.specialistClinics,
+]));
+/**
+ * Returns the published price for a bookable department/service, or null
+ * when no price has been supplied. Consultation and most non-surgical
+ * service fees were never given to us — we say so rather than implying
+ * they're free or guessing a number. Surgical procedure prices are
+ * handled separately via the knowledge base's procedure-price search.
+ */
+function getServicePrice(_department) {
+    // No consultation/clinic-visit price list was supplied for any
+    // department. Returning null (rather than a fabricated "0" or a
+    // number) lets callers correctly say "please confirm with reception"
+    // instead of implying the visit is free.
     return null;
-  }
-
-  return {
-    ...session,
-    appointment: {
-      ...session.appointment,
-    },
-    confirmedAppointment: session.confirmedAppointment
-      ? {
-          ...session.confirmedAppointment,
-        }
-      : null,
-  };
 }
-
 /* =========================================================
-   CONVERSATION AGE
+   CONVERSATION MEMORY
 ========================================================= */
-
-export function isConversationStale(
-  lastInteractionHours: number,
-): boolean {
-  if (!Number.isFinite(lastInteractionHours)) {
-    return false;
-  }
-
-  return (
-    lastInteractionHours * 60 >=
-    CONVERSATION_MEMORY_MINUTES
-  );
+function isConversationStale(lastInteractionHours) {
+    return lastInteractionHours * 60 >= exports.CONVERSATION_MEMORY_MINUTES;
 }
-
-/* =========================================================
-   TEXT HELPERS
-========================================================= */
-
-function cleanText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
+function resetPatientSession(patientId) {
+    sessions.delete(patientId);
+    exports.appointmentConversationState.delete(patientId);
 }
-
-function normalizeKeyword(text: string): string {
-  return cleanText(text)
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s'-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+function getPatientSession(patientId) {
+    return sessions.get(patientId) || null;
 }
-
-function escapeRegExp(value: string): string {
-  return value.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    '\\$&',
-  );
+function getPatientSessionSnapshot(patientId) {
+    const session = sessions.get(patientId);
+    if (!session)
+        return null;
+    return {
+        ...session,
+        appointment: { ...session.appointment },
+    };
 }
-
-function includesWholeTerm(
-  text: string,
-  term: string,
-): boolean {
-  const normalizedText = normalizeKeyword(text);
-  const normalizedTerm = normalizeKeyword(term);
-
-  if (!normalizedTerm) {
-    return false;
-  }
-
-  const pattern = normalizedTerm
-    .split(/\s+/)
-    .map(escapeRegExp)
-    .join('\\s+');
-
-  return new RegExp(
-    `(?:^|\\s)${pattern}(?:$|\\s)`,
-    'i',
-  ).test(normalizedText);
-}
-
-function titleCase(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) =>
-      word.charAt(0).toUpperCase() +
-      word.slice(1).toLowerCase(),
-    )
-    .join(' ');
-}
-
-/* =========================================================
-   SERVICES / PRICING
-========================================================= */
-
-export const appointmentServiceOptions = [
-  ...Object.keys(hospitalKnowledge.departments),
-  ...hospitalKnowledge.specialistClinics,
-].filter(
-  (service, index, services) =>
-    services.indexOf(service) === index,
-);
-
-export function getServicePrice(
-  service: string,
-): string {
-  const normalizedService =
-    normalizeKeyword(service);
-
-  if (!normalizedService) {
-    return 'Price on request';
-  }
-
-  const match =
-    hospitalKnowledge.surgicalPrices.find(
-      (item) => {
-        const procedure =
-          normalizeKeyword(item.procedure);
-
-        return (
-          procedure.includes(normalizedService) ||
-          normalizedService.includes(procedure)
-        );
-      },
-    );
-
-  return match?.price || 'Price on request';
-}
-
 /* =========================================================
    NAME HANDLING
 ========================================================= */
-
-const NON_NAME_WORDS = new Set([
-  'assign',
-  'me',
-  'help',
-  'please',
-  'book',
-  'appointment',
-  'appointments',
-  'need',
-  'visit',
-  'hello',
-  'hi',
-  'hey',
-  'thanks',
-  'thank',
-  'you',
-  'yes',
-  'no',
-  'okay',
-  'ok',
-  'patient',
-  'patients',
-  'hospital',
-  'phadam',
-  'phadam hospital',
-  'revaltrix',
-  'revaltrix solutions',
-  'solutions',
-  'today',
-  'tomorrow',
-  'morning',
-  'afternoon',
-  'evening',
-  'date',
-  'time',
-  'department',
-  'service',
-  'emergency',
-  'maternity',
-  'pediatrics',
-  'laboratory',
-  'pharmacy',
-  'radiology',
-  'dental',
-  'optical',
-  'physiotherapy',
-  'what',
-  'where',
-  'when',
-  'why',
-  'how',
-  'can',
-  'could',
-  'would',
+const INVALID_NAMES = new Set([
+    "assign",
+    "patient",
+    "user",
+    "admin",
+    "doctor",
+    "nurse",
+    "staff",
+    "hello",
+    "hi",
+    "hey",
+    "yes",
+    "no",
+    "okay",
+    "ok",
+    "fine",
+    "sure",
+    "good",
+    "great",
+    "here",
+    "back",
+    "done",
+    "busy",
 ]);
-
-export function isUsablePatientName(
-  name: string | null | undefined,
-): boolean {
-  if (!name) {
-    return false;
-  }
-
-  const normalized = normalizeKeyword(name);
-
-  if (!normalized) {
-    return false;
-  }
-
-  if (
-    normalized === 'revaltrix solutions' ||
-    normalized === 'revaltrix' ||
-    normalized === 'phadam hospital' ||
-    normalized === 'phadam' ||
-    normalized === 'hospital' ||
-    normalized === 'solutions'
-  ) {
-    return false;
-  }
-
-  const words = normalized
-    .split(' ')
-    .filter(Boolean);
-
-  if (words.length < 1 || words.length > 4) {
-    return false;
-  }
-
-  if (
-    words.some((word) =>
-      NON_NAME_WORDS.has(word),
-    )
-  ) {
-    return false;
-  }
-
-  return words.every((word) =>
-    /^[a-z][a-z'-]*$/i.test(word),
-  );
+// Words that commonly follow "I am" / "I'm" without actually introducing a
+// name (e.g. "I'm fine", "I'm not sure", "I'm here for a checkup"). If a
+// captured candidate starts with one of these, we treat it as a false
+// match rather than a name.
+const NON_NAME_LEAD_WORDS = new Set([
+    "fine",
+    "good",
+    "great",
+    "okay",
+    "ok",
+    "ready",
+    "here",
+    "busy",
+    "sick",
+    "tired",
+    "sorry",
+    "sure",
+    "done",
+    "back",
+    "home",
+    "waiting",
+    "calling",
+    "asking",
+    "trying",
+    "looking",
+    "feeling",
+    "well",
+    "alright",
+    "available",
+    "free",
+    "new",
+    "returning",
+    "not",
+    "still",
+    "already",
+    "just",
+    "also",
+]);
+function isUsablePatientName(name) {
+    if (!name)
+        return false;
+    const cleaned = name.trim();
+    if (cleaned.length < 2 || cleaned.length > 80)
+        return false;
+    if (INVALID_NAMES.has(cleaned.toLowerCase()))
+        return false;
+    if (!/[a-zA-Z]/.test(cleaned))
+        return false;
+    return true;
 }
-
-export function extractPatientName(
-  message: string,
-): string | null {
-  const cleaned = cleanText(message);
-
-  const explicitPatterns = [
-    /(?:my name is|i am|i'm|call me|this is|name is)\s+(.+?)(?:[.!?,]|$)/i,
-  ];
-
-  for (const pattern of explicitPatterns) {
-    const match = cleaned.match(pattern);
-
-    if (!match?.[1]) {
-      continue;
-    }
-
-    const candidateText = cleanText(match[1]);
-
-    const candidate = titleCase(
-      candidateText,
-    );
-
-    if (isUsablePatientName(candidate)) {
-      return candidate;
-    }
-  }
-
-  const normalized = normalizeKeyword(cleaned);
-
-  const words = normalized
-    .split(' ')
-    .filter(Boolean);
-
-  if (
-    words.length >= 1 &&
-    words.length <= 4 &&
-    !words.some((word) =>
-      NON_NAME_WORDS.has(word),
-    )
-  ) {
-    const candidate = titleCase(
-      words.join(' '),
-    );
-
-    if (isUsablePatientName(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
+function startsWithNonNameWord(name) {
+    const firstWord = name.trim().split(/\s+/)[0]?.toLowerCase();
+    return Boolean(firstWord && NON_NAME_LEAD_WORDS.has(firstWord));
 }
-
+function extractPatientName(message) {
+    const text = message.trim();
+    // Reliable, explicit introductions. Checked first and not subject to
+    // the "non-name lead word" filter below.
+    const explicitPatterns = [
+        /\bmy name is\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+        /\bmy full name is\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+        /\bthis is\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+        /\bcall me\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+        /\byou can call me\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+        /\bthey call me\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+        /\bname\s*[:\-]\s*([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+    ];
+    for (const pattern of explicitPatterns) {
+        const match = text.match(pattern);
+        if (!match?.[1])
+            continue;
+        const name = match[1]
+            .replace(/[.!?,;:]+$/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (isUsablePatientName(name)) {
+            return name;
+        }
+    }
+    // Ambiguous introductions ("I am X" / "I'm X"). These frequently pick up
+    // non-name phrases ("I'm fine", "I'm not sure"), so we filter those out.
+    const ambiguousPatterns = [
+        /\bi am\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+        /\bi'm\s+([a-zA-Z][a-zA-Z .'-]{1,70})/i,
+    ];
+    for (const pattern of ambiguousPatterns) {
+        const match = text.match(pattern);
+        if (!match?.[1])
+            continue;
+        const name = match[1]
+            .replace(/[.!?,;:]+$/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (startsWithNonNameWord(name))
+            continue;
+        if (isUsablePatientName(name)) {
+            return name;
+        }
+    }
+    return null;
+}
 /* =========================================================
-   INTENT DETECTION
+   HUMAN SUPPORT
 ========================================================= */
-
-export function isHumanSupportRequest(
-  message: string,
-): boolean {
-  return /\b(human|person|agent|staff|doctor|nurse|reception|receptionist|customer care|customer service|talk to|speak to|connect me|assign me|real person|live support|help desk)\b/i.test(
-    message,
-  );
+const HUMAN_SUPPORT_PATTERNS = [
+    /\b(talk|speak|chat)\s+to\s+(a\s+)?(human|real\s+person|person|someone|somebody|staff|receptionist|agent|doctor|nurse)\b/i,
+    /\bconnect me (with|to)\s+(a\s+)?(human|person|someone|somebody|staff|agent|receptionist)\b/i,
+    /\breal\s+person\b/i,
+    /\breceptionist\b/i,
+    /\bhuman\s+(agent|support|help|being)\b/i,
+    /\b(need|want)\s+(a\s+)?(human|real person|staff member|live agent)\b/i,
+    /\btransfer me to (staff|reception|a human)\b/i,
+];
+function isHumanSupportRequest(message) {
+    return HUMAN_SUPPORT_PATTERNS.some((pattern) => pattern.test(message));
 }
-
-function isGreeting(
-  normalized: string,
-): boolean {
-  return /^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(
-    normalized,
-  );
-}
-
-function isBookingIntent(
-  normalized: string,
-): boolean {
-  return /\b(book|appointment|appointments|schedule|visit|consult|consultation)\b/.test(
-    normalized,
-  );
-}
-
-function isCancelIntent(
-  normalized: string,
-): boolean {
-  return /\b(cancel|abort|never mind|nevermind|stop)\b/.test(
-    normalized,
-  );
-}
-
-function isRestartIntent(
-  normalized: string,
-): boolean {
-  return /\b(start over|restart|change everything)\b/.test(
-    normalized,
-  );
-}
-
-function isConfirmIntent(
-  normalized: string,
-): boolean {
-  return (
-    normalized === 'yes' ||
-    normalized === 'y' ||
-    /\b(confirm|confirmed|correct|thats right|that's right|that is right|sure|okay book it|ok book it|book it)\b/.test(
-      normalized,
-    )
-  );
-}
-
-function isChangeFieldIntent(
-  normalized: string,
-): 'date' | 'time' | 'department' | null {
-  if (
-    /\b(change|modify|update)\s+(the\s+)?date\b/.test(
-      normalized,
-    ) ||
-    /\bdifferent date\b/.test(normalized)
-  ) {
-    return 'date';
-  }
-
-  if (
-    /\b(change|modify|update)\s+(the\s+)?time\b/.test(
-      normalized,
-    ) ||
-    /\bdifferent time\b/.test(normalized)
-  ) {
-    return 'time';
-  }
-
-  if (
-    /\b(change|modify|update)\s+(the\s+)?(department|service|clinic)\b/.test(
-      normalized,
-    ) ||
-    /\bdifferent (department|service|clinic)\b/.test(
-      normalized,
-    )
-  ) {
-    return 'department';
-  }
-
-  return null;
-}
-
 /* =========================================================
-   APPOINTMENT PARSING
+   CONTROL COMMANDS (cancel / restart / menu)
 ========================================================= */
-
-const DEPARTMENT_SYNONYMS: Record<
-  string,
-  string[]
-> = {
-  Maternity: [
-    'maternity',
-    'obstetrics',
-    'obgyn',
-    'antenatal',
-    'delivery',
-    'labour',
-    'labor',
-  ],
-
-  Pediatrics: [
-    'pediatrics',
-    'paediatrics',
-    'pediatric',
-    'paediatric',
-    'child',
-    'children',
-  ],
-
-  Emergency: [
-    'emergency',
-    'ambulance',
-    'accident',
-    'trauma',
-    'casualty',
-  ],
-
-  Laboratory: [
-    'laboratory',
-    'lab',
-    'tests',
-    'blood test',
-  ],
-
-  Pharmacy: [
-    'pharmacy',
-    'medicine',
-    'medicines',
-    'drugs',
-    'prescription',
-  ],
-
-  Radiology: [
-    'radiology',
-    'x-ray',
-    'xray',
-    'scan',
-    'ultrasound',
-    'ct scan',
-    'mri',
-  ],
-
-  Dental: [
-    'dental',
-    'dentist',
-    'teeth',
-  ],
-
-  Optical: [
-    'optical',
-    'eye',
-    'eyes',
-    'ophthalmology',
-    'optician',
-  ],
-
-  Physiotherapy: [
-    'physiotherapy',
-    'physio',
-    'rehab',
-    'rehabilitation',
-  ],
-};
-
-function matchDepartment(
-  text: string,
-): string | undefined {
-  const lower = normalizeKeyword(text);
-
-  const known = [
-    ...Object.keys(
-      hospitalKnowledge.departments,
-    ),
-    ...hospitalKnowledge.specialistClinics,
-  ];
-
-  const direct = known.find((service) =>
-    includesWholeTerm(lower, service),
-  );
-
-  if (direct) {
-    return direct;
-  }
-
-  for (const [
-    department,
-    synonyms,
-  ] of Object.entries(
-    DEPARTMENT_SYNONYMS,
-  )) {
-    if (
-      synonyms.some((synonym) =>
-        includesWholeTerm(
-          lower,
-          synonym,
-        ),
-      )
-    ) {
-      return department;
-    }
-  }
-
-  return undefined;
+function isCancelCommand(message) {
+    return /^(cancel|stop|never\s?mind|forget it|start over|restart)\b/i.test(message.trim());
 }
-
-function matchDate(
-  text: string,
-): string | undefined {
-  const lower = normalizeKeyword(text);
-
-  const relative = lower.match(
-    /\b(day after tomorrow|today|tomorrow|next week|next monday|next tuesday|next wednesday|next thursday|next friday|next saturday|next sunday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
-  );
-
-  if (relative) {
-    return titleCase(relative[1]);
-  }
-
-  const monthDate = lower.match(
-    /\b\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i,
-  );
-
-  if (monthDate) {
-    return titleCase(
-      monthDate[0],
-    );
-  }
-
-  const slashDate = lower.match(
-    /\b\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?\b/,
-  );
-
-  if (slashDate) {
-    return slashDate[0];
-  }
-
-  return undefined;
+function isMenuCommand(message) {
+    return /^(menu|main menu|help|options)\b/i.test(message.trim());
 }
-
-function matchTime(
-  text: string,
-): string | undefined {
-  const lower = normalizeKeyword(text);
-
-  if (/\bnoon\b/.test(lower)) {
-    return '12:00 PM';
-  }
-
-  if (/\bmidnight\b/.test(lower)) {
-    return '12:00 AM';
-  }
-
-  const clock = lower.match(
-    /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i,
-  );
-
-  if (clock) {
-    const hour = Number(clock[1]);
-    const minute = Number(
-      clock[2] || '00',
-    );
-
-    if (
-      hour < 1 ||
-      hour > 12 ||
-      minute > 59
-    ) {
-      return undefined;
-    }
-
-    return (
-      `${hour.toString().padStart(2, '0')}:` +
-      `${minute.toString().padStart(2, '0')} ` +
-      `${clock[3].toUpperCase()}`
-    );
-  }
-
-  const twentyFourHour = lower.match(
-    /\b([01]?\d|2[0-3]):([0-5]\d)\b/,
-  );
-
-  if (twentyFourHour) {
-    const hour24 = Number(
-      twentyFourHour[1],
-    );
-
-    const minute = Number(
-      twentyFourHour[2],
-    );
-
-    const meridiem =
-      hour24 >= 12 ? 'PM' : 'AM';
-
-    const hour12 =
-      hour24 % 12 || 12;
-
-    return (
-      `${hour12.toString().padStart(2, '0')}:` +
-      `${minute.toString().padStart(2, '0')} ` +
-      meridiem
-    );
-  }
-
-  /*
-   * A bare number is accepted as a time only when it is
-   * clearly being supplied as an appointment time.
-   *
-   * 1–7  => AM
-   * 8–12 => PM
-   * 13–23 => PM converted from 24-hour format
-   */
-  const bareHour = lower.match(
-    /\b(\d{1,2})(?::(\d{2}))?\s*(?:o'?clock)?\b/,
-  );
-
-  if (
-    bareHour &&
-    !/\b\d{4}\b/.test(lower)
-  ) {
-    const rawHour = Number(
-      bareHour[1],
-    );
-
-    const minute = Number(
-      bareHour[2] || '00',
-    );
-
-    if (
-      rawHour < 1 ||
-      rawHour > 23 ||
-      minute > 59
-    ) {
-      return undefined;
-    }
-
-    const hour12 =
-      rawHour > 12
-        ? rawHour - 12
-        : rawHour;
-
-    const meridiem =
-      rawHour >= 13
-        ? 'PM'
-        : rawHour < 8
-          ? 'AM'
-          : 'PM';
-
-    return (
-      `${hour12.toString().padStart(2, '0')}:` +
-      `${minute.toString().padStart(2, '0')} ` +
-      meridiem
-    );
-  }
-
-  return undefined;
-}
-
-export function parseAppointmentRequest(
-  message: string,
-): AppointmentRequestData {
-  const department =
-    matchDepartment(message);
-
-  const date =
-    matchDate(message);
-
-  const time =
-    matchTime(message);
-
-  return {
-    department,
-    date,
-    time,
-    ready: Boolean(
-      department &&
-      date &&
-      time,
-    ),
-  };
-}
-
 /* =========================================================
-   LEGACY APPOINTMENT STATE
+   DEPARTMENT PARSING
+   Every canonical name below comes directly from
+   `hospitalKnowledge` (departments + specialistClinics), so the
+   parser can never route a patient to a department that doesn't
+   actually exist at the hospital.
 ========================================================= */
-
-export function updateAppointmentConversation(
-  patientId: string,
-  patientName: string,
-  message: string,
-): AppointmentConversationState {
-  const existing =
-    appointmentConversationState.get(
-      patientId,
-    );
-
-  const parsed =
-    parseAppointmentRequest(message);
-
-  const existingAppointment =
-    existing?.appointment || {};
-
-  const appointment: Partial<AppointmentRequestData> =
+const DEPARTMENTS = [
     {
-      ...existingAppointment,
-
-      ...(parsed.date
-        ? {
-            date: parsed.date,
-          }
-        : {}),
-
-      ...(parsed.time
-        ? {
-            time: parsed.time,
-          }
-        : {}),
-
-      ...(parsed.department
-        ? {
-            department:
-              parsed.department,
-          }
-        : {}),
+        name: "Maternity",
+        patterns: [
+            /\bmaternity\b/i,
+            /\bantenatal\b/i,
+            /\bpostnatal\b/i,
+            /\banc\b/i,
+            /\bdelivery\b/i,
+            /\blabou?r\b/i,
+            /\bpregnan(t|cy)\b/i,
+            /\bc[\s-]?section\b/i,
+            /\bcaesarean\b/i,
+            /\bcesarean\b/i,
+        ],
+    },
+    {
+        name: "Obstetrics and Gynecology",
+        patterns: [/\bobstetrics\b/i, /\bob[\s-]?gyn\b/i],
+    },
+    {
+        name: "Gynecology",
+        patterns: [
+            /\bgynecology\b/i,
+            /\bgynaecology\b/i,
+            /\bgynecologist\b/i,
+            /\bgynaecologist\b/i,
+            /\bwomen'?s health\b/i,
+            /\bfertility\b/i,
+            /\bpap smear\b/i,
+        ],
+    },
+    {
+        name: "Pediatrics",
+        patterns: [
+            /\bpediatric(s)?\b/i,
+            /\bpaediatric(s)?\b/i,
+            /\bchild\b/i,
+            /\bchildren\b/i,
+            /\bkid(s)?\b/i,
+            /\bbaby\b/i,
+            /\bbabies\b/i,
+        ],
+    },
+    {
+        name: "Emergency",
+        patterns: [
+            /\bemergency\b/i,
+            /\bambulance\b/i,
+            /\baccident\b/i,
+            /\btrauma\b/i,
+            /\bcasualty\b/i,
+        ],
+    },
+    {
+        name: "Laboratory",
+        patterns: [
+            /\blaboratory\b/i,
+            /\blab\b/i,
+            /\bblood test(s)?\b/i,
+            /\blab test(s)?\b/i,
+        ],
+    },
+    {
+        name: "Pharmacy",
+        patterns: [
+            /\bpharmacy\b/i,
+            /\bmedicine(s)?\b/i,
+            /\bdrugs?\b/i,
+            /\bprescription\b/i,
+        ],
+    },
+    {
+        name: "Radiology",
+        patterns: [
+            /\bradiology\b/i,
+            /\bx[\s-]?ray\b/i,
+            /\bultrasound\b/i,
+            /\bct scan\b/i,
+            /\bmri\b/i,
+            /\bscan\b/i,
+        ],
+    },
+    {
+        name: "Dental",
+        patterns: [/\bdental\b/i, /\bdentist\b/i, /\bteeth\b/i, /\btooth(ache)?\b/i],
+    },
+    {
+        name: "Optical",
+        patterns: [
+            /\boptical\b/i,
+            /\beye(s)?\b/i,
+            /\bophthalmology\b/i,
+            /\boptician\b/i,
+            /\bvision\b/i,
+            /\bglasses\b/i,
+        ],
+    },
+    {
+        name: "Physiotherapy",
+        patterns: [
+            /\bphysiotherapy\b/i,
+            /\bphysio\b/i,
+            /\brehab\b/i,
+            /\brehabilitation\b/i,
+        ],
+    },
+    {
+        name: "Dermatology",
+        patterns: [/\bdermatology\b/i, /\bskin\b/i, /\brash\b/i, /\bacne\b/i],
+    },
+    {
+        name: "Orthopedics",
+        patterns: [
+            /\borthopedic(s)?\b/i,
+            /\borthopaedic(s)?\b/i,
+            /\bbone(s)?\b/i,
+            /\bfracture\b/i,
+            /\bjoint(s)?\b/i,
+            /\bspine\b/i,
+            /\bhip replacement\b/i,
+            /\bknee replacement\b/i,
+        ],
+    },
+    {
+        name: "Ear, Nose and Throat",
+        patterns: [
+            /\bent\b/i,
+            /\bear(s)?\b/i,
+            /\bnose\b/i,
+            /\bthroat\b/i,
+            /\bsinus\b/i,
+            /\btonsil(s)?\b/i,
+            /\bhearing\b/i,
+        ],
+    },
+    {
+        name: "Psychology and Counselling",
+        patterns: [
+            /\bpsychology\b/i,
+            /\bcounsel(l)?ing\b/i,
+            /\bmental health\b/i,
+            /\btherapy\b/i,
+            /\bdepression\b/i,
+            /\banxiety\b/i,
+        ],
+    },
+    {
+        name: "Nutrition",
+        patterns: [
+            /\bnutrition\b/i,
+            /\bdiet(ician)?\b/i,
+            /\bnutritionist\b/i,
+            /\bweight loss\b/i,
+        ],
+    },
+    {
+        name: "Surgical Outpatient",
+        patterns: [
+            /\bsurgical outpatient\b/i,
+            /\bminor surgery\b/i,
+            /\bday surgery\b/i,
+            /\boutpatient surgery\b/i,
+        ],
+    },
+    {
+        name: "Urology",
+        patterns: [
+            /\burology\b/i,
+            /\burologist\b/i,
+            /\burinary\b/i,
+            /\bprostate\b/i,
+            /\bkidney stone(s)?\b/i,
+            /\bbladder\b/i,
+        ],
+    },
+];
+function extractDepartment(message) {
+    for (const department of DEPARTMENTS) {
+        if (department.patterns.some((pattern) => pattern.test(message))) {
+            return department.name;
+        }
+    }
+    return undefined;
+}
+/* =========================================================
+   DATE PARSING
+========================================================= */
+function formatDate(date) {
+    return date.toISOString().slice(0, 10);
+}
+function startOfDay(date) {
+    const result = new Date(date);
+    result.setHours(0, 0, 0, 0);
+    return result;
+}
+function addDays(date, days) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+}
+function parseDateFromMessage(message) {
+    const text = message.toLowerCase();
+    const now = new Date();
+    if (/\btoday\b/.test(text))
+        return formatDate(startOfDay(now));
+    if (/\btomorrow\b/.test(text))
+        return formatDate(startOfDay(addDays(now, 1)));
+    if (/\bday after tomorrow\b/.test(text))
+        return formatDate(startOfDay(addDays(now, 2)));
+    const weekdays = {
+        sunday: 0,
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+        saturday: 6,
     };
-
-  appointment.ready = Boolean(
-    appointment.department &&
-    appointment.date &&
-    appointment.time,
-  );
-
-  const state: AppointmentConversationState = {
-    patientName,
-    appointment,
-  };
-
-  appointmentConversationState.set(
-    patientId,
-    state,
-  );
-
-  return state;
+    for (const [day, targetDay] of Object.entries(weekdays)) {
+        if (new RegExp(`\\b${day}\\b`, "i").test(text)) {
+            const currentDay = now.getDay();
+            let diff = targetDay - currentDay;
+            if (diff <= 0)
+                diff += 7;
+            if (new RegExp(`\\bnext\\s+${day}\\b`, "i").test(text)) {
+                diff += 7;
+            }
+            return formatDate(startOfDay(addDays(now, diff)));
+        }
+    }
+    const slashDate = text.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
+    if (slashDate) {
+        const day = Number(slashDate[1]);
+        const month = Number(slashDate[2]) - 1;
+        let year = slashDate[3] ? Number(slashDate[3]) : now.getFullYear();
+        if (year < 100)
+            year += 2000;
+        const parsed = new Date(year, month, day);
+        if (parsed.getFullYear() === year &&
+            parsed.getMonth() === month &&
+            parsed.getDate() === day) {
+            return formatDate(parsed);
+        }
+    }
+    const monthNames = {
+        january: 0,
+        february: 1,
+        march: 2,
+        april: 3,
+        may: 4,
+        june: 5,
+        july: 6,
+        august: 7,
+        september: 8,
+        october: 9,
+        november: 10,
+        december: 11,
+    };
+    const monthMatch = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?\b/i);
+    if (monthMatch) {
+        const day = Number(monthMatch[1]);
+        const month = monthNames[monthMatch[2].toLowerCase()];
+        const year = monthMatch[3] ? Number(monthMatch[3]) : now.getFullYear();
+        const parsed = new Date(year, month, day);
+        if (parsed.getFullYear() === year &&
+            parsed.getMonth() === month &&
+            parsed.getDate() === day) {
+            return formatDate(parsed);
+        }
+    }
+    return undefined;
 }
-
 /* =========================================================
-   KNOWLEDGE BASE
+   TIME PARSING
 ========================================================= */
-
-function getAnswerFromKnowledgeBase(
-  message: string,
-): string | null {
-  const lower =
-    normalizeKeyword(message);
-
-  /*
-   * Handle SHA/insurance directly before the generic
-   * knowledge-base search so the answer always contains
-   * the hospital-location guidance expected for this intent.
-   */
-  if (
-    /\b(sha|insurance|medical cover|cover|nhif)\b/i.test(
-      lower,
-    )
-  ) {
-    return [
-      'Yes — we accept SHA as well as several private medical insurance partners, including AON Minet, Sanlam, Britam, UAP, and CIC General.',
-      '',
-      'Please have your membership details and any required preauthorization ready before your visit, since coverage can vary by plan.',
-      '',
-      'Phadam Hospital has branches in Nasra and Umoja, Kenya. Please confirm the branch and eligibility requirements before treatment.',
-    ].join('\n');
-  }
-
-  const directAnswer =
-    searchKnowledgeBase(message);
-
-  if (directAnswer) {
-    return directAnswer;
-  }
-
-  if (
-    lower.includes('price') ||
-    lower.includes('cost') ||
-    lower.includes('fee') ||
-    lower.includes('charge')
-  ) {
-    return (
-      'I can look up current prices for specific procedures. ' +
-      'Tell me the procedure or service you need and I can give you the available price or connect you with billing for an exact quote.'
-    );
-  }
-
-  if (
-    lower.includes('emergency') ||
-    lower.includes('ambulance') ||
-    (
-      lower.includes('open') &&
-      lower.includes('24')
-    )
-  ) {
-    return (
-      'Our Emergency and Ambulance Unit runs 24/7. ' +
-      'You do not need an appointment for an emergency. ' +
-      'Please come straight in or contact the hospital for ambulance assistance.'
-    );
-  }
-
-  if (
-    lower.includes('hours') ||
-    lower.includes('open') ||
-    lower.includes('close')
-  ) {
-    return (
-      'Emergency services run 24/7. ' +
-      'Outpatient clinics and specialist consultations operate on scheduled hours that vary by department.'
-    );
-  }
-
-  if (
-    lower.includes('contact') ||
-    lower.includes('phone') ||
-    lower.includes('call')
-  ) {
-    return (
-      `You can reach Phadam Hospital Nasra on ` +
-      `${hospitalKnowledge.locations[0].phoneNumbers.join(', ')}, ` +
-      `or Phadam Hospital Umoja on ` +
-      `${hospitalKnowledge.locations[1].phoneNumbers.join(', ')}. ` +
-      `Which branch do you need?`
-    );
-  }
-
-  if (
-    lower.includes('location') ||
-    lower.includes('where') ||
-    lower.includes('address') ||
-    lower.includes('branch') ||
-    lower.includes('directions')
-  ) {
-    return [
-      'We have two branches:',
-      '',
-      `• ${hospitalKnowledge.locations[0].branch}: ${hospitalKnowledge.locations[0].address} (near ${hospitalKnowledge.locations[0].landmark}) — ${hospitalKnowledge.locations[0].phoneNumbers.join(', ')}`,
-      `• ${hospitalKnowledge.locations[1].branch}: ${hospitalKnowledge.locations[1].address} (near ${hospitalKnowledge.locations[1].landmark}) — ${hospitalKnowledge.locations[1].phoneNumbers.join(', ')}`,
-    ].join('\n');
-  }
-
-  if (
-    lower.includes('service') ||
-    lower.includes('offer') ||
-    lower.includes('department')
-  ) {
-    return [
-      'We offer general consultation, maternity, pediatrics, emergency care, pharmacy, laboratory, radiology, dental, optical, physiotherapy, and a range of specialist clinics.',
-      '',
-      'Tell me which one you need and I can either answer questions about it or start booking an appointment.',
-    ].join('\n');
-  }
-
-  return null;
+function normalizeTime(hour, minute, suffix) {
+    let h = hour;
+    if (suffix) {
+        const normalized = suffix.toLowerCase();
+        if (h < 1 || h > 12)
+            return undefined;
+        if (normalized === "am") {
+            if (h === 12)
+                h = 0;
+        }
+        else if (normalized === "pm") {
+            if (h !== 12)
+                h += 12;
+        }
+    }
+    else if (h < 0 || h > 23) {
+        return undefined;
+    }
+    return `${String(h).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
-
+function parseTimeFromMessage(message) {
+    const text = message.toLowerCase();
+    if (/\bmidnight\b/.test(text))
+        return "12:00 AM";
+    if (/\bnoon\b/.test(text))
+        return "12:00 PM";
+    const explicit = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+    if (explicit) {
+        return normalizeTime(Number(explicit[1]), Number(explicit[2] || 0), explicit[3]);
+    }
+    const twentyFourHour = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+    if (twentyFourHour) {
+        return normalizeTime(Number(twentyFourHour[1]), Number(twentyFourHour[2]));
+    }
+    const bareHour = text.match(/\b(?:at|around|by)\s+([01]?\d|2[0-3])\b/i);
+    if (bareHour) {
+        return normalizeTime(Number(bareHour[1]), 0);
+    }
+    return undefined;
+}
 /* =========================================================
-   APPOINTMENT HELPERS
+   APPOINTMENT PARSER
 ========================================================= */
-
-function summarizeAppointment(
-  appointment: Partial<AppointmentRequestData>,
-): string {
-  const parts: string[] = [];
-
-  if (appointment.department) {
-    parts.push(
-      `department: ${appointment.department}`,
-    );
-  }
-
-  if (appointment.date) {
-    parts.push(
-      `date: ${appointment.date}`,
-    );
-  }
-
-  if (appointment.time) {
-    parts.push(
-      `time: ${appointment.time}`,
-    );
-  }
-
-  return parts.join(', ');
+function parseAppointmentRequest(message) {
+    const date = parseDateFromMessage(message);
+    const time = parseTimeFromMessage(message);
+    const department = extractDepartment(message);
+    return {
+        date,
+        time,
+        department,
+        ready: Boolean(date && time && department),
+    };
 }
-
-function missingAppointmentFields(
-  appointment: Partial<AppointmentRequestData>,
-): Array<'department or service' | 'preferred date' | 'preferred time'> {
-  const missing: Array<
-    'department or service' |
-    'preferred date' |
-    'preferred time'
-  > = [];
-
-  if (!appointment.department) {
-    missing.push('department or service');
-  }
-
-  if (!appointment.date) {
-    missing.push('preferred date');
-  }
-
-  if (!appointment.time) {
-    missing.push('preferred time');
-  }
-
-  return missing;
+function departmentHint(department) {
+    if (!department)
+        return "";
+    const description = hospitalData_js_1.hospitalKnowledge.departments[department];
+    return description ? ` (${description.split(". ")[0]}.)` : "";
 }
-
-export function generateAppointmentCollectionPrompt(
-  patientName: string,
-  currentData: Partial<AppointmentRequestData> = {},
-): string {
-  const missing =
-    missingAppointmentFields(
-      currentData,
-    );
-
-  if (!missing.length) {
-    return (
-      `Thanks, ${patientName}. Please confirm: ` +
-      `${summarizeAppointment(currentData)}. ` +
-      `Reply YES to confirm, or tell me what to change.`
-    );
-  }
-
-  const known =
-    summarizeAppointment(currentData);
-
-  const knownLine = known
-    ? `So far I have ${known}.`
-    : '';
-
-  if (
-    !currentData.department &&
-    currentData.date &&
-    currentData.time
-  ) {
-    return (
-      `Thank you, ${patientName}. ` +
-      `I have your preferred date and time: ` +
-      `${currentData.date} at ${currentData.time}. ` +
-      `What department or service would you like for your appointment? ` +
-      `Once you select the department, I will show you the complete booking details.`
-    );
-  }
-
-  if (
-    !currentData.date &&
-    currentData.department &&
-    currentData.time
-  ) {
-    return (
-      `Thank you, ${patientName}. ` +
-      `I have ${currentData.department} and ` +
-      `${currentData.time}. ` +
-      `What date would you prefer for the appointment?`
-    );
-  }
-
-  if (
-    !currentData.time &&
-    currentData.department &&
-    currentData.date
-  ) {
-    return (
-      `Thank you, ${patientName}. ` +
-      `I have ${currentData.department} for ${currentData.date}. ` +
-      `What time would you prefer?`
-    );
-  }
-
-  if (!currentData.department) {
-    return (
-      `Sure, ${patientName} — let's get your appointment booked. ` +
-      `${knownLine ? `${knownLine} ` : ''}` +
-      `What department or service would you like? ` +
-      `You can also provide the date and time together, for example: ` +
-      `"tomorrow at 9am in Maternity".`
-    );
-  }
-
-  if (!currentData.date) {
-    return (
-      `Sure, ${patientName}. ` +
-      `${knownLine ? `${knownLine} ` : ''}` +
-      `What date would you prefer for the appointment?`
-    );
-  }
-
-  if (!currentData.time) {
-    return (
-      `Sure, ${patientName}. ` +
-      `${knownLine ? `${knownLine} ` : ''}` +
-      `What time would you prefer for the appointment?`
-    );
-  }
-
-  return (
-    `Sure, ${patientName}. ` +
-    `${knownLine} ` +
-    `Please provide the remaining appointment details.`
-  );
+function generateAppointmentCollectionPrompt(patientName, appointment) {
+    const missing = [];
+    if (!appointment.department)
+        missing.push("department");
+    if (!appointment.date)
+        missing.push("date");
+    if (!appointment.time)
+        missing.push("time");
+    if (missing.length === 0) {
+        return `Thank you, ${patientName}. Please confirm your appointment details.`;
+    }
+    if (missing.length === 1) {
+        if (missing[0] === "department") {
+            return (`Thank you, ${patientName}. I have your preferred date and time. ` +
+                `Which department or clinic would you like to see (e.g. Maternity, Pediatrics, Dental, Optical)?`);
+        }
+        return `Thank you, ${patientName}. What ${missing[0]} would you like for your ${appointment.department} appointment?${departmentHint(appointment.department)}`;
+    }
+    if (missing.length === 2) {
+        return `Thank you, ${patientName}. Please share the ${missing[0]} and ${missing[1]} for your appointment (e.g. "Maternity tomorrow at 10am").`;
+    }
+    return `Sure, ${patientName}. I can help you book an appointment. Please tell me the department, preferred date, and preferred time — for example: "Dental appointment on Friday at 2pm".`;
 }
-
 /* =========================================================
-   APPOINTMENT FLOW
+   APPOINTMENT CONVERSATION STATE (standalone helper API)
 ========================================================= */
-
-function handleAppointmentFlow(
-  session: PatientSession,
-  patientName: string,
-  text: string,
-  normalized: string,
-): string {
-  if (isCancelIntent(normalized)) {
-    session.appointment = {};
-    session.stage = 'menu';
-
-    return (
-      `No problem, ${patientName}. ` +
-      `I have cancelled that appointment request. ` +
-      `Let me know if you would like to book another appointment.`
-    );
-  }
-
-  if (isRestartIntent(normalized)) {
-    session.appointment = {};
-    session.stage =
-      'collecting_appointment';
-
-    return (
-      `Okay, ${patientName}, let's start fresh. ` +
-      `Which department or service would you like to book?`
-    );
-  }
-
-  const parsed =
-    parseAppointmentRequest(text);
-
-  /*
-   * =======================================================
-   * CONFIRMING
-   * =======================================================
-   */
-
-  if (
-    session.stage ===
-    'confirming_appointment'
-  ) {
-    const fieldToChange =
-      isChangeFieldIntent(normalized);
-
-    if (fieldToChange) {
-      delete session.appointment[
-        fieldToChange
-      ];
-
-      session.stage =
-        'collecting_appointment';
-
-      return generateAppointmentCollectionPrompt(
+function updateAppointmentConversation(patientId, patientName, message) {
+    const existing = exports.appointmentConversationState.get(patientId);
+    const parsed = parseAppointmentRequest(message);
+    const appointment = {
+        ...(existing?.appointment || {}),
+        ...(parsed.date ? { date: parsed.date } : {}),
+        ...(parsed.time ? { time: parsed.time } : {}),
+        ...(parsed.department ? { department: parsed.department } : {}),
+    };
+    const completed = Boolean(appointment.date && appointment.time && appointment.department);
+    let prompt;
+    let awaitingConfirmation = false;
+    if (!completed) {
+        prompt = generateAppointmentCollectionPrompt(patientName, appointment);
+    }
+    else {
+        prompt = renderAppointmentSummary(patientName, appointment);
+        awaitingConfirmation = true;
+    }
+    const state = {
         patientName,
-        session.appointment,
-      );
-    }
-
-    if (parsed.department) {
-      session.appointment.department =
-        parsed.department;
-    }
-
-    if (parsed.date) {
-      session.appointment.date =
-        parsed.date;
-    }
-
-    if (parsed.time) {
-      session.appointment.time =
-        parsed.time;
-    }
-
-    const ready = Boolean(
-      session.appointment.department &&
-      session.appointment.date &&
-      session.appointment.time,
-    );
-
-    session.appointment.ready =
-      ready;
-
-    if (
-      isConfirmIntent(normalized) &&
-      ready
-    ) {
-      const finalAppointment: AppointmentRequestData =
-        {
-          department:
-            session.appointment
-              .department!,
-          date:
-            session.appointment.date!,
-          time:
-            session.appointment.time!,
-          ready: true,
-        };
-
-      session.confirmedAppointment =
-        finalAppointment;
-
-      /*
-       * Keep the confirmed appointment available
-       * for the webhook/controller to consume.
-       */
-      session.appointment = {
-        ...finalAppointment,
-      };
-
-      session.stage =
-        'confirming_appointment';
-
-      return [
-        `Thank you, ${patientName}.`,
-        '',
-        'Your appointment details are:',
-        `• Department: ${finalAppointment.department}`,
-        `• Date: ${finalAppointment.date}`,
-        `• Time: ${finalAppointment.time}`,
-        '',
-        'Your appointment has been confirmed. Our hospital team will complete the final scheduling/doctor assignment.',
-      ].join('\n');
-    }
-
-    if (
-      parsed.department ||
-      parsed.date ||
-      parsed.time
-    ) {
-      session.stage =
-        'confirming_appointment';
-
-      return [
-        `Got it, ${patientName}.`,
-        '',
-        `Please confirm the updated details:`,
-        summarizeAppointment(
-          session.appointment,
-        ),
-        '',
-        'Reply YES to confirm, or tell me what you would like to change.',
-      ].join('\n');
-    }
-
-    return [
-      `Just to confirm, ${patientName}:`,
-      '',
-      summarizeAppointment(
-        session.appointment,
-      ),
-      '',
-      'Reply YES to confirm, or tell me what you would like to change.',
-    ].join('\n');
-  }
-
-  /*
-   * =======================================================
-   * COLLECTING
-   * =======================================================
-   *
-   * IMPORTANT:
-   * Every message updates the SAME session.
-   *
-   * Emergency
-   *   -> department saved
-   *
-   * Today
-   *   -> date added to existing department
-   *
-   * 09:00 AM
-   *   -> time added to existing department/date
-   *
-   * The bot therefore never sends "09:00 AM" into the
-   * generic knowledge-base flow.
-   */
-
-  if (parsed.department) {
-    session.appointment.department =
-      parsed.department;
-  }
-
-  if (parsed.date) {
-    session.appointment.date =
-      parsed.date;
-  }
-
-  if (parsed.time) {
-    session.appointment.time =
-      parsed.time;
-  }
-
-  const ready = Boolean(
-    session.appointment.department &&
-    session.appointment.date &&
-    session.appointment.time,
-  );
-
-  session.appointment.ready =
-    ready;
-
-  if (!ready) {
-    session.stage =
-      'collecting_appointment';
-
-    return generateAppointmentCollectionPrompt(
-      patientName,
-      session.appointment,
-    );
-  }
-
-  session.stage =
-    'confirming_appointment';
-
-  return [
-    `Thanks, ${patientName}.`,
-    '',
-    'Please confirm your appointment details:',
-    `• Department: ${session.appointment.department}`,
-    `• Date: ${session.appointment.date}`,
-    `• Time: ${session.appointment.time}`,
-    '',
-    'Reply YES to confirm, or tell me what you would like to change.',
-  ].join('\n');
+        appointment,
+        completed,
+        prompt,
+        data: appointment,
+        awaitingConfirmation,
+    };
+    exports.appointmentConversationState.set(patientId, state);
+    return state;
 }
-
+function renderAppointmentSummary(name, appointment) {
+    return (`Thank you, ${name}. Here is your appointment request:\n\n` +
+        `• Department: ${appointment.department}\n` +
+        `• Date: ${appointment.date}\n` +
+        `• Time: ${appointment.time}\n\n` +
+        `Note: exact consultation fees were not published to me — reception will confirm the cost when you arrive or call ahead.\n\n` +
+        `Is this correct? Reply *Yes* to confirm or *No* to change it.`);
+}
 /* =========================================================
    KENYA GREETING
 ========================================================= */
-
-export function getKenyaGreeting(
-  date: Date = new Date(),
-): string {
-  const hour = Number(
-    new Intl.DateTimeFormat(
-      'en-GB',
-      {
-        timeZone: 'Africa/Nairobi',
-        hour: '2-digit',
-        hourCycle: 'h23',
-      },
-    ).format(date),
-  );
-
-  if (hour < 12) {
-    return 'Good morning';
-  }
-
-  if (hour < 18) {
-    return 'Good afternoon';
-  }
-
-  return 'Good evening';
+function getKenyaGreeting(date = new Date()) {
+    const hour = Number(new Intl.DateTimeFormat("en-KE", {
+        timeZone: "Africa/Nairobi",
+        hour: "numeric",
+        hour12: false,
+    }).format(date));
+    if (hour < 12)
+        return "Good morning";
+    if (hour < 18)
+        return "Good afternoon";
+    return "Good evening";
 }
-
 /* =========================================================
-   MAIN BOT
+   BOT COPY
 ========================================================= */
-
-export function generateBotReply(
-  input: BotReplyInput,
-): string {
-  const {
-    patientId,
-    patientName: legacyPatientName,
-    message,
-    isReturning,
-    lastInteractionHours,
-  } = input;
-
-  const effectivePatientId =
-    patientId ||
-    `legacy:${legacyPatientName || 'anonymous'}`;
-
-  const session =
-    getSession(effectivePatientId);
-
-  /*
-   * Legacy/test mode only.
-   */
-  if (
-    !patientId &&
-    !session.name &&
-    legacyPatientName &&
-    isUsablePatientName(
-      legacyPatientName,
-    )
-  ) {
-    session.name =
-      titleCase(
-        cleanText(
-          legacyPatientName,
-        ),
-      );
-
-    session.stage = 'menu';
-  }
-
-  const now = Date.now();
-
-  let wasIdleLongEnough =
-    now - session.lastActivityAt >=
-    SESSION_IDLE_MS;
-
-  if (
-    typeof isReturning === 'boolean'
-  ) {
-    wasIdleLongEnough =
-      isReturning;
-  }
-
-  if (
-    typeof lastInteractionHours ===
-      'number' &&
-    Number.isFinite(
-      lastInteractionHours,
-    )
-  ) {
-    wasIdleLongEnough =
-      isConversationStale(
-        lastInteractionHours,
-      );
-  }
-
-  /*
-   * Do not wipe appointment state merely because the
-   * user has been idle for a few minutes. The appointment
-   * state belongs to the current patient session.
-   */
-  const isFirstMessageEver =
-    !session.contacted;
-
-  session.contacted = true;
-  session.lastActivityAt = now;
-
-  const text =
-    cleanText(message || '');
-
-  if (!text) {
-    return session.name
-      ? `Please tell me what you need today, ${session.name}. ${MENU_LINE}`
-      : DEFAULT_WELCOME;
-  }
-
-  const normalized =
-    normalizeKeyword(text);
-
-  /*
-   * =======================================================
-   * NAME FIRST
-   * =======================================================
-   */
-
-  if (!session.name) {
-    const extracted =
-      extractPatientName(text);
-
-    if (
-      extracted &&
-      isUsablePatientName(extracted)
-    ) {
-      session.name =
-        extracted;
-
-      session.stage = 'menu';
-
-      return [
-        `Thank you, ${session.name}. ${getKenyaGreeting()}, and welcome to Phadam Hospital!`,
-        '',
-        MENU_LINE,
-      ].join('\n');
+const NAME_PROMPT = "Welcome to Phadam Hospital. Before we continue, please tell me your full name. What is your name?";
+const MENU_PROMPT = (name) => `${getKenyaGreeting()}, ${name}. How can I help you today?\n\n` +
+    `You can ask me about:\n` +
+    `• Our services, departments, or specialist clinics\n` +
+    `• Surgical procedure prices (e.g. "cost of a caesarean section")\n` +
+    `• Locations and contacts (Nasra or Umoja)\n` +
+    `• SHA / insurance partners\n` +
+    `• Booking an appointment\n` +
+    `• Speaking with our hospital staff`;
+function isGreeting(message) {
+    return /^(hi|hello|hey|good morning|good afternoon|good evening|mambo|sasa|habari)\b/i.test(message.trim());
+}
+function isBookingIntent(message) {
+    return (/\bbook(ing)?\b/i.test(message) ||
+        /\bappointment\b/i.test(message) ||
+        /\bschedule\b/i.test(message) ||
+        /\bsee a doctor\b/i.test(message) ||
+        /\bconsult(ation)?\b/i.test(message) ||
+        /\bbook a (visit|slot)\b/i.test(message));
+}
+function isAffirmative(message) {
+    return /^(yes|yeah|yep|yup|correct|confirm(ed)?|okay|ok|sure|right|that'?s right|sawa)$/i.test(message.trim());
+}
+function isNegative(message) {
+    return /^(no|nope|nah|change|edit|wrong|not correct|that'?s wrong|incorrect)$/i.test(message.trim());
+}
+/**
+ * Looks up an answer in the hospital knowledge base and returns it,
+ * lightly personalized. Returns null when the knowledge base has no
+ * confident answer — callers decide what to do next (usually: offer to
+ * connect the patient with staff) rather than this function inventing
+ * a generic filler reply.
+ */
+function answerKnowledgeBase(name, message) {
+    let result = null;
+    try {
+        result = (0, hospitalData_js_1.searchKnowledgeBase)(message);
     }
-
-    return isFirstMessageEver
-      ? DEFAULT_WELCOME
-      : NAME_PROMPT;
-  }
-
-  const currentPatientName =
-    session.name;
-
-  /*
-   * =======================================================
-   * HUMAN HANDOFF
-   * =======================================================
-   */
-
-  if (
-    isHumanSupportRequest(text) &&
-    session.stage !==
-      'confirming_appointment'
-  ) {
-    session.stage =
-      'human_handoff';
-
-    return (
-      `Thank you, ${currentPatientName}. ` +
-      `I have flagged this chat for our staff. ` +
-      `Please briefly describe what you need and someone will join the conversation shortly.`
-    );
-  }
-
-  /*
-   * =======================================================
-   * APPOINTMENT FLOW MUST BE CHECKED BEFORE GREETING,
-   * GENERAL Q&A, OR FALLBACK.
-   * =======================================================
-   */
-
-  const inAppointmentFlow =
-    session.stage ===
-      'collecting_appointment' ||
-    session.stage ===
-      'confirming_appointment';
-
-  const parsedGuess =
-    parseAppointmentRequest(text);
-
-  const looksLikeAppointmentDetails =
-    Boolean(
-      parsedGuess.department ||
-      parsedGuess.date ||
-      parsedGuess.time,
-    );
-
-  if (
-    inAppointmentFlow ||
-    isBookingIntent(normalized) ||
-    looksLikeAppointmentDetails
-  ) {
-    if (!inAppointmentFlow) {
-      session.stage =
-        'collecting_appointment';
+    catch {
+        result = null;
     }
-
-    return handleAppointmentFlow(
-      session,
-      currentPatientName,
-      text,
-      normalized,
-    );
-  }
-
-  /*
-   * =======================================================
-   * GREETING
-   * =======================================================
-   */
-
-  if (isGreeting(normalized)) {
-    if (wasIdleLongEnough) {
-      return [
-        `${getKenyaGreeting()}, ${currentPatientName}. Welcome back to Phadam Hospital.`,
-        '',
-        MENU_LINE,
-      ].join('\n');
+    if (!result)
+        return null;
+    // The knowledge base already returns well-formatted, self-explanatory
+    // text (with its own headers/emoji). Prepending "Yes, {name}." in front
+    // of a heading reads oddly, so we only add a light personal touch when
+    // the response is a short, conversational-style line rather than a
+    // structured list/heading.
+    const looksStructured = /^[\p{Emoji}\p{So}]/u.test(result) || result.includes("\n\n•") || result.includes("\n•");
+    if (looksStructured) {
+        return result;
     }
-
-    return (
-      `${getKenyaGreeting()}, ${currentPatientName}. ` +
-      `${MENU_LINE}`
-    );
-  }
-
-  /*
-   * =======================================================
-   * KNOWLEDGE BASE
-   * =======================================================
-   */
-
-  const answer =
-    getAnswerFromKnowledgeBase(text);
-
-  if (answer) {
-    return [
-      answer,
-      '',
-      `What would you like to do next, ${currentPatientName}?`,
-    ].join('\n');
-  }
-
-  /*
-   * =======================================================
-   * SAFE FALLBACK
-   * =======================================================
-   */
-
-  return [
-    `Thank you, ${currentPatientName}.`,
-    '',
-    `I don't have a confident answer for that yet — one of our doctors or staff can help with anything medically specific.`,
-    '',
-    MENU_LINE,
-  ].join('\n');
+    return `${name}, ${result.charAt(0).toLowerCase()}${result.slice(1)}`;
+}
+function processTurn(state, message, isReturning) {
+    const name = state.patientName;
+    if (isHumanSupportRequest(message)) {
+        return {
+            reply: `Of course, ${name}. I'll direct your request to our hospital staff — please hold on for assistance.`,
+            state: { ...state, stage: "human_handoff" },
+        };
+    }
+    if (state.stage === "human_handoff" && !isGreeting(message) && !isMenuCommand(message)) {
+        return {
+            reply: `Your request has already been passed to our staff, ${name}. Please wait for assistance, or say "menu" to continue chatting with me.`,
+            state,
+        };
+    }
+    if (isGreeting(message) || isMenuCommand(message)) {
+        return {
+            reply: isReturning && isGreeting(message) ? `Welcome back, ${name}. ${MENU_PROMPT(name)}` : MENU_PROMPT(name),
+            state: { ...state, stage: "menu" },
+        };
+    }
+    if (isCancelCommand(message)) {
+        return {
+            reply: `No problem, ${name}. I've cleared that request. ${MENU_PROMPT(name)}`,
+            state: { ...state, stage: "menu", appointment: {} },
+        };
+    }
+    if (state.stage === "confirming_appointment") {
+        if (isAffirmative(message)) {
+            return {
+                reply: `Thank you, ${name}. Your appointment request has been confirmed and sent to the hospital team for processing.`,
+                state: { ...state, stage: "menu", appointment: {} },
+            };
+        }
+        if (isNegative(message)) {
+            return {
+                reply: generateAppointmentCollectionPrompt(name, {}),
+                state: { ...state, stage: "collecting_appointment", appointment: {} },
+            };
+        }
+        // Fall through: treat the message as new appointment info rather than
+        // forcing a strict yes/no, in case the patient just restates a change.
+    }
+    const parsed = parseAppointmentRequest(message);
+    const inAppointmentFlow = state.stage === "collecting_appointment" ||
+        state.stage === "confirming_appointment" ||
+        isBookingIntent(message);
+    if (inAppointmentFlow) {
+        const appointment = {
+            ...state.appointment,
+            ...(parsed.date ? { date: parsed.date } : {}),
+            ...(parsed.time ? { time: parsed.time } : {}),
+            ...(parsed.department ? { department: parsed.department } : {}),
+        };
+        if (!appointment.date || !appointment.time || !appointment.department) {
+            return {
+                reply: generateAppointmentCollectionPrompt(name, appointment),
+                state: { ...state, stage: "collecting_appointment", appointment },
+            };
+        }
+        return {
+            reply: renderAppointmentSummary(name, appointment),
+            state: { ...state, stage: "confirming_appointment", appointment },
+        };
+    }
+    const answer = answerKnowledgeBase(name, message);
+    if (answer) {
+        return { reply: answer, state: { ...state, stage: "menu" } };
+    }
+    return {
+        reply: `I'm sorry, ${name}, I don't have that information on hand. ` +
+            `Would you like me to connect you with our hospital staff, or ask about something else — our services, prices, locations, or insurance?`,
+        state,
+    };
+}
+/* =========================================================
+   PUBLIC ENTRY POINT
+========================================================= */
+function generateBotReply(input) {
+    const message = input.message.trim();
+    /*
+     * Legacy/stateless mode:
+     * When no patientId is supplied, patientName is used to seed a
+     * one-off turn so existing unit tests and simple integrations work
+     * without session storage. No conversation memory persists here.
+     */
+    if (!input.patientId) {
+        if (!input.patientName) {
+            if (!message)
+                return NAME_PROMPT;
+            const extracted = extractPatientName(message);
+            return extracted ? MENU_PROMPT(extracted) : NAME_PROMPT;
+        }
+        const state = {
+            patientName: input.patientName,
+            stage: "menu",
+            appointment: {},
+        };
+        return processTurn(state, message, input.isReturning).reply;
+    }
+    /* =======================================================
+       SESSION-BACKED MODE (production)
+    ======================================================= */
+    const patientId = input.patientId;
+    const now = Date.now();
+    let session = sessions.get(patientId);
+    if (session && now - session.lastInteraction > exports.CONVERSATION_MEMORY_MINUTES * 60 * 1000) {
+        sessions.delete(patientId);
+        exports.appointmentConversationState.delete(patientId);
+        session = undefined;
+    }
+    if (!session) {
+        session = {
+            patientName: null,
+            lastInteraction: now,
+            stage: "awaiting_name",
+            appointment: {},
+        };
+        sessions.set(patientId, session);
+    }
+    session.lastInteraction = now;
+    if (session.stage === "awaiting_name") {
+        const extracted = extractPatientName(message);
+        if (!extracted) {
+            return NAME_PROMPT;
+        }
+        session.patientName = extracted;
+        session.stage = "menu";
+        return MENU_PROMPT(extracted);
+    }
+    const turnState = {
+        patientName: session.patientName || "there",
+        stage: session.stage,
+        appointment: session.appointment,
+    };
+    const { reply, state } = processTurn(turnState, message, input.isReturning);
+    session.stage = state.stage;
+    session.appointment = state.appointment;
+    return reply;
 }
