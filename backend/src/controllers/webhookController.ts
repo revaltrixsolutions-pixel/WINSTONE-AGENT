@@ -191,12 +191,16 @@ async function getLastAgentInteractionHours(
   });
 
   if (!lastAgentMessage?.timestamp) {
-    return Number.POSITIVE_INFINITY;
+    // An assignment without an agent reply is not an active human exchange.
+    // Allow the bot to continue rather than suppressing it indefinitely.
+    return 0;
   }
 
   return (Date.now() - new Date(lastAgentMessage.timestamp).getTime()) /
     (1000 * 60 * 60);
 }
+
+const AGENT_INACTIVITY_TIMEOUT_MINUTES = 10;
 
 function isAppointmentLookupRequest(message: string): boolean {
   return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
@@ -580,13 +584,32 @@ async function sendBotReply(
   if (patient.chatStatus === 'AGENT_ACTIVE') {
     const hoursSinceAgentMessage = await getLastAgentInteractionHours(patient.id);
 
-    if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < 3 / 60) {
+    if (!Number.isFinite(hoursSinceAgentMessage) || hoursSinceAgentMessage < AGENT_INACTIVITY_TIMEOUT_MINUTES / 60) {
       console.info('[WhatsApp Bot Suppressed] Chat is assigned to staff.', {
         patientId: patient.id,
         hoursSinceAgentMessage,
+        inactivityTimeoutMinutes: AGENT_INACTIVITY_TIMEOUT_MINUTES,
       });
       return;
     }
+
+    await prisma.patient.update({
+      where: { id: patient.id },
+      data: {
+        chatStatus: 'BOT',
+        assignedTo: null,
+      },
+    });
+
+    patient = {
+      ...patient,
+      chatStatus: 'BOT',
+    };
+
+    console.info('[WhatsApp Bot Resumed] Agent conversation inactive.', {
+      patientId: patient.id,
+      inactivityTimeoutMinutes: AGENT_INACTIVITY_TIMEOUT_MINUTES,
+    });
   }
 
   if (nameWasJustCaptured) {
@@ -1252,7 +1275,7 @@ export async function handleWhatsAppWebhook(
             patient = await prisma.patient.create({
               data: {
                 phoneNumber: senderPhone,
-                chatStatus: 'PENDING_AGENT',
+                chatStatus: 'BOT',
               },
               select: {
                 id: true,
@@ -1361,10 +1384,11 @@ export async function handleWhatsAppWebhook(
                    * Keep an active agent assignment if a staff member
                    * already owns the conversation.
                    */
-                  chatStatus:
-                    patient.chatStatus === 'AGENT_ACTIVE'
-                      ? 'AGENT_ACTIVE'
-                      : 'PENDING_AGENT',
+                  chatStatus: patient.chatStatus === 'AGENT_ACTIVE'
+                    ? 'AGENT_ACTIVE'
+                    : isHumanSupportRequest(messageBody)
+                      ? 'PENDING_AGENT'
+                      : 'BOT',
                 },
                 select: {
                   id: true,

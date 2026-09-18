@@ -77,6 +77,9 @@ test('does not treat a command as a patient name', () => {
 
 test('guides patients who request a human', () => {
   assert.equal(isHumanSupportRequest('Can I talk to a human?'), true);
+  assert.equal(isHumanSupportRequest('I need an agent'), true);
+  assert.equal(isHumanSupportRequest('Please connect me to a doctor'), true);
+  assert.equal(isHumanSupportRequest('I need staff help'), true);
   assert.match(generateBotReply({
     patientName: 'Mary',
     message: 'Can I talk to a human?',

@@ -273,6 +273,12 @@ const HUMAN_SUPPORT_PATTERNS: RegExp[] = [
   /\b(talk|speak|chat)\s+to\s+(a\s+)?(human|real\s+person|person|someone|somebody|staff|receptionist|agent|doctor|nurse)\b/i,
   /\bconnect me (with|to)\s+(a\s+)?(human|person|someone|somebody|staff|agent|receptionist)\b/i,
   /\breal\s+person\b/i,
+  /\b(human|live\s+agent|real\s+agent|actual\s+person)\b/i,
+  /\b(need|want|request|connect me to)\s+(an?\s+)?(agent|staff|reception|receptionist|doctor|nurse|clinician)\b/i,
+  /\b(agent|staff|reception|receptionist)\b.*\b(help|assist|talk|speak|contact|connect|call|chat)\b/i,
+  /\b(help|assist|talk|speak|contact|connect|call|chat)\b.*\b(agent|staff|reception|receptionist)\b/i,
+  /\b(doctor|nurse|clinician|medical officer)\b.*\b(please|now|available|help|speak|talk|contact|connect|call|chat)\b/i,
+  /\b(please|need|want|can i|could i|may i)\b.*\b(doctor|nurse|clinician|medical officer)\b/i,
   /\breceptionist\b/i,
   /\bhuman\s+(agent|support|help|being)\b/i,
   /\b(need|want)\s+(a\s+)?(human|real person|staff member|live agent)\b/i,
@@ -1205,7 +1211,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
 
   if (isHumanSupportRequest(message)) {
     return {
-      reply: `Of course, ${name}. I'll direct your request to our hospital staff — please hold on for assistance.`,
+      reply: `Of course, ${name}. I'll direct your request about a doctor or hospital staff member to our team — please hold on for assistance.`,
       state: { ...state, stage: "human_handoff" },
     };
   }
