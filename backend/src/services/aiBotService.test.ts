@@ -158,6 +158,24 @@ test('answers common price and rebooking questions naturally', () => {
   assert.match(cancelReply, /cancel|cleared|No problem/i);
 });
 
+test('handles appointment history and reschedule keywords with patient-friendly wording', () => {
+  const historyReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'show my appointment history',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(historyReply, /history|appointment/i);
+
+  const rescheduleReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'reschedule my appointment to tomorrow at 3pm',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(rescheduleReply, /reschedule|appointment|tomorrow|3pm|available/i);
+});
+
 test('handles real-world patient phrases like confirmation, doctor availability, and late arrival', () => {
   const confirmReply = generateBotReply({
     patientName: 'Mary',

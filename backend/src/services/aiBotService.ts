@@ -1033,6 +1033,11 @@ function isGreeting(message: string): boolean {
 function isBookingIntent(message: string): boolean {
   return (
     /\bbook(ing)?\b/i.test(message) ||
+    /\bshow\s+(my|the)\s+appointment(s)?\b/i.test(message) ||
+    /\bappointment history\b/i.test(message) ||
+    /\bhistory of my appointment\b/i.test(message) ||
+    /\b(reschedule|rescheduling|rebook|rebooking|change my appointment|change appointment)\b/i.test(message) ||
+    /\bavailable appointment(s)?\b/i.test(message) ||
     /\bappointment\b/i.test(message) ||
     /\bappointments?\b/i.test(message) ||
     /\bconsult(ation)?\b/i.test(message) ||
@@ -1126,8 +1131,11 @@ function getCommonPatientReply(name: string, message: string): string | null {
   const replyMap: Array<{ pattern: RegExp; reply: string }> = [
     { pattern: /\b(thank you|thanks|thankyou|many thanks|appreciate it)\b/i, reply: `${name}, you’re very welcome. I’m glad to help.` },
     { pattern: /\b(okay|ok|alright|sure|nice|great|perfect|sounds good|all good|yes please)\b/i, reply: `${name}, great. I can help with the next step.` },
+    { pattern: /\b(show my appointment history|appointment history|my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i, reply: `${name}, I can help with your appointment history. Please tell me if you want your upcoming bookings, past visits, or to reschedule one of them.` },
+    { pattern: /\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment)\b/i, reply: `${name}, no problem. Please share the new date and time, or tell me the department, and I’ll help update your appointment.` },
+    { pattern: /\b(available appointment|available appointments|next available slot|next slots|open times|what slots are free)\b/i, reply: `${name}, I can help check the available slots. Please tell me the department and preferred day, and I’ll suggest the next open times.` },
     { pattern: /\b(i am running late|i'm late|im late|running late)\b/i, reply: `${name}, no problem. Please let our front desk know as soon as you can, and we’ll do our best to keep your appointment updated.` },
-    { pattern: /\b(can you confirm my appointment|please confirm my appointment|confirm my appointment|appointment confirmation)\b/i, reply: `${name}, I can help with that. Please share the department, date, and time you booked, and I’ll confirm the details for you.` },
+    { pattern: /\b(can you confirm my appointment|please confirm my appointment|confirm my appointment|appointment confirmation|check my appointment)\b/i, reply: `${name}, I can help with that. Please tell me the department, date, or visit you want confirmed, and I’ll check the details for you.` },
     { pattern: /\b(is there a doctor available now|doctor available now|is a doctor available|any doctor available)\b/i, reply: `${name}, I can help with doctor availability. Please tell me the department you need and your preferred day or time, and I’ll guide you toward the right appointment or booking option.` },
     { pattern: /\b(i need a female doctor|female doctor|woman doctor|lady doctor)\b/i, reply: `${name}, we can help with that. Please tell me the department or service you need, and I’ll guide you to the most suitable doctor or booking option.` },
     { pattern: /\b(i need to speak to a doctor|speak to the doctor|talk to the doctor|talk to a doctor|need a doctor)\b/i, reply: `${name}, I can connect you with our clinical team. Please tell me the department or concern, and I’ll guide you to the right next step.` },
@@ -1338,6 +1346,30 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     return {
       reply:
         `${name}, no problem. I can help you change the appointment time or date. Please share the new day and time, or tell me the department and I’ll help update it.`,
+      state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+    };
+  }
+
+  if (/\b(show my appointment history|appointment history|my appointments|upcoming appointments|scheduled appointments|my booking history)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, I can look up your appointment history. Please tell me whether you want your upcoming bookings, recent visits, or a reschedule for one of them.`,
+      state: { ...state, stage: "menu" },
+    };
+  }
+
+  if (/\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, I can help reschedule it. Please share the new day and time, or tell me the department and I’ll guide you to the next available appointment.`,
+      state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+    };
+  }
+
+  if (/\b(available appointment|available appointments|next available slot|open slots|available slots|next available appointment)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, I can suggest the next available appointment slots. Please give me the department and preferred day, and I’ll recommend the earliest open times.`,
       state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
     };
   }

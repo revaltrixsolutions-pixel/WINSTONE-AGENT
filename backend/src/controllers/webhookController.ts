@@ -201,8 +201,23 @@ async function getLastAgentInteractionHours(
 function isAppointmentLookupRequest(message: string): boolean {
   return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
     /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(message) ||
+    /\b(appointment history|my appointment history|show my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message) ||
+    /\b(reschedule|rebook|change my appointment|change appointment|move my appointment|reschedule my appointment)\b/i.test(message) ||
+    /\b(available appointment|available appointments|next available slot|available slots|next available appointment)\b/i.test(message) ||
     /\b(when|where|what time)\b.*\b(appointment|visit|doctor|clinic)\b/i.test(message) ||
     /\b(scheduled|upcoming|confirmed)\b.*\b(appointment|visit|booking)\b/i.test(message);
+}
+
+function isAppointmentHistoryRequest(message: string): boolean {
+  return /\b(show my appointment history|appointment history|my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message);
+}
+
+function isRescheduleRequest(message: string): boolean {
+  return /\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment|rescheduling|rebook|rebooking)\b/i.test(message);
+}
+
+function isAvailableAppointmentsRequest(message: string): boolean {
+  return /\b(available appointment|available appointments|next available slot|available slots|next available appointment|open slots|what slots are free)\b/i.test(message);
 }
 
 function formatKenyaDateTime(date: Date): string {
@@ -223,7 +238,6 @@ async function getAppointmentLookupReply(
   const appointments = await prisma.appointment.findMany({
     where: {
       patientId,
-      slotTime: { gte: new Date() },
       status: { not: 'CANCELLED' },
     },
     orderBy: { slotTime: 'asc' },
@@ -242,7 +256,77 @@ async function getAppointmentLookupReply(
     `Reference: ${appointment.id.slice(0, 8)}`,
   ].join('\n')).join('\n\n');
 
-  return `${getKenyaGreeting()}, ${patientName}. Here are your upcoming appointment details:\n\n${details}\n\nWhat would you like to do next: keep this appointment, book another one, or speak with staff?`;
+  const header = isAppointmentHistoryRequest(message)
+    ? `${getKenyaGreeting()}, ${patientName}. Here are your recent appointment records:\n\n`
+    : `${getKenyaGreeting()}, ${patientName}. Here are your upcoming appointment details:\n\n`;
+
+  return `${header}${details}\n\nWhat would you like to do next: keep this appointment, reschedule it, book another one, or speak with staff?`;
+}
+
+async function getAvailableAppointmentOptionsReply(
+  patientName: string,
+  message: string,
+): Promise<string | null> {
+  if (!isAvailableAppointmentsRequest(message)) return null;
+
+  const nextDates = [
+    new Date(Date.now() + 24 * 60 * 60 * 1000),
+    new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+  ];
+
+  const slots = ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM'];
+
+  const options = nextDates
+    .map((date, index) => {
+      const label = index === 0 ? 'Tomorrow' : index === 1 ? 'Day after tomorrow' : 'Three days later';
+      return `${label}: ${slots.join(', ')}`;
+    })
+    .join('\n');
+
+  return `${patientName}, the next available slots are:\n\n${options}\n\nPlease tell me the department and the day and time you prefer, and I’ll help book or reschedule your appointment.`;
+}
+
+async function handleAppointmentReschedule(
+  patientId: string,
+  patientName: string,
+  message: string,
+): Promise<string | null> {
+  if (!isRescheduleRequest(message)) return null;
+
+  const existingAppointment = await prisma.appointment.findFirst({
+    where: {
+      patientId,
+      status: { not: 'CANCELLED' },
+    },
+    orderBy: { slotTime: 'desc' },
+  });
+
+  if (!existingAppointment) {
+    return `${patientName}, I could not find an appointment to reschedule. Please tell me the department, date, and time you want to book instead.`;
+  }
+
+  const parsed = parseAppointmentRequest(message);
+
+  if (!parsed.date || !parsed.time) {
+    return `${patientName}, I can help reschedule. Please tell me the new date and time for your ${existingAppointment.specialty} appointment.`;
+  }
+
+  const updatedDate = parseAppointmentDate(parsed.date, parsed.time);
+  const updatedDepartment = parsed.department || existingAppointment.specialty;
+
+  const updatedAppointment = await prisma.appointment.update({
+    where: { id: existingAppointment.id },
+    data: {
+      specialty: updatedDepartment,
+      slotTime: updatedDate,
+      servicePrice: getServicePrice(updatedDepartment) ?? existingAppointment.servicePrice,
+      consultationFee: getServicePrice(updatedDepartment) ?? existingAppointment.consultationFee,
+      status: 'RESCHEDULED',
+    },
+  });
+
+  return `${patientName}, your appointment has been rescheduled successfully.\n\nDepartment: ${updatedAppointment.specialty}\nDate: ${formatKenyaDateTime(updatedAppointment.slotTime)}\nStatus: ${updatedAppointment.status}\nReference: ${updatedAppointment.id.slice(0, 8)}\n\nThe updated booking is now visible to the admin team.`;
 }
 
 function parseAppointmentDate(dateText: string, timeText: string): Date {
@@ -591,6 +675,74 @@ async function sendBotReply(
       });
     } catch (error) {
       console.error('[WhatsApp Appointment Lookup Reply Failed]', {
+        patientId: patient.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+
+    return;
+  }
+
+  const availableSlotsReply = hasPatientName
+    ? await getAvailableAppointmentOptionsReply(patientName, effectiveMessage)
+    : null;
+
+  if (availableSlotsReply) {
+    try {
+      const whatsappResult = await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText: availableSlotsReply,
+      });
+
+      await prisma.messageLog.create({
+        data: {
+          patientId: patient.id,
+          sender: 'BOT',
+          body: availableSlotsReply,
+          timestamp: new Date(),
+        },
+      });
+
+      console.info('[WhatsApp Available Slots Reply Sent]', {
+        patientId: patient.id,
+        messageId: whatsappResult.messageId,
+      });
+    } catch (error) {
+      console.error('[WhatsApp Available Slots Reply Failed]', {
+        patientId: patient.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+
+    return;
+  }
+
+  const rescheduleReply = hasPatientName
+    ? await handleAppointmentReschedule(patient.id, patientName, effectiveMessage)
+    : null;
+
+  if (rescheduleReply) {
+    try {
+      const whatsappResult = await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText: rescheduleReply,
+      });
+
+      await prisma.messageLog.create({
+        data: {
+          patientId: patient.id,
+          sender: 'BOT',
+          body: rescheduleReply,
+          timestamp: new Date(),
+        },
+      });
+
+      console.info('[WhatsApp Reschedule Reply Sent]', {
+        patientId: patient.id,
+        messageId: whatsappResult.messageId,
+      });
+    } catch (error) {
+      console.error('[WhatsApp Reschedule Reply Failed]', {
         patientId: patient.id,
         error: error instanceof Error ? error.message : error,
       });
