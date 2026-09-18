@@ -64,6 +64,9 @@ export const appointmentConversationState =
 
 export const appointmentServiceOptions: string[] = Array.from(
   new Set([
+    "General Consultation",
+    ...hospitalKnowledge.services,
+    ...hospitalKnowledge.specialistClinics,
     "Maternity",
     "Pediatrics",
     "Emergency",
@@ -71,9 +74,8 @@ export const appointmentServiceOptions: string[] = Array.from(
     "Pharmacy",
     "Radiology",
     "Physiotherapy",
-    ...hospitalKnowledge.specialistClinics,
   ]),
-);
+).map((service) => service.trim()).filter(Boolean);
 
 /**
  * Returns the standard consultation-fee quote for a bookable
@@ -391,6 +393,8 @@ const DEPARTMENTS: Array<{ name: string; patterns: RegExp[] }> = [
       /\bmaternity\b/i,
       /\bantenatal\b/i,
       /\bpostnatal\b/i,
+      /\bantenatal clinic\b/i,
+      /\bpostnatal clinic\b/i,
       /\banc\b/i,
       /\bdelivery\b/i,
       /\blabou?r\b/i,
@@ -398,6 +402,17 @@ const DEPARTMENTS: Array<{ name: string; patterns: RegExp[] }> = [
       /\bc[\s-]?section\b/i,
       /\bcaesarean\b/i,
       /\bcesarean\b/i,
+    ],
+  },
+  {
+    name: "General Consultation",
+    patterns: [
+      /\b(doctors?|general|routine)\s+consultation\b/i,
+      /\bmedical consultation\b/i,
+      /\bclinic visit\b/i,
+      /\bconsultation visit\b/i,
+      /\bsee a doctor\b/i,
+      /\bconsultation\b/i,
     ],
   },
   {
@@ -432,6 +447,9 @@ const DEPARTMENTS: Array<{ name: string; patterns: RegExp[] }> = [
       /\bkid(s)?\b/i,
       /\bbaby\b/i,
       /\bbabies\b/i,
+      /\bwell-baby\b/i,
+      /\bwell baby\b/i,
+      /\bimmunization\b/i,
     ],
   },
   {
@@ -1282,11 +1300,6 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
       reply: commonReply,
       state: { ...state, stage: "menu" },
     };
-  }
-
-
-  if (answer) {
-    return { reply: answer, state: { ...state, stage: "menu" } };
   }
 
   if (/\b(cost|price|fee|charges|how much|consultation fee|pricing|what does it cost|how much is it|what is the cost|what is the price)\b/i.test(message)) {

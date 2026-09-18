@@ -340,7 +340,7 @@ function buildAppointmentInteractive(
         button: 'Choose a service',
         sections: [{
           title: 'Hospital services',
-          rows: rows.slice(0, 10),
+          rows,
         }],
       },
     };
