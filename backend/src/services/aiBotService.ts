@@ -363,13 +363,17 @@ function formatMedicalAdviceRedirect(name: string, message: string): string {
 ========================================================= */
 
 function isCancelCommand(message: string): boolean {
-  return /^(cancel|stop|never\s?mind|forget it|start over|restart)\b/i.test(
-    message.trim(),
+  return (
+    /^(cancel|stop|never\s?mind|forget it|start over|restart|clear it)\b/i.test(message.trim()) ||
+    /\b(cancel|cancelled|cancelling|reschedule|rescheduling|rebook|rebooking|move my appointment|change my appointment|change appointment|remove my booking|drop my booking|cancel my appointment|reschedule my appointment)\b/i.test(message)
   );
 }
 
 function isMenuCommand(message: string): boolean {
-  return /^(menu|main menu|help|options)\b/i.test(message.trim());
+  const text = message.trim().toLowerCase();
+
+  return /^(menu|main menu|help|options|home|main|start|restart|begin|back)\b/i.test(text) ||
+    /\b(main menu|start over|go back|show menu|menu please)\b/i.test(text);
 }
 
 /* =========================================================
@@ -806,8 +810,7 @@ export function generateAppointmentCollectionPrompt(
     if (missing[0] === "department") {
       return (
         `Thank you, ${patientName}. I have your preferred date and time. ` +
-        `Which department or clinic would you like to see?` +
-        fullDepartmentListBlock()
+        `Which department or clinic would you like to see?`
       );
     }
 
@@ -821,8 +824,7 @@ export function generateAppointmentCollectionPrompt(
     if (missing.includes("department")) {
       const other = missing.find((item) => item !== "department") as string;
       return (
-        `Thank you, ${patientName}. Please share your preferred ${other}, and let me know which department or clinic you'd like to see.` +
-        fullDepartmentListBlock()
+        `Thank you, ${patientName}. Please share your preferred ${other}, and let me know which department or clinic you'd like to see.`
       );
     }
 
@@ -831,9 +833,8 @@ export function generateAppointmentCollectionPrompt(
 
   return (
     `Sure, ${patientName}. I can help you book an appointment. ` +
-    `Please tell me the department, preferred date, and preferred time — for example: "Dental appointment on Friday at 2pm".` +
-    fullDepartmentListBlock() +
-    `\n\n(Standard consultation fee: ${hospitalKnowledge.consultationFee}. Surgical/theatre procedures are priced separately — ask me any time for a specific procedure's price.)`
+    `Please tell me the department, preferred date, and preferred time — for example: "Dental appointment on Friday at 2pm". ` +
+    `I’ll guide you through the booking step by step, and once a department is selected I’ll confirm the standard fee before we continue.`
   );
 }
 
@@ -1002,31 +1003,62 @@ const MENU_PROMPT = (name: string) =>
   `If you're feeling unwell or need medical advice, just tell me and I'll connect you directly with our clinical team instead of guessing.`;
 
 function isGreeting(message: string): boolean {
-  return /^(hi|hello|hey|good morning|good afternoon|good evening|mambo|sasa|habari)\b/i.test(
-    message.trim(),
-  );
+  const text = message.trim().toLowerCase();
+
+  return /^(hi|hello|hey|hi there|hello there|good morning|good afternoon|good evening|good day|morning|afternoon|evening|mambo|sasa|habari|yo|sup)\b/i.test(
+    text,
+  ) || /\b(hi there|hello there|good morning|good afternoon|good evening)\b/i.test(text);
 }
 
 function isBookingIntent(message: string): boolean {
   return (
     /\bbook(ing)?\b/i.test(message) ||
     /\bappointment\b/i.test(message) ||
+    /\bappointments?\b/i.test(message) ||
+    /\bconsult(ation)?\b/i.test(message) ||
+    /\bcheckup\b/i.test(message) ||
+    /\bvisit\b/i.test(message) ||
+    /\bslot\b/i.test(message) ||
     /\bschedule\b/i.test(message) ||
     /\bsee a doctor\b/i.test(message) ||
-    /\bconsult(ation)?\b/i.test(message) ||
-    /\bbook a (visit|slot)\b/i.test(message)
+    /\bsee doctor\b/i.test(message) ||
+    /\bmeet a doctor\b/i.test(message) ||
+    /\bbook a (visit|slot)\b/i.test(message) ||
+    /\bneed (an? )?(appointment|visit|consultation|doctor|checkup|slot)\b/i.test(message) ||
+    /\bi want to book\b/i.test(message) ||
+    /\bi'd like to book\b/i.test(message) ||
+    /\bi would like to book\b/i.test(message) ||
+    /\bbook me\b/i.test(message) ||
+    /\b(reserve|arrange|set up|schedule|book)\s+(an? )?(appointment|visit|consultation|checkup|slot)\b/i.test(message) ||
+    /\bcan i do it (tomorrow|today|next week|on [a-z]+)?\b/i.test(message) ||
+    /\bcan i (book|schedule|reserve|arrange)\b/i.test(message) ||
+    /\bmake appointment\b/i.test(message) ||
+    /\bwould like an appointment\b/i.test(message) ||
+    /\bneed to see a doctor\b/i.test(message) ||
+    /\bneed a doctor\b/i.test(message) ||
+    /\bi need a consultation\b/i.test(message) ||
+    /\bcan i get a same day appointment\b/i.test(message) ||
+    /\bsame day appointment\b/i.test(message) ||
+    /\bcan i book today\b/i.test(message) ||
+    /\bbook for today\b/i.test(message)
   );
 }
 
 function isAffirmative(message: string): boolean {
-  return /^(yes|yeah|yep|yup|correct|confirm(ed)?|okay|ok|sure|right|that'?s right|sawa)$/i.test(
-    message.trim(),
+  const text = message.trim().toLowerCase();
+
+  return (
+    /^(yes|yeah|yep|yup|correct|confirm(ed)?|okay|ok|sure|right|that'?s right|sawa|thanks|thank you|thankyou|nice|great|perfect|sounds good|alright|all good|yes please|go ahead|please proceed)$/i.test(text) ||
+    /\b(yes please|okay thanks|thanks a lot|thank you very much|all good|sounds good|go ahead|please proceed|sure thing|no problem|perfectly)\b/i.test(text)
   );
 }
 
 function isNegative(message: string): boolean {
-  return /^(no|nope|nah|change|edit|wrong|not correct|that'?s wrong|incorrect)$/i.test(
-    message.trim(),
+  const text = message.trim().toLowerCase();
+
+  return (
+    /^(no|nope|nah|change|edit|wrong|not correct|that'?s wrong|incorrect|not now|no thanks|not really|never mind)$/i.test(text) ||
+    /\b(no thanks|not really|not now|never mind|change it|wrong one)\b/i.test(text)
   );
 }
 
@@ -1061,7 +1093,66 @@ function answerKnowledgeBase(name: string, message: string): string | null {
     return `Yes, ${name}. ${stripped}`;
   }
 
+  if (/^(yes|no)\b/i.test(trimmed)) {
+    return trimmed.replace(/^(yes|no)\b\s*,?/i, (_, prefix) => `${prefix}, ${name}`);
+  }
+
   return `${name}, ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+}
+
+function getCommonPatientReply(name: string, message: string): string | null {
+  const text = message.trim();
+
+  const replyMap: Array<{ pattern: RegExp; reply: string }> = [
+    { pattern: /\b(thank you|thanks|thankyou|many thanks|appreciate it)\b/i, reply: `${name}, you’re very welcome. I’m glad to help.` },
+    { pattern: /\b(okay|ok|alright|sure|nice|great|perfect|sounds good|all good|yes please)\b/i, reply: `${name}, great. I can help with the next step.` },
+    { pattern: /\b(i am running late|i'm late|im late|running late)\b/i, reply: `${name}, no problem. Please let our front desk know as soon as you can, and we’ll do our best to keep your appointment updated.` },
+    { pattern: /\b(can you confirm my appointment|please confirm my appointment|confirm my appointment|appointment confirmation)\b/i, reply: `${name}, I can help with that. Please share the department, date, and time you booked, and I’ll confirm the details for you.` },
+    { pattern: /\b(is there a doctor available now|doctor available now|is a doctor available|any doctor available)\b/i, reply: `${name}, I can help with doctor availability. Please tell me the department you need and your preferred day or time, and I’ll guide you toward the right appointment or booking option.` },
+    { pattern: /\b(i need a female doctor|female doctor|woman doctor|lady doctor)\b/i, reply: `${name}, we can help with that. Please tell me the department or service you need, and I’ll guide you to the most suitable doctor or booking option.` },
+    { pattern: /\b(i need to speak to a doctor|speak to the doctor|talk to the doctor|talk to a doctor|need a doctor)\b/i, reply: `${name}, I can connect you with our clinical team. Please tell me the department or concern, and I’ll guide you to the right next step.` },
+    { pattern: /\b(where are you located|where is the clinic|clinic location|branch location|where is your hospital|your location)\b/i, reply: `${name}, our hospital has branches in Nasra and Umoja. I can share the right contact details and directions if you’d like.` },
+    { pattern: /\b(when are you open|what time do you open|opening hours|working hours|are you open on weekends|weekend opening hours)\b/i, reply: `${name}, our teams are available during normal clinic hours, and I can help you with appointments or the best time to visit.` },
+    { pattern: /\b(what services do you have|what departments do you have|services available|departments available|what clinics do you have)\b/i, reply: `${name}, we offer general consultation, maternity, dental, pediatric, obstetrics and gynecology, lab services, and more. Tell me what you need and I’ll guide you.` },
+    { pattern: /\b(i want to cancel|cancel my appointment|cancel appointment|need to cancel|i need to cancel)\b/i, reply: `${name}, no problem. I can help you cancel or reschedule. Please tell me the department and the day or time you’d like to change.` },
+    { pattern: /\b(do you accept sha|accept sha|insurance|nhif|do you take insurance|do you accept insurance)\b/i, reply: `${name}, yes, we do accept SHA and other major insurance arrangements. Tell me which cover you have and I’ll guide you on the next step.` },
+    { pattern: /\b(how do i book|how can i book|how to book|how do i schedule|how to schedule)\b/i, reply: `${name}, I can help with that. Just tell me the department, preferred date, and time, and I’ll prepare the booking details for you.` },
+    { pattern: /\b(do you have same day appointment|same day appointment|can i get a same day appointment|same day booking)\b/i, reply: `${name}, same-day availability depends on the department and doctor schedule. Please tell me the department and preferred time, and I’ll check the best option for you.` },
+    { pattern: /\b(i need urgent care|urgent care|emergency|very urgent|i need help now)\b/i, reply: `${name}, if this is urgent or you need immediate medical help, please call the hospital directly or visit the nearest branch as quickly as possible. I can also help you book the right service.` },
+    { pattern: /\b(i am not feeling well|not feeling well|i feel unwell|i feel sick|i'm sick)\b/i, reply: `${name}, I’m sorry to hear that. Please tell me the main concern or department you need, and I’ll guide you to the right support or appointment.` },
+    { pattern: /\b(can i come tomorrow|come tomorrow|can i book tomorrow|book for tomorrow)\b/i, reply: `${name}, yes, that’s usually possible. Please tell me the department and preferred time, and I’ll help you set it up.` },
+    { pattern: /\b(i have pain|mild pain|severe pain|i am in pain|i have a headache|i have stomach pain)\b/i, reply: `${name}, I’m sorry you’re in pain. Please let me know the department or concern, and I’ll guide you to the right care or appointment option.` },
+    { pattern: /\b(can i get a referral|need a referral|i need a referral letter|referral)\b/i, reply: `${name}, I can help with the next step. Please tell me the department or doctor you need, and I’ll guide you on the referral process.` },
+    { pattern: /\b(what is the cost|what does it cost|how much does it cost|what is the consultation fee|consultation fee)\b/i, reply: `${name}, our standard consultation fee is KSh 1,000. If you want a specific department or procedure price, tell me the service and I’ll give the exact amount.` },
+    { pattern: /\b(where is the nearest branch|nearest branch|which branch is closest|closest branch)\b/i, reply: `${name}, we have branches in Nasra and Umoja. Tell me which area is convenient for you and I’ll guide you to the most suitable one.` },
+    { pattern: /\b(can i book online|book online|online booking|do you have online booking)\b/i, reply: `${name}, yes, you can start the booking with me here. Just share the department, date, and preferred time, and I’ll help you complete it.` },
+    { pattern: /\b(i need a follow up|follow up appointment|need follow up|i want a follow up)\b/i, reply: `${name}, I can help you arrange a follow-up. Please tell me the department and the day or time that works best for you.` },
+    { pattern: /\b(please call me back|call me back|can you call me|call me)\b/i, reply: `${name}, of course. Please share the best time or number to reach you, and our team will get in touch as soon as possible.` },
+    { pattern: /\b(i am here|i'm here|arrived|here for appointment)\b/i, reply: `${name}, thank you for letting me know. Please check in with the reception desk or tell me the department and time of your appointment so I can help.` },
+    { pattern: /\b(what is the procedure|what does the procedure involve|procedure details|what happens in the procedure)\b/i, reply: `${name}, I’d be happy to explain the process. Please tell me the service or procedure name, and I’ll guide you with the right information.` },
+    { pattern: /\b(can you help me choose a doctor|help me choose a doctor|which doctor should i choose|doctor recommendation|recommended doctor)\b/i, reply: `${name}, I can help narrow it down. Please tell me the department, your concern, and whether you prefer a male or female doctor, and I’ll guide you.` },
+    { pattern: /\b(do you have a doctor for my child|pediatrician|child doctor|doctor for my baby|kids doctor)\b/i, reply: `${name}, yes, we can help with pediatric consultations and child health visits. Please tell me the concern or age, and I’ll guide you to the right department.` },
+    { pattern: /\b(i want to reschedule|reschedule my appointment|need to reschedule|change my appointment)\b/i, reply: `${name}, no problem. I can help you reschedule. Please share the new day and time, or tell me the department and I’ll help update it.` },
+    { pattern: /\b(are you open on weekends|weekend appointments|can i book on saturday|can i book on sunday)\b/i, reply: `${name}, weekend availability depends on the department and clinic schedule. Please tell me the preferred day and department, and I’ll guide you from there.` },
+    { pattern: /\b(maternity|pregnancy|antenatal|delivery|obstetrics|gynecology)\b/i, reply: `${name}, we can help with maternity and obstetrics services. Please tell me whether you’d like an appointment for antenatal care, delivery support, or a general consultation.` },
+    { pattern: /\b(do you have lab tests|lab tests|blood test|labs|laboratory services)\b/i, reply: `${name}, yes, we do offer laboratory services and diagnostic tests. I can help you identify the right department or service for your request.` },
+    { pattern: /\b(i am unable to come|can't make it|cannot come|i can’t make it|unable to attend)\b/i, reply: `${name}, I’m sorry to hear that. Please let me know if you’d like to reschedule or cancel, and I’ll help with the next step.` },
+    { pattern: /\b(what does sha cover|does sha cover this|sha cover|insurance coverage)\b/i, reply: `${name}, SHA coverage varies by service and facility policy. Please tell me the department or service you need, and I’ll guide you on the most relevant coverage details.` },
+    { pattern: /\b(can my family come|family appointment|book for my family|my husband|my wife|my child)\b/i, reply: `${name}, yes, we can help with family and dependent appointments. Please tell me the department and the number of patients, and I’ll guide you through the booking.` },
+    { pattern: /\b(i need an appointment for my mother|appointment for my father|visit for my parent|for my family member)\b/i, reply: `${name}, absolutely. Please share the department, the patient’s name if it’s different, and the preferred date or time, and I’ll help you arrange it.` },
+    { pattern: /\b(hey there|hi there|hello there|good morning|good afternoon|good evening)\b/i, reply: `${name}, hello. How can I help you today?` },
+    { pattern: /\b(i am here for consultation|for consultation|for check up|check up appointment|doctor visit)\b/i, reply: `${name}, I can help with that. Please tell me the department and your preferred time, and I’ll guide you through the booking.` },
+    { pattern: /\b(i need a doctor for my pregnancy|pregnancy checkup|prenatal care|antenatal appointment)\b/i, reply: `${name}, we can help with prenatal and maternity care. Please tell me whether this is an antenatal checkup or a general obstetrics visit, and I’ll guide you appropriately.` },
+    { pattern: /\b(dental|teeth|tooth pain|dentist)\b/i, reply: `${name}, we can help with dental consultations and appointments. Please tell me the issue or preferred day and time so I can guide you to the right booking.` },
+  ];
+
+  for (const entry of replyMap) {
+    if (entry.pattern.test(text)) {
+      return entry.reply;
+    }
+  }
+
+  return null;
 }
 
 /* =========================================================
@@ -1152,7 +1243,9 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
   const inAppointmentFlow =
     state.stage === "collecting_appointment" ||
     state.stage === "confirming_appointment" ||
-    isBookingIntent(message);
+    isBookingIntent(message) ||
+    /\b(can|could|would) (i|we) (do|book|schedule|reserve)\b/i.test(message) ||
+    /\b(i want|i need|can i) (to )?(book|schedule|reserve|change|cancel)\b/i.test(message);
 
   if (inAppointmentFlow) {
     const appointment: Partial<AppointmentRequestData> = {
@@ -1179,6 +1272,59 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
 
   if (answer) {
     return { reply: answer, state: { ...state, stage: "menu" } };
+  }
+
+  const commonReply = getCommonPatientReply(name, message);
+  if (commonReply) {
+    return {
+      reply: commonReply,
+      state: { ...state, stage: "menu" },
+    };
+  }
+
+
+  if (answer) {
+    return { reply: answer, state: { ...state, stage: "menu" } };
+  }
+
+  if (/\b(cost|price|fee|charges|how much|consultation fee|pricing|what does it cost|how much is it|what is the cost|what is the price)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, the standard consultation fee is KSh 1,000. If you want a specific department or procedure price, tell me the service and I’ll give the exact amount.`,
+      state,
+    };
+  }
+
+  if (/\b(tomorrow|today|next week|next monday|next tuesday|next wednesday|next thursday|next friday|next saturday|next sunday|later this week|this week|next month|weekend|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, I can help with that. Please share the department and the time you prefer, and I’ll build the appointment details for you.`,
+      state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+    };
+  }
+
+  if (/\b(open|opening|hours|working hours|when are you open|what time do you open|clinic hours|operating hours|available|availability|are you open|is the clinic open)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, our hospital teams are available for appointments and support during normal clinic hours, and I can help you book a consultation. If you want, tell me the department and preferred day or time and I’ll help schedule it.`,
+      state: { ...state, stage: "menu" },
+    };
+  }
+
+  if (/\b(insurance|sha|nhif|coverage|cover|medical cover|accept insurance|do you accept sha|do you accept insurance)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, we do accept SHA and other major insurance partners. Tell me which cover you have, and I can guide you on the next step or help you book the appointment.`,
+      state: { ...state, stage: "menu" },
+    };
+  }
+
+  if (/\b(change.*time|different time|can.*time.*change|need.*another time|reschedule.*appointment|change.*appointment|move.*appointment|another day|different day)\b/i.test(message)) {
+    return {
+      reply:
+        `${name}, no problem. I can help you change the appointment time or date. Please share the new day and time, or tell me the department and I’ll help update it.`,
+      state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+    };
   }
 
   return {
@@ -1210,15 +1356,16 @@ export function generateBotReply(input: BotReplyInput): string {
    * first will look like a brand-new request instead of a continuation.
    */
   if (!input.patientId) {
-    if (!input.patientName) {
-      if (!message) return NAME_PROMPT;
+    const extracted = extractPatientName(message);
+    const resolvedName = extracted || input.patientName;
 
-      const extracted = extractPatientName(message);
-      return extracted ? MENU_PROMPT(extracted) : NAME_PROMPT;
+    if (!resolvedName) {
+      if (!message) return NAME_PROMPT;
+      return NAME_PROMPT;
     }
 
     const state: TurnState = {
-      patientName: input.patientName,
+      patientName: resolvedName,
       stage: "menu",
       appointment: {},
     };
@@ -1253,21 +1400,25 @@ export function generateBotReply(input: BotReplyInput): string {
 
   session.lastInteraction = now;
 
-  if (session.stage === "awaiting_name") {
-    const extracted = extractPatientName(message);
+  const extractedName = extractPatientName(message);
 
-    if (!extracted) {
+  if (session.stage === "awaiting_name") {
+    if (!extractedName) {
       return NAME_PROMPT;
     }
 
-    session.patientName = extracted;
+    session.patientName = extractedName;
     session.stage = "menu";
 
-    return MENU_PROMPT(extracted);
+    return MENU_PROMPT(extractedName);
+  }
+
+  if (extractedName) {
+    session.patientName = extractedName;
   }
 
   const turnState: TurnState = {
-    patientName: session.patientName || "there",
+    patientName: session.patientName || extractedName || "there",
     stage: session.stage,
     appointment: session.appointment,
   };

@@ -34,17 +34,7 @@ export interface HospitalKnowledge {
   leadership: HospitalLeader[];
   bookingNotes: string[];
   unknownTopics: string[];
-  /**
-   * Standard flat outpatient consultation fee, charged for a routine
-   * doctor's visit before any tests, procedures, or admission. This is
-   * the figure already referenced elsewhere in the booking experience
-   * (e.g. department-selection menus), so it is centralized here rather
-   * than being hardcoded or silently treated as unknown in multiple
-   * places. If the hospital ever publishes per-department consultation
-   * rates, replace this flat value with a lookup table — the call sites
-   * (`getServicePrice` in botLogic.ts, and the formatters below) are
-   * already structured so that change only needs to happen in one spot.
-   */
+  
   consultationFee: string;
 }
 
@@ -1034,6 +1024,11 @@ export function searchKnowledgeBase(query: string): string | null {
       'appointments',
       'clinic hours',
       'clinic time',
+      'operating hours',
+      'opening hours',
+      'when are you open',
+      'when do you open',
+      'when is the clinic open',
     ])
   ) {
     return formatSpecialistClinics();
@@ -1054,6 +1049,11 @@ export function searchKnowledgeBase(query: string): string | null {
       'what services',
       'services do you have',
       'services you offer',
+      'what is available',
+      'what can you help me with',
+      'what treatments do you have',
+      'what departments do you have',
+      'which services do you provide',
     ]) ||
     matchingServices.length
   ) {

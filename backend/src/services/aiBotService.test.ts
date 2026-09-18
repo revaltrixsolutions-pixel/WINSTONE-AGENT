@@ -97,6 +97,93 @@ test('named greetings provide Kenya time and next actions', () => {
   assert.match(reply, /appointment|service|staff/i);
 });
 
+test('starts every conversation by asking for the patient name', () => {
+  const reply = generateBotReply({
+    patientName: null,
+    message: 'book appointment tomorrow at 9am in maternity',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /what is your name/i);
+  assert.doesNotMatch(reply, /tomorrow at 9am/i);
+});
+
+test('understands affirmative replies like okay and thanks in appointment flow', () => {
+  const step1 = generateBotReply({
+    patientId: 'affirm-1',
+    patientName: null,
+    message: 'my name is Mary',
+  });
+  assert.match(step1, /How can I help you today|welcome/i);
+
+  const step2 = generateBotReply({
+    patientId: 'affirm-1',
+    patientName: null,
+    message: 'book appointment today at 9am in maternity',
+  });
+  assert.match(step2, /appointment request|correct|confirm/i);
+
+  const step3 = generateBotReply({
+    patientId: 'affirm-1',
+    patientName: null,
+    message: 'thanks',
+  });
+  assert.match(step3, /Appointment Confirmed|booking reference/i);
+});
+
+test('answers common price and rebooking questions naturally', () => {
+  const priceReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'what is the consultation fee for obstetrics and gynecology?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(priceReply, /KSh 1,000/i);
+
+  const rescheduleReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'can i do it tomorrow at 9am in maternity?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(rescheduleReply, /appointment request|correct|confirm|what time/i);
+
+  const cancelReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'I want to cancel my appointment',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(cancelReply, /cancel|cleared|No problem/i);
+});
+
+test('handles real-world patient phrases like confirmation, doctor availability, and late arrival', () => {
+  const confirmReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'can you confirm my appointment?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(confirmReply, /appointment|confirm|reference|date|time/i);
+
+  const availabilityReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'is there a doctor available now?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(availabilityReply, /doctor|available|appointment|book|call/i);
+
+  const lateReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'i am running late',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(lateReply, /late|appointment|contact|staff|call/i);
+});
+
 test('formats Kenya greeting periods', () => {
   assert.equal(getKenyaGreeting(new Date('2026-09-15T08:00:00.000Z')), 'Good morning');
   assert.equal(getKenyaGreeting(new Date('2026-09-15T12:00:00.000Z')), 'Good afternoon');

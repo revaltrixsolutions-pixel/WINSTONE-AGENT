@@ -329,13 +329,12 @@ function buildAppointmentInteractive(
     const rows = appointmentServiceOptions.map((service) => ({
       id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       title: service.slice(0, 24),
-      description: `Consultation fee: ${getServicePrice(service) ?? 'KSh 1,000'}`,
     }));
 
     return {
       type: 'list',
       body: {
-        text: `${prompt} The menu shows the most requested services. If yours is not listed, reply with the service name.` ,
+        text: `${prompt} Please choose the department you want from the menu below.`,
       },
       action: {
         button: 'Choose a service',
