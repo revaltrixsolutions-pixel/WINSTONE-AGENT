@@ -10,6 +10,7 @@ import {
   getKenyaGreeting,
   isUsablePatientName,
   isHumanSupportRequest,
+  getServicePrice,
   CONVERSATION_MEMORY_MINUTES,
 } from './aiBotService';
 
@@ -120,6 +121,13 @@ test('does not confuse appointments with ENT', () => {
   assert.equal(booking.ready, false);
 });
 
+test('recognizes common gynecology typos and returns the exact consultation fee', () => {
+  const booking = parseAppointmentRequest('Obstetrics and Gynecolog appointment today at 11:00 AM');
+  assert.equal(booking.department, 'Obstetrics and Gynecology');
+  assert.equal(booking.time, '11:00 AM');
+  assert.equal(getServicePrice(booking.department), 'KSh 1,000');
+});
+
 test('asks for missing booking details', () => {
   const prompt = generateAppointmentCollectionPrompt('Mary', {
     date: 'tomorrow',
@@ -128,4 +136,15 @@ test('asks for missing booking details', () => {
 
   assert.match(prompt, /department/i);
   assert.match(prompt, /date|time/i);
+});
+
+test('keeps consultation pricing wording exact and human-friendly', () => {
+  const prompt = generateAppointmentCollectionPrompt('Mary', {
+    department: 'Obstetrics and Gynecology',
+    date: 'today',
+  });
+
+  assert.match(prompt, /KSh 1,000/i);
+  assert.doesNotMatch(prompt, /KSh 1,000 \+ KSh 1,000 consultation/i);
+  assert.match(prompt, /what time/i);
 });

@@ -329,7 +329,7 @@ function buildAppointmentInteractive(
     const rows = appointmentServiceOptions.map((service) => ({
       id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       title: service.slice(0, 24),
-      description: `${getServicePrice(service)} + KSh 1,000 consultation`,
+      description: `Consultation fee: ${getServicePrice(service) ?? 'KSh 1,000'}`,
     }));
 
     return {

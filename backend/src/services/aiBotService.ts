@@ -398,13 +398,19 @@ const DEPARTMENTS: Array<{ name: string; patterns: RegExp[] }> = [
   },
   {
     name: "Obstetrics and Gynecology",
-    patterns: [/\bobstetrics\b/i, /\bob[\s-]?gyn\b/i],
+    patterns: [
+      /\bobstetrics\b/i,
+      /\bob[\s-]?gyn\b/i,
+      /\bobstetrics\s+and\s+gynecolog/i,
+      /\bgynecolog\b/i,
+    ],
   },
   {
     name: "Gynecology",
     patterns: [
       /\bgynecology\b/i,
       /\bgynaecology\b/i,
+      /\bgynecolog\b/i,
       /\bgynecologist\b/i,
       /\bgynaecologist\b/i,
       /\bwomen'?s health\b/i,
@@ -1042,18 +1048,20 @@ function answerKnowledgeBase(name: string, message: string): string | null {
 
   if (!result) return null;
 
-  // The knowledge base already returns well-formatted, self-explanatory
-  // text (with its own headers/emoji). Prepending "Yes, {name}." in front
-  // of a heading reads oddly, so we only add a light personal touch when
-  // the response is a short, conversational-style line rather than a
-  // structured list/heading.
-  const looksStructured = /^[\p{Emoji}\p{So}]/u.test(result) || result.includes("\n\n•") || result.includes("\n•");
+  // Keep the reply feeling natural and conversational in both short
+  // answers and structured knowledge responses. This also matches the
+  // hospital bot's more human-style chat behavior that users expect.
+  const trimmed = result.trim();
+  if (!trimmed) return null;
+
+  const looksStructured = /^[\p{Emoji}\p{So}]/u.test(trimmed) || trimmed.includes("\n\n•") || trimmed.includes("\n•");
 
   if (looksStructured) {
-    return result;
+    const stripped = trimmed.replace(/^[\p{Emoji}\p{So}\s]+/u, '').replace(/^\*+|\*+$/g, '');
+    return `Yes, ${name}. ${stripped}`;
   }
 
-  return `${name}, ${result.charAt(0).toLowerCase()}${result.slice(1)}`;
+  return `${name}, ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
 }
 
 /* =========================================================
@@ -1176,7 +1184,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
   return {
     reply:
       `I'm sorry, ${name}, I don't have that information on hand. ` +
-      `Would you like me to connect you with our hospital staff, or ask about something else — our services, prices, locations, or insurance?`,
+      `I can connect you with our hospital staff or a doctor, or we can look at services, prices, locations, or insurance instead.`,
     state,
   };
 }

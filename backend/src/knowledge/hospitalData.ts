@@ -521,10 +521,14 @@ function formatInsuranceList(): string {
 }
 
 function formatInsuranceConfirmation(matches: string[]): string {
+  const branchList = hospitalKnowledge.locations
+    .map((location) => `${location.branch} (${location.address})`)
+    .join('; ');
+
   return [
     '🛡️ *Insurance Confirmation*',
     '',
-    `Yes — Phadam Hospital works with: ${matches.join(', ')}.`,
+    `Yes — Phadam Hospital works with: ${matches.join(', ')}. Our branches are located in Nairobi, including ${branchList}.`,
     '',
     'Please confirm your specific plan\'s eligibility and any preauthorization requirements directly with the hospital before your visit.',
   ].join('\n');
