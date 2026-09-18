@@ -10,6 +10,8 @@
  */
 export type * from './models/Patient'
 export type * from './models/Appointment'
+export type * from './models/AppointmentFollowUp'
+export type * from './models/ReminderDelivery'
 export type * from './models/MessageLog'
 export type * from './models/User'
 export type * from './commonInputTypes'

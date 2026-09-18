@@ -271,7 +271,6 @@ app.get('/health', async (_req, res) => {
    ========================================================= */
 
 const reminderWindowMinutes = [720, 360, 60] as const;
-const reminderDispatchState = new Map<string, Set<number>>();
 
 function formatAppointmentDateTime(date: Date): {
   date: string;
@@ -306,7 +305,7 @@ async function dispatchAppointmentReminders(): Promise<void> {
 
   const appointments = await prisma.appointment.findMany({
     where: {
-      status: 'CONFIRMED',
+      status: { in: ['CONFIRMED', 'RESCHEDULED'] },
       slotTime: {
         gte: upcomingWindowStart,
         lte: upcomingWindowEnd,
@@ -319,10 +318,6 @@ async function dispatchAppointmentReminders(): Promise<void> {
 
   for (const appointment of appointments) {
     const patientPhone = appointment.patient?.phoneNumber?.trim();
-
-    if (!patientPhone) {
-      continue;
-    }
 
     const diffMinutes =
       (appointment.slotTime.getTime() - now.getTime()) / 60000;
@@ -339,9 +334,15 @@ async function dispatchAppointmentReminders(): Promise<void> {
       }
 
       const key = `${appointment.id}:${reminderMinutes}`;
-      const seen = reminderDispatchState.get(appointment.id) ?? new Set<number>();
+      const existingDelivery = await prisma.reminderDelivery.findFirst({
+        where: {
+          appointmentId: appointment.id,
+          kind: `${reminderMinutes}m`,
+          recipientType: 'PATIENT',
+        },
+      });
 
-      if (seen.has(reminderMinutes)) {
+      if (existingDelivery || !patientPhone) {
         continue;
       }
 
@@ -371,8 +372,13 @@ async function dispatchAppointmentReminders(): Promise<void> {
           messageText: reminderMessage,
         });
 
-        seen.add(reminderMinutes);
-        reminderDispatchState.set(appointment.id, seen);
+        await prisma.reminderDelivery.create({
+          data: {
+            appointmentId: appointment.id,
+            kind: `${reminderMinutes}m`,
+            recipientType: 'PATIENT',
+          },
+        });
 
         console.info('[Cron Job] Appointment reminder sent.', {
           appointmentId: appointment.id,
@@ -409,11 +415,39 @@ async function dispatchAppointmentReminders(): Promise<void> {
 
       void key;
     }
+
+    const adminReminderMinutes = 20;
+    if (diffMinutes > 0 && diffMinutes >= adminReminderMinutes - 20 && diffMinutes <= adminReminderMinutes + 20) {
+      const existingAdminDelivery = await prisma.reminderDelivery.findFirst({
+        where: {
+          appointmentId: appointment.id,
+          kind: '20m',
+          recipientType: 'ADMIN',
+        },
+      });
+
+      if (!existingAdminDelivery) {
+        await prisma.reminderDelivery.create({
+          data: {
+            appointmentId: appointment.id,
+            kind: '20m',
+            recipientType: 'ADMIN',
+          },
+        });
+
+        console.info('[Cron Job] Admin booking reminder queued.', {
+          appointmentId: appointment.id,
+          patientId: appointment.patientId,
+          reminderMinutes: adminReminderMinutes,
+        });
+      }
+    }
   }
 }
 
 /**
- * Runs every 15 minutes to send 12h, 6h, and 1h reminders.
+ * Runs every 15 minutes to send patient reminders and queue the 20-minute
+ * admin booking reminder. Delivery keys are persisted in the database.
  */
 cron.schedule(
   '*/15 * * * *',

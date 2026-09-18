@@ -28,6 +28,16 @@ export type Patient = Prisma.PatientModel
  */
 export type Appointment = Prisma.AppointmentModel
 /**
+ * Model AppointmentFollowUp
+ * 
+ */
+export type AppointmentFollowUp = Prisma.AppointmentFollowUpModel
+/**
+ * Model ReminderDelivery
+ * 
+ */
+export type ReminderDelivery = Prisma.ReminderDeliveryModel
+/**
  * Model MessageLog
  * 
  */

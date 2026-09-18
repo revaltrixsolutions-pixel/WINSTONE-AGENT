@@ -215,6 +215,8 @@ export type AppointmentWhereInput = {
   status?: Prisma.StringFilter<"Appointment"> | string
   createdAt?: Prisma.DateTimeFilter<"Appointment"> | Date | string
   patient?: Prisma.XOR<Prisma.PatientScalarRelationFilter, Prisma.PatientWhereInput>
+  followUps?: Prisma.AppointmentFollowUpListRelationFilter
+  reminders?: Prisma.ReminderDeliveryListRelationFilter
 }
 
 export type AppointmentOrderByWithRelationInput = {
@@ -228,6 +230,8 @@ export type AppointmentOrderByWithRelationInput = {
   status?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   patient?: Prisma.PatientOrderByWithRelationInput
+  followUps?: Prisma.AppointmentFollowUpOrderByRelationAggregateInput
+  reminders?: Prisma.ReminderDeliveryOrderByRelationAggregateInput
 }
 
 export type AppointmentWhereUniqueInput = Prisma.AtLeast<{
@@ -244,6 +248,8 @@ export type AppointmentWhereUniqueInput = Prisma.AtLeast<{
   status?: Prisma.StringFilter<"Appointment"> | string
   createdAt?: Prisma.DateTimeFilter<"Appointment"> | Date | string
   patient?: Prisma.XOR<Prisma.PatientScalarRelationFilter, Prisma.PatientWhereInput>
+  followUps?: Prisma.AppointmentFollowUpListRelationFilter
+  reminders?: Prisma.ReminderDeliveryListRelationFilter
 }, "id">
 
 export type AppointmentOrderByWithAggregationInput = {
@@ -286,6 +292,8 @@ export type AppointmentCreateInput = {
   status?: string
   createdAt?: Date | string
   patient: Prisma.PatientCreateNestedOneWithoutAppointmentsInput
+  followUps?: Prisma.AppointmentFollowUpCreateNestedManyWithoutAppointmentInput
+  reminders?: Prisma.ReminderDeliveryCreateNestedManyWithoutAppointmentInput
 }
 
 export type AppointmentUncheckedCreateInput = {
@@ -298,6 +306,8 @@ export type AppointmentUncheckedCreateInput = {
   slotTime: Date | string
   status?: string
   createdAt?: Date | string
+  followUps?: Prisma.AppointmentFollowUpUncheckedCreateNestedManyWithoutAppointmentInput
+  reminders?: Prisma.ReminderDeliveryUncheckedCreateNestedManyWithoutAppointmentInput
 }
 
 export type AppointmentUpdateInput = {
@@ -310,6 +320,8 @@ export type AppointmentUpdateInput = {
   status?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   patient?: Prisma.PatientUpdateOneRequiredWithoutAppointmentsNestedInput
+  followUps?: Prisma.AppointmentFollowUpUpdateManyWithoutAppointmentNestedInput
+  reminders?: Prisma.ReminderDeliveryUpdateManyWithoutAppointmentNestedInput
 }
 
 export type AppointmentUncheckedUpdateInput = {
@@ -322,6 +334,8 @@ export type AppointmentUncheckedUpdateInput = {
   slotTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   status?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  followUps?: Prisma.AppointmentFollowUpUncheckedUpdateManyWithoutAppointmentNestedInput
+  reminders?: Prisma.ReminderDeliveryUncheckedUpdateManyWithoutAppointmentNestedInput
 }
 
 export type AppointmentCreateManyInput = {
@@ -405,6 +419,11 @@ export type AppointmentMinOrderByAggregateInput = {
   createdAt?: Prisma.SortOrder
 }
 
+export type AppointmentScalarRelationFilter = {
+  is?: Prisma.AppointmentWhereInput
+  isNot?: Prisma.AppointmentWhereInput
+}
+
 export type AppointmentCreateNestedManyWithoutPatientInput = {
   create?: Prisma.XOR<Prisma.AppointmentCreateWithoutPatientInput, Prisma.AppointmentUncheckedCreateWithoutPatientInput> | Prisma.AppointmentCreateWithoutPatientInput[] | Prisma.AppointmentUncheckedCreateWithoutPatientInput[]
   connectOrCreate?: Prisma.AppointmentCreateOrConnectWithoutPatientInput | Prisma.AppointmentCreateOrConnectWithoutPatientInput[]
@@ -447,6 +466,34 @@ export type AppointmentUncheckedUpdateManyWithoutPatientNestedInput = {
   deleteMany?: Prisma.AppointmentScalarWhereInput | Prisma.AppointmentScalarWhereInput[]
 }
 
+export type AppointmentCreateNestedOneWithoutFollowUpsInput = {
+  create?: Prisma.XOR<Prisma.AppointmentCreateWithoutFollowUpsInput, Prisma.AppointmentUncheckedCreateWithoutFollowUpsInput>
+  connectOrCreate?: Prisma.AppointmentCreateOrConnectWithoutFollowUpsInput
+  connect?: Prisma.AppointmentWhereUniqueInput
+}
+
+export type AppointmentUpdateOneRequiredWithoutFollowUpsNestedInput = {
+  create?: Prisma.XOR<Prisma.AppointmentCreateWithoutFollowUpsInput, Prisma.AppointmentUncheckedCreateWithoutFollowUpsInput>
+  connectOrCreate?: Prisma.AppointmentCreateOrConnectWithoutFollowUpsInput
+  upsert?: Prisma.AppointmentUpsertWithoutFollowUpsInput
+  connect?: Prisma.AppointmentWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AppointmentUpdateToOneWithWhereWithoutFollowUpsInput, Prisma.AppointmentUpdateWithoutFollowUpsInput>, Prisma.AppointmentUncheckedUpdateWithoutFollowUpsInput>
+}
+
+export type AppointmentCreateNestedOneWithoutRemindersInput = {
+  create?: Prisma.XOR<Prisma.AppointmentCreateWithoutRemindersInput, Prisma.AppointmentUncheckedCreateWithoutRemindersInput>
+  connectOrCreate?: Prisma.AppointmentCreateOrConnectWithoutRemindersInput
+  connect?: Prisma.AppointmentWhereUniqueInput
+}
+
+export type AppointmentUpdateOneRequiredWithoutRemindersNestedInput = {
+  create?: Prisma.XOR<Prisma.AppointmentCreateWithoutRemindersInput, Prisma.AppointmentUncheckedCreateWithoutRemindersInput>
+  connectOrCreate?: Prisma.AppointmentCreateOrConnectWithoutRemindersInput
+  upsert?: Prisma.AppointmentUpsertWithoutRemindersInput
+  connect?: Prisma.AppointmentWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AppointmentUpdateToOneWithWhereWithoutRemindersInput, Prisma.AppointmentUpdateWithoutRemindersInput>, Prisma.AppointmentUncheckedUpdateWithoutRemindersInput>
+}
+
 export type AppointmentCreateWithoutPatientInput = {
   id?: string
   doctorName: string
@@ -456,6 +503,8 @@ export type AppointmentCreateWithoutPatientInput = {
   slotTime: Date | string
   status?: string
   createdAt?: Date | string
+  followUps?: Prisma.AppointmentFollowUpCreateNestedManyWithoutAppointmentInput
+  reminders?: Prisma.ReminderDeliveryCreateNestedManyWithoutAppointmentInput
 }
 
 export type AppointmentUncheckedCreateWithoutPatientInput = {
@@ -467,6 +516,8 @@ export type AppointmentUncheckedCreateWithoutPatientInput = {
   slotTime: Date | string
   status?: string
   createdAt?: Date | string
+  followUps?: Prisma.AppointmentFollowUpUncheckedCreateNestedManyWithoutAppointmentInput
+  reminders?: Prisma.ReminderDeliveryUncheckedCreateNestedManyWithoutAppointmentInput
 }
 
 export type AppointmentCreateOrConnectWithoutPatientInput = {
@@ -510,6 +561,142 @@ export type AppointmentScalarWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"Appointment"> | Date | string
 }
 
+export type AppointmentCreateWithoutFollowUpsInput = {
+  id?: string
+  doctorName: string
+  specialty: string
+  servicePrice?: string
+  consultationFee?: string
+  slotTime: Date | string
+  status?: string
+  createdAt?: Date | string
+  patient: Prisma.PatientCreateNestedOneWithoutAppointmentsInput
+  reminders?: Prisma.ReminderDeliveryCreateNestedManyWithoutAppointmentInput
+}
+
+export type AppointmentUncheckedCreateWithoutFollowUpsInput = {
+  id?: string
+  patientId: string
+  doctorName: string
+  specialty: string
+  servicePrice?: string
+  consultationFee?: string
+  slotTime: Date | string
+  status?: string
+  createdAt?: Date | string
+  reminders?: Prisma.ReminderDeliveryUncheckedCreateNestedManyWithoutAppointmentInput
+}
+
+export type AppointmentCreateOrConnectWithoutFollowUpsInput = {
+  where: Prisma.AppointmentWhereUniqueInput
+  create: Prisma.XOR<Prisma.AppointmentCreateWithoutFollowUpsInput, Prisma.AppointmentUncheckedCreateWithoutFollowUpsInput>
+}
+
+export type AppointmentUpsertWithoutFollowUpsInput = {
+  update: Prisma.XOR<Prisma.AppointmentUpdateWithoutFollowUpsInput, Prisma.AppointmentUncheckedUpdateWithoutFollowUpsInput>
+  create: Prisma.XOR<Prisma.AppointmentCreateWithoutFollowUpsInput, Prisma.AppointmentUncheckedCreateWithoutFollowUpsInput>
+  where?: Prisma.AppointmentWhereInput
+}
+
+export type AppointmentUpdateToOneWithWhereWithoutFollowUpsInput = {
+  where?: Prisma.AppointmentWhereInput
+  data: Prisma.XOR<Prisma.AppointmentUpdateWithoutFollowUpsInput, Prisma.AppointmentUncheckedUpdateWithoutFollowUpsInput>
+}
+
+export type AppointmentUpdateWithoutFollowUpsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  doctorName?: Prisma.StringFieldUpdateOperationsInput | string
+  specialty?: Prisma.StringFieldUpdateOperationsInput | string
+  servicePrice?: Prisma.StringFieldUpdateOperationsInput | string
+  consultationFee?: Prisma.StringFieldUpdateOperationsInput | string
+  slotTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  patient?: Prisma.PatientUpdateOneRequiredWithoutAppointmentsNestedInput
+  reminders?: Prisma.ReminderDeliveryUpdateManyWithoutAppointmentNestedInput
+}
+
+export type AppointmentUncheckedUpdateWithoutFollowUpsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  patientId?: Prisma.StringFieldUpdateOperationsInput | string
+  doctorName?: Prisma.StringFieldUpdateOperationsInput | string
+  specialty?: Prisma.StringFieldUpdateOperationsInput | string
+  servicePrice?: Prisma.StringFieldUpdateOperationsInput | string
+  consultationFee?: Prisma.StringFieldUpdateOperationsInput | string
+  slotTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  reminders?: Prisma.ReminderDeliveryUncheckedUpdateManyWithoutAppointmentNestedInput
+}
+
+export type AppointmentCreateWithoutRemindersInput = {
+  id?: string
+  doctorName: string
+  specialty: string
+  servicePrice?: string
+  consultationFee?: string
+  slotTime: Date | string
+  status?: string
+  createdAt?: Date | string
+  patient: Prisma.PatientCreateNestedOneWithoutAppointmentsInput
+  followUps?: Prisma.AppointmentFollowUpCreateNestedManyWithoutAppointmentInput
+}
+
+export type AppointmentUncheckedCreateWithoutRemindersInput = {
+  id?: string
+  patientId: string
+  doctorName: string
+  specialty: string
+  servicePrice?: string
+  consultationFee?: string
+  slotTime: Date | string
+  status?: string
+  createdAt?: Date | string
+  followUps?: Prisma.AppointmentFollowUpUncheckedCreateNestedManyWithoutAppointmentInput
+}
+
+export type AppointmentCreateOrConnectWithoutRemindersInput = {
+  where: Prisma.AppointmentWhereUniqueInput
+  create: Prisma.XOR<Prisma.AppointmentCreateWithoutRemindersInput, Prisma.AppointmentUncheckedCreateWithoutRemindersInput>
+}
+
+export type AppointmentUpsertWithoutRemindersInput = {
+  update: Prisma.XOR<Prisma.AppointmentUpdateWithoutRemindersInput, Prisma.AppointmentUncheckedUpdateWithoutRemindersInput>
+  create: Prisma.XOR<Prisma.AppointmentCreateWithoutRemindersInput, Prisma.AppointmentUncheckedCreateWithoutRemindersInput>
+  where?: Prisma.AppointmentWhereInput
+}
+
+export type AppointmentUpdateToOneWithWhereWithoutRemindersInput = {
+  where?: Prisma.AppointmentWhereInput
+  data: Prisma.XOR<Prisma.AppointmentUpdateWithoutRemindersInput, Prisma.AppointmentUncheckedUpdateWithoutRemindersInput>
+}
+
+export type AppointmentUpdateWithoutRemindersInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  doctorName?: Prisma.StringFieldUpdateOperationsInput | string
+  specialty?: Prisma.StringFieldUpdateOperationsInput | string
+  servicePrice?: Prisma.StringFieldUpdateOperationsInput | string
+  consultationFee?: Prisma.StringFieldUpdateOperationsInput | string
+  slotTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  patient?: Prisma.PatientUpdateOneRequiredWithoutAppointmentsNestedInput
+  followUps?: Prisma.AppointmentFollowUpUpdateManyWithoutAppointmentNestedInput
+}
+
+export type AppointmentUncheckedUpdateWithoutRemindersInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  patientId?: Prisma.StringFieldUpdateOperationsInput | string
+  doctorName?: Prisma.StringFieldUpdateOperationsInput | string
+  specialty?: Prisma.StringFieldUpdateOperationsInput | string
+  servicePrice?: Prisma.StringFieldUpdateOperationsInput | string
+  consultationFee?: Prisma.StringFieldUpdateOperationsInput | string
+  slotTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  status?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  followUps?: Prisma.AppointmentFollowUpUncheckedUpdateManyWithoutAppointmentNestedInput
+}
+
 export type AppointmentCreateManyPatientInput = {
   id?: string
   doctorName: string
@@ -530,6 +717,8 @@ export type AppointmentUpdateWithoutPatientInput = {
   slotTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   status?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  followUps?: Prisma.AppointmentFollowUpUpdateManyWithoutAppointmentNestedInput
+  reminders?: Prisma.ReminderDeliveryUpdateManyWithoutAppointmentNestedInput
 }
 
 export type AppointmentUncheckedUpdateWithoutPatientInput = {
@@ -541,6 +730,8 @@ export type AppointmentUncheckedUpdateWithoutPatientInput = {
   slotTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   status?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  followUps?: Prisma.AppointmentFollowUpUncheckedUpdateManyWithoutAppointmentNestedInput
+  reminders?: Prisma.ReminderDeliveryUncheckedUpdateManyWithoutAppointmentNestedInput
 }
 
 export type AppointmentUncheckedUpdateManyWithoutPatientInput = {
@@ -555,6 +746,44 @@ export type AppointmentUncheckedUpdateManyWithoutPatientInput = {
 }
 
 
+/**
+ * Count Type AppointmentCountOutputType
+ */
+
+export type AppointmentCountOutputType = {
+  followUps: number
+  reminders: number
+}
+
+export type AppointmentCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  followUps?: boolean | AppointmentCountOutputTypeCountFollowUpsArgs
+  reminders?: boolean | AppointmentCountOutputTypeCountRemindersArgs
+}
+
+/**
+ * AppointmentCountOutputType without action
+ */
+export type AppointmentCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AppointmentCountOutputType
+   */
+  select?: Prisma.AppointmentCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * AppointmentCountOutputType without action
+ */
+export type AppointmentCountOutputTypeCountFollowUpsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AppointmentFollowUpWhereInput
+}
+
+/**
+ * AppointmentCountOutputType without action
+ */
+export type AppointmentCountOutputTypeCountRemindersArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.ReminderDeliveryWhereInput
+}
+
 
 export type AppointmentSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -567,6 +796,9 @@ export type AppointmentSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   status?: boolean
   createdAt?: boolean
   patient?: boolean | Prisma.PatientDefaultArgs<ExtArgs>
+  followUps?: boolean | Prisma.Appointment$followUpsArgs<ExtArgs>
+  reminders?: boolean | Prisma.Appointment$remindersArgs<ExtArgs>
+  _count?: boolean | Prisma.AppointmentCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["appointment"]>
 
 export type AppointmentSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -610,6 +842,9 @@ export type AppointmentSelectScalar = {
 export type AppointmentOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "patientId" | "doctorName" | "specialty" | "servicePrice" | "consultationFee" | "slotTime" | "status" | "createdAt", ExtArgs["result"]["appointment"]>
 export type AppointmentInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   patient?: boolean | Prisma.PatientDefaultArgs<ExtArgs>
+  followUps?: boolean | Prisma.Appointment$followUpsArgs<ExtArgs>
+  reminders?: boolean | Prisma.Appointment$remindersArgs<ExtArgs>
+  _count?: boolean | Prisma.AppointmentCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AppointmentIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   patient?: boolean | Prisma.PatientDefaultArgs<ExtArgs>
@@ -622,6 +857,8 @@ export type $AppointmentPayload<ExtArgs extends runtime.Types.Extensions.Interna
   name: "Appointment"
   objects: {
     patient: Prisma.$PatientPayload<ExtArgs>
+    followUps: Prisma.$AppointmentFollowUpPayload<ExtArgs>[]
+    reminders: Prisma.$ReminderDeliveryPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1028,6 +1265,8 @@ readonly fields: AppointmentFieldRefs;
 export interface Prisma__AppointmentClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   patient<T extends Prisma.PatientDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.PatientDefaultArgs<ExtArgs>>): Prisma.Prisma__PatientClient<runtime.Types.Result.GetResult<Prisma.$PatientPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  followUps<T extends Prisma.Appointment$followUpsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Appointment$followUpsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AppointmentFollowUpPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  reminders<T extends Prisma.Appointment$remindersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Appointment$remindersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ReminderDeliveryPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1464,6 +1703,54 @@ export type AppointmentDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.I
    * Limit how many Appointments to delete.
    */
   limit?: number
+}
+
+/**
+ * Appointment.followUps
+ */
+export type Appointment$followUpsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AppointmentFollowUp
+   */
+  select?: Prisma.AppointmentFollowUpSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AppointmentFollowUp
+   */
+  omit?: Prisma.AppointmentFollowUpOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AppointmentFollowUpInclude<ExtArgs> | null
+  where?: Prisma.AppointmentFollowUpWhereInput
+  orderBy?: Prisma.AppointmentFollowUpOrderByWithRelationInput | Prisma.AppointmentFollowUpOrderByWithRelationInput[]
+  cursor?: Prisma.AppointmentFollowUpWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AppointmentFollowUpScalarFieldEnum | Prisma.AppointmentFollowUpScalarFieldEnum[]
+}
+
+/**
+ * Appointment.reminders
+ */
+export type Appointment$remindersArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ReminderDelivery
+   */
+  select?: Prisma.ReminderDeliverySelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the ReminderDelivery
+   */
+  omit?: Prisma.ReminderDeliveryOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ReminderDeliveryInclude<ExtArgs> | null
+  where?: Prisma.ReminderDeliveryWhereInput
+  orderBy?: Prisma.ReminderDeliveryOrderByWithRelationInput | Prisma.ReminderDeliveryOrderByWithRelationInput[]
+  cursor?: Prisma.ReminderDeliveryWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ReminderDeliveryScalarFieldEnum | Prisma.ReminderDeliveryScalarFieldEnum[]
 }
 
 /**

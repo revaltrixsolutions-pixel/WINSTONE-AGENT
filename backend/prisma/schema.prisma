@@ -32,6 +32,30 @@ model Appointment {
   slotTime    DateTime
   status      String   @default("CONFIRMED")
   createdAt   DateTime @default(now())
+  followUps   AppointmentFollowUp[]
+  reminders   ReminderDelivery[]
+}
+
+model AppointmentFollowUp {
+  id            String      @id @default(uuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  authorId      String
+  authorName    String
+  note          String
+  createdAt     DateTime    @default(now())
+}
+
+model ReminderDelivery {
+  id            String      @id @default(uuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  kind          String
+  recipientType String
+  sentAt        DateTime    @default(now())
+
+  @@unique([appointmentId, kind, recipientType])
+  @@index([recipientType, sentAt])
 }
 
 model MessageLog {

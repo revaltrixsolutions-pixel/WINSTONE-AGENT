@@ -53,6 +53,8 @@ export const AnyNull = runtime.AnyNull
 export const ModelName = {
   Patient: 'Patient',
   Appointment: 'Appointment',
+  AppointmentFollowUp: 'AppointmentFollowUp',
+  ReminderDelivery: 'ReminderDelivery',
   MessageLog: 'MessageLog',
   User: 'User'
 } as const
@@ -100,6 +102,29 @@ export const AppointmentScalarFieldEnum = {
 } as const
 
 export type AppointmentScalarFieldEnum = (typeof AppointmentScalarFieldEnum)[keyof typeof AppointmentScalarFieldEnum]
+
+
+export const AppointmentFollowUpScalarFieldEnum = {
+  id: 'id',
+  appointmentId: 'appointmentId',
+  authorId: 'authorId',
+  authorName: 'authorName',
+  note: 'note',
+  createdAt: 'createdAt'
+} as const
+
+export type AppointmentFollowUpScalarFieldEnum = (typeof AppointmentFollowUpScalarFieldEnum)[keyof typeof AppointmentFollowUpScalarFieldEnum]
+
+
+export const ReminderDeliveryScalarFieldEnum = {
+  id: 'id',
+  appointmentId: 'appointmentId',
+  kind: 'kind',
+  recipientType: 'recipientType',
+  sentAt: 'sentAt'
+} as const
+
+export type ReminderDeliveryScalarFieldEnum = (typeof ReminderDeliveryScalarFieldEnum)[keyof typeof ReminderDeliveryScalarFieldEnum]
 
 
 export const MessageLogScalarFieldEnum = {

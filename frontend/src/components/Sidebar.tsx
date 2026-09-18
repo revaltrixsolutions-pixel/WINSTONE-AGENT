@@ -40,6 +40,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: '👥',
       description: 'Patient directory',
     },
+    {
+      id: 'adminAppointments',
+      label: 'Follow-ups',
+      icon: '🗂️',
+      description: 'Intake and reminders',
+    },
     ...(isSuperAdmin
       ? [
           {

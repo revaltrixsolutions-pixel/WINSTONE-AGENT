@@ -59,6 +59,25 @@ export type Appointment = {
   createdAt?: string;
   servicePrice?: string;
   consultationFee?: string;
+  followUps?: AppointmentFollowUp[];
+};
+
+export type AppointmentFollowUp = {
+  id: string;
+  appointmentId: string;
+  authorName: string;
+  note: string;
+  createdAt: string;
+};
+
+export type AdminReminder = {
+  id: string;
+  kind: string;
+  recipientType: string;
+  sentAt: string;
+  appointment: Appointment & {
+    patient?: { fullName?: string | null; phoneNumber?: string };
+  };
 };
 
 export type PatientRecord = {
@@ -551,6 +570,41 @@ export async function updateAppointmentStatus(
     `/api/dashboard/appointments/${encodeURIComponent(appointmentId)}/status`,
     { method: 'PATCH', body: JSON.stringify({ status }) },
   );
+}
+
+export async function createPatientWithAppointment(input: {
+  fullName: string;
+  phoneNumber: string;
+  specialty: string;
+  doctorName?: string;
+  slotTime: string;
+  servicePrice?: string;
+  consultationFee?: string;
+}): Promise<{ success: boolean; appointment?: Appointment; error?: string }> {
+  return request('/api/dashboard/patients-with-appointment', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function createAppointmentFollowUp(
+  appointmentId: string,
+  note: string,
+): Promise<{ success: boolean; followUp?: AppointmentFollowUp; error?: string }> {
+  return request(`/api/dashboard/appointments/${encodeURIComponent(appointmentId)}/follow-ups`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function fetchAppointmentReminders(): Promise<AdminReminder[]> {
+  const response = await request<{ success: boolean; reminders?: AdminReminder[]; error?: string }>(
+    '/api/dashboard/reminders',
+    { method: 'GET' },
+  );
+
+  if (!response.success) throw new Error(response.error || 'Unable to fetch reminders.');
+  return response.reminders || [];
 }
 
 export async function loginToDashboard(

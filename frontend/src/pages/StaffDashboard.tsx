@@ -9,6 +9,7 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatQueue } from '../components/ChatQueue';
 import { ChatWindow } from '../components/ChatWindow';
 import { AppointmentTable } from '../components/AppointmentTable';
+import { AdminAppointmentsPage } from '../components/AdminAppointmentsPage';
 import {
   createUserAccount,
   deleteUserAccount,
@@ -19,7 +20,7 @@ import {
   updateUserStatus,
   updateAppointmentStatus,
 } from '../services/api';
-import type { Appointment, PatientRecord } from '../services/api';
+import type { AdminReminder, Appointment, PatientRecord } from '../services/api';
 
 import {
   assignChatToAgent,
@@ -27,6 +28,7 @@ import {
   sendAgentReply,
   fetchAppointments,
   fetchPatients,
+  fetchAppointmentReminders,
 } from '../services/api';
 
 type AudioContextWindow = Window & {
@@ -66,11 +68,13 @@ export const StaffDashboard: React.FC = () => {
   const [adminBusy, setAdminBusy] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [adminReminders, setAdminReminders] = useState<AdminReminder[]>([]);
 
   const previousChatIds = useRef<Set<string>>(new Set());
   const previousLatestMessages = useRef<Record<string, string>>({});
   const previousAssignments = useRef<Record<string, string | null>>({});
   const previousAppointmentIds = useRef<Set<string>>(new Set());
+  const previousReminderIds = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
   const isLoadingChatsRef = useRef(false);
 
@@ -78,9 +82,15 @@ export const StaffDashboard: React.FC = () => {
     if (!('Notification' in window)) return;
 
     if (Notification.permission === 'granted') {
-      new Notification('New message from patient', {
-        body: `${newChatCount} new WhatsApp conversation${newChatCount > 1 ? 's are' : ' is'} waiting in the queue.`,
-        tag: 'phadam-whatsapp-new-chat',
+      const body = `${newChatCount} new hospital update${newChatCount > 1 ? 's are' : ' is'} waiting in the queue.`;
+      void navigator.serviceWorker?.ready.then((registration) => {
+        void registration.showNotification('Phadam Hospital update', {
+          body,
+          tag: 'phadam-hospital-admin-update',
+          icon: '/pwa-192.png',
+        });
+      }).catch(() => {
+        new Notification('Phadam Hospital update', { body, tag: 'phadam-hospital-admin-update' });
       });
     }
   }, []);
@@ -265,6 +275,7 @@ export const StaffDashboard: React.FC = () => {
         fetchAppointments(),
         fetchPatients(),
       ]);
+      const reminders = await fetchAppointmentReminders();
 
       const previousAppointmentIdsValue = previousAppointmentIds.current;
       const hasNewAppointment = previousAppointmentIdsValue.size > 0 &&
@@ -274,6 +285,14 @@ export const StaffDashboard: React.FC = () => {
         playNotificationSound();
         notifyBrowser(1);
       }
+
+      const newAdminReminders = reminders.filter((reminder) => !previousReminderIds.current.has(reminder.id));
+      if (previousReminderIds.current.size > 0 && newAdminReminders.length > 0) {
+        playNotificationSound();
+        notifyBrowser(newAdminReminders.length);
+      }
+      previousReminderIds.current = new Set(reminders.map((reminder) => reminder.id));
+      setAdminReminders(reminders);
 
       previousAppointmentIds.current = new Set(nextAppointments.map((appointment) => appointment.id));
       setAppointments(nextAppointments);
@@ -374,6 +393,13 @@ export const StaffDashboard: React.FC = () => {
       window.clearInterval(intervalId);
     };
   }, [currentUser, loadChats, loadDashboardRecords]);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    void navigator.serviceWorker.register('/sw.js').catch((registrationError) => {
+      console.warn('Web notification worker unavailable:', registrationError);
+    });
+  }, []);
 
   const handleCreateUser = useCallback(async () => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
@@ -649,7 +675,7 @@ export const StaffDashboard: React.FC = () => {
 
   const renderMobileBottomNavigation = () => (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_35px_rgba(15,23,42,0.25)] backdrop-blur-xl md:hidden">
-      <div className="mx-auto grid max-w-md grid-cols-3 gap-2">
+      <div className="mx-auto grid max-w-md grid-cols-4 gap-2">
         <button
           type="button"
           onClick={() => handleTabChange('inbox')}
@@ -667,6 +693,19 @@ export const StaffDashboard: React.FC = () => {
               {chats.length > 99 ? '99+' : chats.length}
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('adminAppointments')}
+          className={`flex min-h-14 flex-col items-center justify-center rounded-2xl text-xs font-bold transition ${
+            activeTab === 'adminAppointments'
+              ? 'bg-gradient-to-br from-slate-700 to-cyan-700 text-white shadow-lg shadow-cyan-500/30'
+              : 'text-slate-400 hover:bg-white/10'
+          }`}
+        >
+          <span className="text-lg">🗂️</span>
+          <span>Follow-ups</span>
         </button>
 
         <button
@@ -928,6 +967,14 @@ export const StaffDashboard: React.FC = () => {
                 </div>
               </div>
             </section>
+          )}
+
+          {activeTab === 'adminAppointments' && (
+            <AdminAppointmentsPage
+              appointments={appointments}
+              reminders={adminReminders}
+              onChanged={loadDashboardRecords}
+            />
           )}
 
           {activeTab === 'admin' && currentUser?.role === 'SUPER_ADMIN' && (

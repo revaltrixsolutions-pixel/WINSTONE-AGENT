@@ -2,12 +2,23 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendWhatsAppMessage } from '../services/whatsappService';
 
+function parseSlotTime(value: unknown): Date | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function cleanPhone(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\D/g, '') : '';
+}
+
 export async function getAppointments(_req: Request, res: Response): Promise<Response> {
   const appointments = await prisma.appointment.findMany({
     include: {
       patient: {
         select: { id: true, fullName: true, phoneNumber: true },
       },
+      followUps: { orderBy: { createdAt: 'desc' } },
     },
     orderBy: { slotTime: 'asc' },
   });
@@ -85,4 +96,82 @@ export async function updateAppointmentStatus(req: Request, res: Response): Prom
   }
 
   return res.status(200).json({ success: true, appointment });
+}
+
+export async function createPatientWithAppointment(req: Request, res: Response): Promise<Response> {
+  const fullName = typeof req.body?.fullName === 'string' ? req.body.fullName.trim() : '';
+  const phoneNumber = cleanPhone(req.body?.phoneNumber);
+  const specialty = typeof req.body?.specialty === 'string' ? req.body.specialty.trim() : '';
+  const doctorName = typeof req.body?.doctorName === 'string' && req.body.doctorName.trim()
+    ? req.body.doctorName.trim()
+    : 'To be assigned';
+  const slotTime = parseSlotTime(req.body?.slotTime);
+
+  if (!fullName || phoneNumber.length < 7 || !specialty || !slotTime) {
+    return res.status(400).json({
+      success: false,
+      error: 'Full name, valid international phone number, service, and appointment date/time are required.',
+    });
+  }
+
+  const patient = await prisma.patient.upsert({
+    where: { phoneNumber },
+    update: { fullName },
+    create: { phoneNumber, fullName, chatStatus: 'BOT' },
+  });
+
+  const appointment = await prisma.appointment.create({
+    data: {
+      patientId: patient.id,
+      doctorName,
+      specialty,
+      servicePrice: typeof req.body?.servicePrice === 'string' ? req.body.servicePrice : 'KSh 0',
+      consultationFee: typeof req.body?.consultationFee === 'string' ? req.body.consultationFee : 'KSh 1,000',
+      slotTime,
+      status: 'CONFIRMED',
+    },
+    include: { patient: true },
+  });
+
+  return res.status(201).json({ success: true, patient, appointment });
+}
+
+export async function createAppointmentFollowUp(req: Request, res: Response): Promise<Response> {
+  const appointmentId = req.params.appointmentId?.trim();
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+
+  if (!appointmentId || !note) {
+    return res.status(400).json({ success: false, error: 'Appointment and follow-up note are required.' });
+  }
+
+  const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId } });
+  if (!appointment) {
+    return res.status(404).json({ success: false, error: 'Appointment not found.' });
+  }
+
+  const followUp = await prisma.appointmentFollowUp.create({
+    data: {
+      appointmentId,
+      authorId: req.user?.id || 'system',
+      authorName: req.user?.name || 'Hospital staff',
+      note,
+    },
+  });
+
+  return res.status(201).json({ success: true, followUp });
+}
+
+export async function getAppointmentReminders(_req: Request, res: Response): Promise<Response> {
+  const reminders = await prisma.reminderDelivery.findMany({
+    where: { recipientType: 'ADMIN' },
+    include: {
+      appointment: {
+        include: { patient: { select: { fullName: true, phoneNumber: true } } },
+      },
+    },
+    orderBy: { sentAt: 'desc' },
+    take: 50,
+  });
+
+  return res.status(200).json({ success: true, reminders });
 }

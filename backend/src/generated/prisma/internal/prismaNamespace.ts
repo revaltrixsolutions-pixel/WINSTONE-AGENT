@@ -399,6 +399,8 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 export const ModelName = {
   Patient: 'Patient',
   Appointment: 'Appointment',
+  AppointmentFollowUp: 'AppointmentFollowUp',
+  ReminderDelivery: 'ReminderDelivery',
   MessageLog: 'MessageLog',
   User: 'User'
 } as const
@@ -416,7 +418,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "patient" | "appointment" | "messageLog" | "user"
+    modelProps: "patient" | "appointment" | "appointmentFollowUp" | "reminderDelivery" | "messageLog" | "user"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -565,6 +567,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.AppointmentCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.AppointmentCountAggregateOutputType> | number
+        }
+      }
+    }
+    AppointmentFollowUp: {
+      payload: Prisma.$AppointmentFollowUpPayload<ExtArgs>
+      fields: Prisma.AppointmentFollowUpFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AppointmentFollowUpFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AppointmentFollowUpFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>
+        }
+        findFirst: {
+          args: Prisma.AppointmentFollowUpFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AppointmentFollowUpFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>
+        }
+        findMany: {
+          args: Prisma.AppointmentFollowUpFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>[]
+        }
+        create: {
+          args: Prisma.AppointmentFollowUpCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>
+        }
+        createMany: {
+          args: Prisma.AppointmentFollowUpCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AppointmentFollowUpCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>[]
+        }
+        delete: {
+          args: Prisma.AppointmentFollowUpDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>
+        }
+        update: {
+          args: Prisma.AppointmentFollowUpUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>
+        }
+        deleteMany: {
+          args: Prisma.AppointmentFollowUpDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AppointmentFollowUpUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AppointmentFollowUpUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>[]
+        }
+        upsert: {
+          args: Prisma.AppointmentFollowUpUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppointmentFollowUpPayload>
+        }
+        aggregate: {
+          args: Prisma.AppointmentFollowUpAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAppointmentFollowUp>
+        }
+        groupBy: {
+          args: Prisma.AppointmentFollowUpGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AppointmentFollowUpGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AppointmentFollowUpCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AppointmentFollowUpCountAggregateOutputType> | number
+        }
+      }
+    }
+    ReminderDelivery: {
+      payload: Prisma.$ReminderDeliveryPayload<ExtArgs>
+      fields: Prisma.ReminderDeliveryFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ReminderDeliveryFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ReminderDeliveryFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>
+        }
+        findFirst: {
+          args: Prisma.ReminderDeliveryFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ReminderDeliveryFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>
+        }
+        findMany: {
+          args: Prisma.ReminderDeliveryFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>[]
+        }
+        create: {
+          args: Prisma.ReminderDeliveryCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>
+        }
+        createMany: {
+          args: Prisma.ReminderDeliveryCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ReminderDeliveryCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>[]
+        }
+        delete: {
+          args: Prisma.ReminderDeliveryDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>
+        }
+        update: {
+          args: Prisma.ReminderDeliveryUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>
+        }
+        deleteMany: {
+          args: Prisma.ReminderDeliveryDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ReminderDeliveryUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ReminderDeliveryUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>[]
+        }
+        upsert: {
+          args: Prisma.ReminderDeliveryUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReminderDeliveryPayload>
+        }
+        aggregate: {
+          args: Prisma.ReminderDeliveryAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateReminderDelivery>
+        }
+        groupBy: {
+          args: Prisma.ReminderDeliveryGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ReminderDeliveryGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ReminderDeliveryCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ReminderDeliveryCountAggregateOutputType> | number
         }
       }
     }
@@ -782,6 +932,29 @@ export const AppointmentScalarFieldEnum = {
 } as const
 
 export type AppointmentScalarFieldEnum = (typeof AppointmentScalarFieldEnum)[keyof typeof AppointmentScalarFieldEnum]
+
+
+export const AppointmentFollowUpScalarFieldEnum = {
+  id: 'id',
+  appointmentId: 'appointmentId',
+  authorId: 'authorId',
+  authorName: 'authorName',
+  note: 'note',
+  createdAt: 'createdAt'
+} as const
+
+export type AppointmentFollowUpScalarFieldEnum = (typeof AppointmentFollowUpScalarFieldEnum)[keyof typeof AppointmentFollowUpScalarFieldEnum]
+
+
+export const ReminderDeliveryScalarFieldEnum = {
+  id: 'id',
+  appointmentId: 'appointmentId',
+  kind: 'kind',
+  recipientType: 'recipientType',
+  sentAt: 'sentAt'
+} as const
+
+export type ReminderDeliveryScalarFieldEnum = (typeof ReminderDeliveryScalarFieldEnum)[keyof typeof ReminderDeliveryScalarFieldEnum]
 
 
 export const MessageLogScalarFieldEnum = {
@@ -1041,6 +1214,8 @@ export type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaC
 export type GlobalOmitConfig = {
   patient?: Prisma.PatientOmit
   appointment?: Prisma.AppointmentOmit
+  appointmentFollowUp?: Prisma.AppointmentFollowUpOmit
+  reminderDelivery?: Prisma.ReminderDeliveryOmit
   messageLog?: Prisma.MessageLogOmit
   user?: Prisma.UserOmit
 }
