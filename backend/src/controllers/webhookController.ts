@@ -220,6 +220,8 @@ async function getLastAgentInteractionHours(
 const AGENT_INACTIVITY_TIMEOUT_MINUTES = 10;
 
 function isAppointmentLookupRequest(message: string): boolean {
+  if (isNewBookingRequest(message)) return false;
+
   return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
     /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(message) ||
     /\b(appointment history|my appointment history|show my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message) ||
@@ -227,6 +229,13 @@ function isAppointmentLookupRequest(message: string): boolean {
     /\b(available appointment|available appointments|next available slot|available slots|next available appointment)\b/i.test(message) ||
     /\b(when|where|what time)\b.*\b(appointment|visit|doctor|clinic)\b/i.test(message) ||
     /\b(scheduled|upcoming|confirmed)\b.*\b(appointment|visit|booking)\b/i.test(message);
+}
+
+function isNewBookingRequest(message: string): boolean {
+  return /\b(?:book|make|do|schedule|reserve|arrange|set\s+up)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message) ||
+    /\b(?:can|could|would)\s+i\s+(?:book|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
+    /\b(?:help|guide|assist)\s+me\s+(?:to\s+)?(?:book|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
+    /\b(?:i|we)\s+(?:need|want|would\s+like)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message);
 }
 
 function isAppointmentHistoryRequest(message: string): boolean {
@@ -335,6 +344,9 @@ async function handleAppointmentReschedule(
   }
 
   const updatedDate = parseAppointmentDate(parsed.date, parsed.time);
+  if (updatedDate.getTime() <= Date.now()) {
+    return `${patientName}, that time has already passed. Please choose a future time for your appointment.`;
+  }
   const updatedDepartment = parsed.department || existingAppointment.specialty;
 
   const updatedAppointment = await prisma.appointment.update({
@@ -355,9 +367,9 @@ function parseAppointmentDate(dateText: string, timeText: string): Date {
   const normalizedDate = dateText.toLowerCase();
   const normalizedTime = timeText.toLowerCase();
 
-  const base = new Date();
-  const dateOnly = new Date(base);
-  dateOnly.setHours(0, 0, 0, 0);
+  const kenyaNow = getKenyaTimeParts();
+  const [year, month, day] = kenyaNow.date.split('-').map(Number);
+  const dateOnly = new Date(Date.UTC(year, month - 1, day));
 
   const timeMatch = normalizedTime.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
   const parsedHour = timeMatch ? Number(timeMatch[1]) : 9;
@@ -373,40 +385,70 @@ function parseAppointmentDate(dateText: string, timeText: string): Date {
   }
 
   if (normalizedDate.includes('today')) {
-    dateOnly.setHours(hour, parsedMinute, 0, 0);
-    return dateOnly;
+    return new Date(Date.UTC(year, month - 1, day, hour - 3, parsedMinute));
   }
 
   if (normalizedDate.includes('tomorrow')) {
-    dateOnly.setDate(dateOnly.getDate() + 1);
-    dateOnly.setHours(hour, parsedMinute, 0, 0);
-    return dateOnly;
+    dateOnly.setUTCDate(dateOnly.getUTCDate() + 1);
+    return new Date(Date.UTC(dateOnly.getUTCFullYear(), dateOnly.getUTCMonth(), dateOnly.getUTCDate(), hour - 3, parsedMinute));
   }
 
   const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const weekdayIndex = weekdays.findIndex((day) => normalizedDate.includes(day));
   if (weekdayIndex >= 0) {
-    const currentIndex = dateOnly.getDay();
+    const currentIndex = dateOnly.getUTCDay();
     const daysUntil = (weekdayIndex - currentIndex + 7) % 7 || 7;
-    dateOnly.setDate(dateOnly.getDate() + daysUntil);
-    dateOnly.setHours(hour, parsedMinute, 0, 0);
-    return dateOnly;
+    dateOnly.setUTCDate(dateOnly.getUTCDate() + daysUntil);
+    return new Date(Date.UTC(dateOnly.getUTCFullYear(), dateOnly.getUTCMonth(), dateOnly.getUTCDate(), hour - 3, parsedMinute));
   }
 
   if (normalizedDate.includes('next week')) {
-    dateOnly.setDate(dateOnly.getDate() + 7);
-    dateOnly.setHours(hour, parsedMinute, 0, 0);
-    return dateOnly;
+    dateOnly.setUTCDate(dateOnly.getUTCDate() + 7);
+    return new Date(Date.UTC(dateOnly.getUTCFullYear(), dateOnly.getUTCMonth(), dateOnly.getUTCDate(), hour - 3, parsedMinute));
   }
 
   const directDate = new Date(normalizedDate);
   if (!Number.isNaN(directDate.getTime())) {
-    directDate.setHours(hour, parsedMinute, 0, 0);
-    return directDate;
+    return new Date(Date.UTC(directDate.getFullYear(), directDate.getMonth(), directDate.getDate(), hour - 3, parsedMinute));
   }
 
-  dateOnly.setHours(hour, parsedMinute, 0, 0);
-  return dateOnly;
+  return new Date(Date.UTC(year, month - 1, day, hour - 3, parsedMinute));
+}
+
+const APPOINTMENT_TIME_SLOTS = ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'];
+
+function getKenyaTimeParts(date = new Date()): { date: string; minutes: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Nairobi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    minutes: Number(values.hour) * 60 + Number(values.minute),
+  };
+}
+
+function getAvailableTimeSlots(dateText?: string): string[] {
+  if (!dateText || !dateText.toLowerCase().includes('today')) {
+    return APPOINTMENT_TIME_SLOTS;
+  }
+
+  const current = getKenyaTimeParts();
+  return APPOINTMENT_TIME_SLOTS.filter((slot) => {
+    const match = slot.match(/^(\d{2}):(\d{2})\s+(AM|PM)$/);
+    if (!match) return false;
+    let hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (match[3] === 'PM' && hour < 12) hour += 12;
+    if (match[3] === 'AM' && hour === 12) hour = 0;
+    return hour * 60 + minute > current.minutes;
+  });
 }
 
 function buildAppointmentInteractive(
@@ -471,14 +513,33 @@ function buildAppointmentInteractive(
   }
 
   if (!appointmentState.time) {
+    const availableTimeSlots = getAvailableTimeSlots(appointmentState.date);
+
+    if (availableTimeSlots.length === 0) {
+      return {
+        type: 'list',
+        body: { text: `${prompt} There are no remaining appointment times today. Please choose another date.` },
+        action: {
+          button: 'Choose another date',
+          sections: [{
+            title: 'Appointment date',
+            rows: [
+              { id: 'date_tomorrow', title: 'Tomorrow' },
+              { id: 'date_next_week', title: 'Next week' },
+            ],
+          }],
+        },
+      };
+    }
+
     return {
       type: 'list',
       body: { text: prompt },
       action: {
         button: 'Choose a time',
-        sections: [{
+          sections: [{
           title: 'Available times',
-          rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
+          rows: availableTimeSlots.map((time) => ({
             id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
             title: time,
           })),
@@ -844,6 +905,32 @@ async function sendBotReply(
     }
 
     const slotTime = parseAppointmentDate(date, time);
+
+    if (slotTime.getTime() <= Date.now()) {
+      const pastTimeReply = `${patientName}, that appointment time has already passed. Please choose a future time so I can complete the booking.`;
+
+      try {
+        await sendWhatsAppMessage({
+          recipientPhone: patient.phoneNumber,
+          messageText: pastTimeReply,
+        });
+        await prisma.messageLog.create({
+          data: {
+            patientId: patient.id,
+            sender: 'BOT',
+            body: pastTimeReply,
+            timestamp: new Date(),
+          },
+        });
+      } catch (error) {
+        console.error('[WhatsApp Past Appointment Reply Failed]', {
+          patientId: patient.id,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+
+      return;
+    }
 
     try {
       const appointment = await prisma.appointment.create({
