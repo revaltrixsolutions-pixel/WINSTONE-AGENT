@@ -522,11 +522,12 @@ function buildAppointmentInteractive(
       id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       title: service.slice(0, 24),
     }));
+    const serviceList = appointmentServiceOptions.map((service, index) => `${index + 1}. ${service}`).join('\n');
 
     return {
       type: 'list',
       body: {
-        text: `${prompt} Please choose the department you want from the menu below.`,
+        text: `${prompt}\n\nAll hospital services:\n${serviceList}\n\nYou can choose from the first options below or type any service name exactly.`,
       },
       action: {
         button: 'Choose a service',

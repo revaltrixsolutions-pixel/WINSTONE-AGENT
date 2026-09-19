@@ -593,6 +593,13 @@ const DEPARTMENTS: Array<{ name: string; patterns: RegExp[] }> = [
 ];
 
 function extractDepartment(message: string): string | undefined {
+  const normalizedMessage = message.trim().toLowerCase();
+  const exactService = appointmentServiceOptions.find((service) =>
+    normalizedMessage.includes(service.toLowerCase()),
+  );
+
+  if (exactService) return exactService;
+
   for (const department of DEPARTMENTS) {
     if (department.patterns.some((pattern) => pattern.test(message))) {
       return department.name;
