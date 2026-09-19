@@ -230,7 +230,8 @@ function isAppointmentLookupRequest(message: string): boolean {
 }
 
 function isAppointmentHistoryRequest(message: string): boolean {
-  return /\b(show my appointment history|appointment history|my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message);
+  return /\b(?:can i get|show|view|check|what is)\s+(?:my\s+)?(?:appointment|booking)\s+(?:history|records?)\b/i.test(message) ||
+    /\b(?:show my appointment history|appointment history|my appointment history|my booking history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message);
 }
 
 function isRescheduleRequest(message: string): boolean {

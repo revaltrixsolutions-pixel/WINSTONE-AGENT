@@ -597,6 +597,33 @@ export async function createAppointmentFollowUp(
   });
 }
 
+export async function sendAppointmentFollowUp(
+  appointmentId: string,
+  note: string,
+): Promise<{ success: boolean; followUp?: AppointmentFollowUp; error?: string }> {
+  return request(`/api/dashboard/appointments/${encodeURIComponent(appointmentId)}/follow-ups/send`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function fetchHospitalPhoneNumber(): Promise<string> {
+  const response = await request<{ success: boolean; hospitalPhoneNumber?: string; error?: string }>(
+    '/api/dashboard/hospital-phone',
+    { method: 'GET' },
+  );
+
+  if (!response.success) throw new Error(response.error || 'Unable to load hospital phone number.');
+  return response.hospitalPhoneNumber || '';
+}
+
+export async function saveHospitalPhoneNumber(phoneNumber: string): Promise<{ success: boolean; hospitalPhoneNumber?: string; error?: string }> {
+  return request<{ success: boolean; hospitalPhoneNumber?: string; error?: string }>('/api/dashboard/hospital-phone', {
+    method: 'POST',
+    body: JSON.stringify({ hospitalPhoneNumber: phoneNumber }),
+  });
+}
+
 export async function fetchAppointmentReminders(): Promise<AdminReminder[]> {
   const response = await request<{ success: boolean; reminders?: AdminReminder[]; error?: string }>(
     '/api/dashboard/reminders',

@@ -859,7 +859,11 @@ export function generateAppointmentCollectionPrompt(
 
   return (
     `Sure, ${patientName}. I can help you book an appointment. ` +
-    `Please tell me the department, preferred date, and preferred time — for example: "Dental appointment on Friday at 2pm". ` +
+    `Please send these three details:\n` +
+    `1. Department or clinic\n` +
+    `2. Preferred date\n` +
+    `3. Preferred time\n\n` +
+    `For example: "Dental appointment on Friday at 2pm". ` +
     `I’ll guide you through the booking step by step, and once a department is selected I’ll confirm the standard fee before we continue.`
   );
 }
@@ -1083,6 +1087,11 @@ function isBookingIntent(message: string): boolean {
   );
 }
 
+function isAppointmentHistoryRequest(message: string): boolean {
+  return /\b(?:can i get|show|view|check|what is)\s+(?:my\s+)?(?:appointment|booking)\s+(?:history|records?)\b/i.test(message) ||
+    /\b(?:my appointment history|appointment history|my booking history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message);
+}
+
 function isAffirmative(message: string): boolean {
   const text = message.trim().toLowerCase();
 
@@ -1245,6 +1254,15 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     };
   }
 
+  if (isAppointmentHistoryRequest(message)) {
+    return {
+      reply:
+        `${name}, I can look up your appointment history. In WhatsApp, I’ll show your recent records and their status. ` +
+        `You can then keep an appointment, reschedule it, book another one, or speak with staff.`,
+      state: { ...state, stage: "menu" },
+    };
+  }
+
   // Medical symptom / advice questions are redirected to human clinical
   // staff rather than answered here. Skipped while the patient is already
   // mid-way through booking an appointment, so a stray word like "pain"
@@ -1366,7 +1384,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     };
   }
 
-  if (/\b(show my appointment history|appointment history|my appointments|upcoming appointments|scheduled appointments|my booking history)\b/i.test(message)) {
+  if (isAppointmentHistoryRequest(message)) {
     return {
       reply:
         `${name}, I can look up your appointment history. Please tell me whether you want your upcoming bookings, recent visits, or a reschedule for one of them.`,

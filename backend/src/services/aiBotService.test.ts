@@ -205,6 +205,32 @@ test('understands natural booking phrases for appointments', () => {
   assert.match(canBookReply, /appointment|book|department|date|time/i);
 });
 
+test('shows the booking steps for a short booking request', () => {
+  const reply = generateBotReply({
+    patientName: 'Revaltrix Solutions',
+    message: 'can I book appointment',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /book an appointment/i);
+  assert.match(reply, /department/i);
+  assert.match(reply, /date/i);
+  assert.match(reply, /time/i);
+});
+
+test('recognizes requests to get appointment history', () => {
+  const reply = generateBotReply({
+    patientName: 'Revaltrix Solutions',
+    message: 'can I get my appointment history',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /appointment history/i);
+  assert.doesNotMatch(reply, /which department|preferred date/i);
+});
+
 test('handles real-world patient phrases like confirmation, doctor availability, and late arrival', () => {
   const confirmReply = generateBotReply({
     patientName: 'Mary',

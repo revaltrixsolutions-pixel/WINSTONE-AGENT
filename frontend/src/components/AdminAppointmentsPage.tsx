@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { AdminReminder, Appointment } from '../services/api';
 import {
   createAppointmentFollowUp,
   createPatientWithAppointment,
+  fetchHospitalPhoneNumber,
+  saveHospitalPhoneNumber,
+  sendAppointmentFollowUp,
 } from '../services/api';
 
 type AdminAppointmentsPageProps = {
@@ -31,6 +34,9 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [followUpNote, setFollowUpNote] = useState('');
   const [followUpBusy, setFollowUpBusy] = useState(false);
+  const [hospitalPhoneNumber, setHospitalPhoneNumber] = useState('');
+  const [hospitalPhoneInput, setHospitalPhoneInput] = useState('');
+  const [hospitalPhoneBusy, setHospitalPhoneBusy] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -44,6 +50,63 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
   const orderedAppointments = useMemo(() => (
     [...appointments].sort((a, b) => new Date(a.slotTime).getTime() - new Date(b.slotTime).getTime())
   ), [appointments]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const value = await fetchHospitalPhoneNumber();
+        setHospitalPhoneNumber(value);
+        setHospitalPhoneInput(value);
+      } catch {
+        setHospitalPhoneNumber('');
+        setHospitalPhoneInput('');
+      }
+    })();
+  }, []);
+
+  const submitHospitalPhone = async () => {
+    if (!hospitalPhoneInput.trim()) {
+      setMessage('Hospital phone number is required.');
+      return;
+    }
+
+    setHospitalPhoneBusy(true);
+    setMessage(null);
+
+    try {
+      const response = await saveHospitalPhoneNumber(hospitalPhoneInput.trim());
+      if (!response.success) throw new Error(response.error || 'Unable to save hospital phone number.');
+      setHospitalPhoneNumber(response.hospitalPhoneNumber || hospitalPhoneInput.trim());
+      setHospitalPhoneInput(response.hospitalPhoneNumber || hospitalPhoneInput.trim());
+      setMessage('Hospital phone number saved successfully.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to save hospital phone number.');
+    } finally {
+      setHospitalPhoneBusy(false);
+    }
+  };
+
+  const canSendFollowUp = (appointment: Appointment) => {
+    const hoursUntilVisit = (new Date(appointment.slotTime).getTime() - Date.now()) / (1000 * 60 * 60);
+    return hoursUntilVisit <= 3 && hoursUntilVisit >= -1;
+  };
+
+  const makeCall = (appointment: Appointment) => {
+    const patientPhone = appointment.patientPhone || '';
+    const cleanHospitalPhone = hospitalPhoneNumber.replace(/\D/g, '');
+
+    if (!cleanHospitalPhone) {
+      setMessage('Please set the hospital phone number first in Super Admin settings.');
+      return;
+    }
+
+    const telLink = `tel:${cleanHospitalPhone}`;
+    window.location.href = telLink;
+
+    if (patientPhone) {
+      setMessage(`Calling hospital line ${cleanHospitalPhone}. The patient phone is ${patientPhone}.`);
+    }
+  };
 
   const submitPatient = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -66,17 +129,20 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
     }
   };
 
-  const submitFollowUp = async (appointmentId: string) => {
+  const submitFollowUp = async (appointmentId: string, mode: 'save' | 'send') => {
     if (!followUpNote.trim()) return;
     setFollowUpBusy(true);
     setMessage(null);
 
     try {
-      const response = await createAppointmentFollowUp(appointmentId, followUpNote.trim());
+      const response = mode === 'send'
+        ? await sendAppointmentFollowUp(appointmentId, followUpNote.trim())
+        : await createAppointmentFollowUp(appointmentId, followUpNote.trim());
+
       if (!response.success) throw new Error(response.error || 'Unable to save follow-up.');
       setFollowUpNote('');
       setSelectedAppointmentId(null);
-      setMessage('Follow-up saved for the whole admin team.');
+      setMessage(mode === 'send' ? 'Follow-up sent immediately to the patient.' : 'Follow-up saved for the whole admin team.');
       await onChanged();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to save follow-up.');
@@ -139,6 +205,16 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
         {message && <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-bold text-cyan-900">{message}</div>}
 
         <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-xl font-black text-slate-900">Hospital calling line</h3>
+            <p className="mt-1 text-sm text-slate-500">Set the hospital number used for outbound calls from the admin dashboard.</p>
+            <div className="mt-5 space-y-4">
+              <input value={hospitalPhoneInput} onChange={(e) => setHospitalPhoneInput(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-cyan-500" placeholder="e.g. +254 712 345 678" />
+              <button type="button" disabled={hospitalPhoneBusy} onClick={() => void submitHospitalPhone()} className="w-full rounded-2xl bg-violet-700 px-4 py-3 text-sm font-black text-white transition hover:bg-violet-800 disabled:opacity-50">{hospitalPhoneBusy ? 'Saving...' : 'Save hospital phone number'}</button>
+              {hospitalPhoneNumber && <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">Current hospital line: {hospitalPhoneNumber}</div>}
+            </div>
+          </div>
+
           <form onSubmit={submitPatient} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
             <h3 className="text-xl font-black text-slate-900">Add patient with appointment</h3>
             <p className="mt-1 text-sm text-slate-500">The patient is upserted by phone number and the appointment is stored immediately.</p>
@@ -167,10 +243,13 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
                 return <article key={appointment.id} className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div><p className="font-black text-slate-900">{appointment.patientName || 'Patient'} <span className="font-normal text-slate-500">· {appointment.patientPhone || 'No phone'}</span></p><p className="mt-1 text-sm font-bold text-cyan-800">{appointment.specialty}</p><p className="text-xs text-slate-500">{new Date(appointment.slotTime).toLocaleString()} · {appointment.status}</p></div>
-                    <button type="button" onClick={() => setSelectedAppointmentId(isSelected ? null : appointment.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">{isSelected ? 'Close' : 'Add follow-up'}</button>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => makeCall(appointment)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Call</button>
+                      <button type="button" onClick={() => setSelectedAppointmentId(isSelected ? null : appointment.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">{isSelected ? 'Close' : 'Add follow-up'}</button>
+                    </div>
                   </div>
                   {(appointment.followUps || []).map((followUp) => <div key={followUp.id} className="mt-3 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-bold text-slate-700">{followUp.authorName} · {new Date(followUp.createdAt).toLocaleString()}</p><p className="mt-1 text-slate-600">{followUp.note}</p></div>)}
-                  {isSelected && <div className="mt-4 flex gap-2"><input value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="What did you follow up on?" /><button type="button" disabled={followUpBusy || !followUpNote.trim()} onClick={() => void submitFollowUp(appointment.id)} className="rounded-xl bg-cyan-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">Save</button></div>}
+                  {isSelected && <div className="mt-4 space-y-2"><div className="flex gap-2"><input value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="What did you follow up on?" /></div><div className="flex gap-2"><button type="button" disabled={followUpBusy || !followUpNote.trim()} onClick={() => void submitFollowUp(appointment.id, 'save')} className="rounded-xl bg-slate-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">Save note</button>{canSendFollowUp(appointment) ? <button type="button" disabled={followUpBusy || !followUpNote.trim()} onClick={() => void submitFollowUp(appointment.id, 'send')} className="rounded-xl bg-cyan-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">Send text now</button> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-bold text-slate-500">Text sends only within 3 hrs</span>}</div></div>}
                 </article>;
               })}
             </div>

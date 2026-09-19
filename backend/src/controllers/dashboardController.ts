@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { getHospitalPhoneNumber, setHospitalPhoneNumber } from '../lib/hospitalSettings';
 import { sendWhatsAppMessage } from '../services/whatsappService';
 
 function parseSlotTime(value: unknown): Date | null {
@@ -144,7 +145,7 @@ export async function createAppointmentFollowUp(req: Request, res: Response): Pr
     return res.status(400).json({ success: false, error: 'Appointment and follow-up note are required.' });
   }
 
-  const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId } });
+  const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, include: { patient: true } });
   if (!appointment) {
     return res.status(404).json({ success: false, error: 'Appointment not found.' });
   }
@@ -158,7 +159,67 @@ export async function createAppointmentFollowUp(req: Request, res: Response): Pr
     },
   });
 
+  return res.status(201).json({ success: true, followUp, appointment });
+}
+
+export async function triggerAppointmentFollowUp(req: Request, res: Response): Promise<Response> {
+  const appointmentId = req.params.appointmentId?.trim();
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+
+  if (!appointmentId || !note) {
+    return res.status(400).json({ success: false, error: 'Appointment and follow-up message are required.' });
+  }
+
+  const appointment = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    include: { patient: true },
+  });
+
+  if (!appointment) {
+    return res.status(404).json({ success: false, error: 'Appointment not found.' });
+  }
+
+  const hoursUntilVisit = (new Date(appointment.slotTime).getTime() - Date.now()) / (1000 * 60 * 60);
+  if (hoursUntilVisit > 3 || hoursUntilVisit < -1) {
+    return res.status(400).json({ success: false, error: 'Follow-up messages are only allowed within 3 hours before the patient appointment time.' });
+  }
+
+  const followUp = await prisma.appointmentFollowUp.create({
+    data: {
+      appointmentId,
+      authorId: req.user?.id || 'system',
+      authorName: req.user?.name || 'Hospital staff',
+      note,
+    },
+  });
+
+  if (appointment.patient.phoneNumber) {
+    const message = `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. We are following up on your appointment.\n\n${note}`;
+    await sendWhatsAppMessage({
+      recipientPhone: appointment.patient.phoneNumber,
+      messageText: message,
+    });
+  }
+
   return res.status(201).json({ success: true, followUp });
+}
+
+export async function getHospitalPhoneSetting(_req: Request, res: Response): Promise<Response> {
+  const hospitalPhone = await getHospitalPhoneNumber();
+  return res.status(200).json({ success: true, hospitalPhoneNumber: hospitalPhone });
+}
+
+export async function setHospitalPhoneSetting(req: Request, res: Response): Promise<Response> {
+  const hospitalPhoneNumber = typeof req.body?.hospitalPhoneNumber === 'string'
+    ? req.body.hospitalPhoneNumber.trim()
+    : '';
+
+  if (!hospitalPhoneNumber) {
+    return res.status(400).json({ success: false, error: 'Hospital phone number is required.' });
+  }
+
+  const saved = await setHospitalPhoneNumber(hospitalPhoneNumber);
+  return res.status(200).json({ success: true, hospitalPhoneNumber: saved });
 }
 
 export async function getAppointmentReminders(_req: Request, res: Response): Promise<Response> {
