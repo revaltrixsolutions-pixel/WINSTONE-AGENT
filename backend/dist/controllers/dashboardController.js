@@ -5,8 +5,12 @@ exports.getPatients = getPatients;
 exports.updateAppointmentStatus = updateAppointmentStatus;
 exports.createPatientWithAppointment = createPatientWithAppointment;
 exports.createAppointmentFollowUp = createAppointmentFollowUp;
+exports.triggerAppointmentFollowUp = triggerAppointmentFollowUp;
+exports.getHospitalPhoneSetting = getHospitalPhoneSetting;
+exports.setHospitalPhoneSetting = setHospitalPhoneSetting;
 exports.getAppointmentReminders = getAppointmentReminders;
 const prisma_1 = require("../lib/prisma");
+const hospitalSettings_1 = require("../lib/hospitalSettings");
 const whatsappService_1 = require("../services/whatsappService");
 function parseSlotTime(value) {
     if (typeof value !== 'string' || !value.trim())
@@ -78,10 +82,11 @@ async function updateAppointmentStatus(req, res) {
         const confirmation = [
             '🏥 *Phadam Hospital Appointment Confirmed*',
             '',
+            `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. Your appointment is confirmed.`,
+            '',
             `Service: ${appointment.specialty}`,
             `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
             `Time: ${appointment.slotTime.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', timeStyle: 'short' })}`,
-            `Consultation fee: ${appointment.consultationFee}`,
             `Reference: ${appointment.id.slice(0, 8)}`,
             '',
             'Reply here if you need help or need to reschedule.',
@@ -89,6 +94,23 @@ async function updateAppointmentStatus(req, res) {
         await (0, whatsappService_1.sendWhatsAppMessage)({
             recipientPhone: appointment.patient.phoneNumber,
             messageText: confirmation,
+        });
+    }
+    if (status === 'CANCELLED' && appointment.patient.phoneNumber) {
+        const cancellation = [
+            'Hello ' + (appointment.patient.fullName || 'Patient') + ', this is Phadam Hospital. We are following up on your appointment.',
+            '',
+            'Your appointment has been cancelled.',
+            `Service: ${appointment.specialty}`,
+            `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
+            `Time: ${appointment.slotTime.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', timeStyle: 'short' })}`,
+            `Reference: ${appointment.id.slice(0, 8)}`,
+            '',
+            'Reply here if you would like help booking a new appointment.',
+        ].join('\n');
+        await (0, whatsappService_1.sendWhatsAppMessage)({
+            recipientPhone: appointment.patient.phoneNumber,
+            messageText: cancellation,
         });
     }
     return res.status(200).json({ success: true, appointment });
@@ -132,7 +154,7 @@ async function createAppointmentFollowUp(req, res) {
     if (!appointmentId || !note) {
         return res.status(400).json({ success: false, error: 'Appointment and follow-up note are required.' });
     }
-    const appointment = await prisma_1.prisma.appointment.findUnique({ where: { id: appointmentId } });
+    const appointment = await prisma_1.prisma.appointment.findUnique({ where: { id: appointmentId }, include: { patient: true } });
     if (!appointment) {
         return res.status(404).json({ success: false, error: 'Appointment not found.' });
     }
@@ -144,7 +166,64 @@ async function createAppointmentFollowUp(req, res) {
             note,
         },
     });
+    return res.status(201).json({ success: true, followUp, appointment });
+}
+async function triggerAppointmentFollowUp(req, res) {
+    const appointmentId = req.params.appointmentId?.trim();
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    if (!appointmentId || !note) {
+        return res.status(400).json({ success: false, error: 'Appointment and follow-up message are required.' });
+    }
+    const appointment = await prisma_1.prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { patient: true },
+    });
+    if (!appointment) {
+        return res.status(404).json({ success: false, error: 'Appointment not found.' });
+    }
+    const hoursUntilVisit = (new Date(appointment.slotTime).getTime() - Date.now()) / (1000 * 60 * 60);
+    if (hoursUntilVisit > 3 || hoursUntilVisit < -1) {
+        return res.status(400).json({ success: false, error: 'Follow-up messages are only allowed within 3 hours before the patient appointment time.' });
+    }
+    const followUp = await prisma_1.prisma.appointmentFollowUp.create({
+        data: {
+            appointmentId,
+            authorId: req.user?.id || 'system',
+            authorName: req.user?.name || 'Hospital staff',
+            note,
+        },
+    });
+    if (appointment.patient.phoneNumber) {
+        const message = [
+            `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. We are following up on your appointment.`,
+            '',
+            `Appointment reference: ${appointment.id.slice(0, 8)}`,
+            `Service: ${appointment.specialty}`,
+            `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
+            `Time: ${appointment.slotTime.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', timeStyle: 'short' })}`,
+            '',
+            note,
+        ].join('\n');
+        await (0, whatsappService_1.sendWhatsAppMessage)({
+            recipientPhone: appointment.patient.phoneNumber,
+            messageText: message,
+        });
+    }
     return res.status(201).json({ success: true, followUp });
+}
+async function getHospitalPhoneSetting(_req, res) {
+    const hospitalPhone = await (0, hospitalSettings_1.getHospitalPhoneNumber)();
+    return res.status(200).json({ success: true, hospitalPhoneNumber: hospitalPhone });
+}
+async function setHospitalPhoneSetting(req, res) {
+    const hospitalPhoneNumber = typeof req.body?.hospitalPhoneNumber === 'string'
+        ? req.body.hospitalPhoneNumber.trim()
+        : '';
+    if (!hospitalPhoneNumber) {
+        return res.status(400).json({ success: false, error: 'Hospital phone number is required.' });
+    }
+    const saved = await (0, hospitalSettings_1.setHospitalPhoneNumber)(hospitalPhoneNumber);
+    return res.status(200).json({ success: true, hospitalPhoneNumber: saved });
 }
 async function getAppointmentReminders(_req, res) {
     const reminders = await prisma_1.prisma.reminderDelivery.findMany({

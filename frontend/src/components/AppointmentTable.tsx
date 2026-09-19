@@ -87,12 +87,14 @@ function formatDateTime(value: string) {
 
   return {
     date: date.toLocaleDateString('en-KE', {
+      timeZone: 'Africa/Nairobi',
       weekday: 'short',
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     }),
     time: date.toLocaleTimeString('en-KE', {
+      timeZone: 'Africa/Nairobi',
       hour: '2-digit',
       minute: '2-digit',
     }),
@@ -321,6 +323,7 @@ export const AppointmentTable: React.FC<
                 <AppointmentCard
                   key={appointment.id}
                   appointment={appointment}
+                  onStatusChange={onStatusChange}
                 />
               ))}
             </div>
@@ -334,6 +337,7 @@ export const AppointmentTable: React.FC<
                       <th className="px-5 py-4 font-black">
                         Patient
                       </th>
+                      <th className="px-5 py-4 font-black">Reference</th>
                       <th className="px-5 py-4 font-black">
                         Specialty
                       </th>
@@ -343,11 +347,9 @@ export const AppointmentTable: React.FC<
                       <th className="px-5 py-4 font-black">
                         Appointment
                       </th>
+                      <th className="px-5 py-4 font-black">Scheduled</th>
                       <th className="px-5 py-4 font-black">
                         Status
-                      </th>
-                      <th className="px-5 py-4 font-black">
-                        Fees
                       </th>
                       <th className="px-5 py-4 font-black">Action</th>
                     </tr>
@@ -431,6 +433,10 @@ const AppointmentRow: React.FC<AppointmentRowProps> = ({
         </div>
       </td>
 
+      <td className="px-5 py-4 font-mono text-xs text-slate-600">
+        {appointment.id.slice(0, 8)}
+      </td>
+
       <td className="px-5 py-4 font-medium text-slate-600">
         {appointment.specialty || 'General consultation'}
       </td>
@@ -448,28 +454,22 @@ const AppointmentRow: React.FC<AppointmentRowProps> = ({
         </p>
       </td>
 
+      <td className="px-5 py-4 text-xs text-slate-600">
+        {formatDateTime(appointment.createdAt || appointment.slotTime).date}
+        <p className="mt-1 text-violet-600">{formatDateTime(appointment.createdAt || appointment.slotTime).time}</p>
+      </td>
+
       <td className="px-5 py-4">
         <StatusBadge
           status={appointment.status}
         />
       </td>
 
-      <td className="px-5 py-4 text-xs text-slate-600">
-        <p>{appointment.servicePrice || 'KSh 0'}</p>
-        <p className="mt-1">Consultation: {appointment.consultationFee || 'KSh 1,000'}</p>
-      </td>
       <td className="px-5 py-4">
-        {appointment.status.toUpperCase() === 'PENDING' && onStatusChange ? (
-          <button
-            type="button"
-            onClick={() => void onStatusChange(appointment.id, 'CONFIRMED')}
-            className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700"
-          >
-            Confirm
-          </button>
-        ) : (
-          <span className="text-xs text-slate-400">No action</span>
-        )}
+        {onStatusChange ? <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={appointment.status.toUpperCase() === 'CONFIRMED'} onClick={() => void onStatusChange(appointment.id, 'CONFIRMED')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Confirm</button>
+          <button type="button" disabled={appointment.status.toUpperCase() === 'CANCELLED'} onClick={() => void onStatusChange(appointment.id, 'CANCELLED')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40">Cancel</button>
+        </div> : <span className="text-xs text-slate-400">No action</span>}
       </td>
     </tr>
   );
@@ -477,10 +477,12 @@ const AppointmentRow: React.FC<AppointmentRowProps> = ({
 
 type AppointmentCardProps = {
   appointment: Appointment;
+  onStatusChange?: (appointmentId: string, status: string) => void | Promise<void>;
 };
 
 const AppointmentCard: React.FC<AppointmentCardProps> = ({
   appointment,
+  onStatusChange,
 }) => {
   const dateTime = formatDateTime(appointment.slotTime);
 
@@ -506,6 +508,8 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
+        <InfoItem label="Reference" value={appointment.id.slice(0, 8)} icon="🔖" />
+        <InfoItem label="Booked" value={formatDateTime(appointment.createdAt || appointment.slotTime).date + ' ' + formatDateTime(appointment.createdAt || appointment.slotTime).time} icon="🕒" />
         <InfoItem
           label="Specialty"
           value={
@@ -531,6 +535,10 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
           value={dateTime.time || 'Not available'}
           icon="⏰"
         />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" disabled={!onStatusChange || appointment.status.toUpperCase() === 'CONFIRMED'} onClick={() => onStatusChange?.(appointment.id, 'CONFIRMED')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Confirm</button>
+        <button type="button" disabled={!onStatusChange || appointment.status.toUpperCase() === 'CANCELLED'} onClick={() => onStatusChange?.(appointment.id, 'CANCELLED')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Cancel</button>
       </div>
     </article>
   );

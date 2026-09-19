@@ -81,10 +81,11 @@ export async function updateAppointmentStatus(req: Request, res: Response): Prom
     const confirmation = [
       '🏥 *Phadam Hospital Appointment Confirmed*',
       '',
+      `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. Your appointment is confirmed.`,
+      '',
       `Service: ${appointment.specialty}`,
       `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
       `Time: ${appointment.slotTime.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', timeStyle: 'short' })}`,
-      `Consultation fee: ${appointment.consultationFee}`,
       `Reference: ${appointment.id.slice(0, 8)}`,
       '',
       'Reply here if you need help or need to reschedule.',
@@ -93,6 +94,25 @@ export async function updateAppointmentStatus(req: Request, res: Response): Prom
     await sendWhatsAppMessage({
       recipientPhone: appointment.patient.phoneNumber,
       messageText: confirmation,
+    });
+  }
+
+  if (status === 'CANCELLED' && appointment.patient.phoneNumber) {
+    const cancellation = [
+      'Hello ' + (appointment.patient.fullName || 'Patient') + ', this is Phadam Hospital. We are following up on your appointment.',
+      '',
+      'Your appointment has been cancelled.',
+      `Service: ${appointment.specialty}`,
+      `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
+      `Time: ${appointment.slotTime.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', timeStyle: 'short' })}`,
+      `Reference: ${appointment.id.slice(0, 8)}`,
+      '',
+      'Reply here if you would like help booking a new appointment.',
+    ].join('\n');
+
+    await sendWhatsAppMessage({
+      recipientPhone: appointment.patient.phoneNumber,
+      messageText: cancellation,
     });
   }
 
@@ -194,7 +214,16 @@ export async function triggerAppointmentFollowUp(req: Request, res: Response): P
   });
 
   if (appointment.patient.phoneNumber) {
-    const message = `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. We are following up on your appointment.\n\n${note}`;
+    const message = [
+      `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. We are following up on your appointment.`,
+      '',
+      `Appointment reference: ${appointment.id.slice(0, 8)}`,
+      `Service: ${appointment.specialty}`,
+      `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
+      `Time: ${appointment.slotTime.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', timeStyle: 'short' })}`,
+      '',
+      note,
+    ].join('\n');
     await sendWhatsAppMessage({
       recipientPhone: appointment.patient.phoneNumber,
       messageText: message,

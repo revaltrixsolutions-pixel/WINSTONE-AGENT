@@ -296,7 +296,7 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
             <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-black text-amber-900">{reminders.length} alerts</span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {reminders.slice(0, 6).map((reminder) => <div key={reminder.id} className="rounded-2xl border border-amber-200 bg-white p-4"><p className="font-black text-slate-900">{reminder.appointment.patient?.fullName || reminder.appointment.patientName || 'Patient'} · {reminder.appointment.specialty}</p><p className="mt-1 text-xs text-slate-600">Visit: {new Date(reminder.appointment.slotTime).toLocaleString()}</p><p className="mt-1 text-xs font-bold text-amber-800">Queued {new Date(reminder.sentAt).toLocaleString()}</p></div>)}
+            {reminders.slice(0, 6).map((reminder) => <div key={reminder.id} className="rounded-2xl border border-amber-200 bg-white p-4"><p className="font-black text-slate-900">{reminder.appointment.patient?.fullName || reminder.appointment.patientName || 'Patient'} · {reminder.appointment.specialty}</p><p className="mt-1 text-xs text-slate-600">Reference: {reminder.appointment.id.slice(0, 8)}</p><p className="mt-1 text-xs text-slate-600">Appointment: {formatNairobiDateTime(reminder.appointment.slotTime)}</p><p className="mt-1 text-xs text-slate-600">Scheduled: {formatNairobiDateTime(reminder.appointment.createdAt || reminder.appointment.slotTime)}</p><p className="mt-1 text-xs font-bold text-amber-800">Sent: {formatNairobiDateTime(reminder.sentAt)}</p></div>)}
             {reminders.length === 0 && <p className="text-sm text-amber-900">No admin reminders have been queued yet.</p>}
           </div>
         </div>
