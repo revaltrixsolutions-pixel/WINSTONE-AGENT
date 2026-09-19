@@ -37,17 +37,32 @@ async function getLastInteractionHours(patientId) {
     return diffMs / (1000 * 60 * 60);
 }
 async function getLastAgentInteractionHours(patientId) {
-    const lastAgentMessage = await prisma_1.prisma.messageLog.findFirst({
-        where: { patientId, sender: 'AGENT' },
-        orderBy: { timestamp: 'desc' },
-        select: { timestamp: true },
-    });
-    if (!lastAgentMessage?.timestamp) {
-        // An assignment without an agent reply is not an active human exchange.
-        // Allow the bot to continue rather than suppressing it indefinitely.
+    const [lastAgentMessage, patient] = await Promise.all([
+        prisma_1.prisma.messageLog.findFirst({
+            where: { patientId, sender: 'AGENT' },
+            orderBy: { timestamp: 'desc' },
+            select: { timestamp: true },
+        }),
+        prisma_1.prisma.patient.findUnique({
+            where: { id: patientId },
+            select: { agentLastActiveAt: true },
+        }),
+    ]);
+    const activityTimes = [
+        lastAgentMessage?.timestamp,
+        patient?.agentLastActiveAt,
+    ]
+        .filter((value) => Boolean(value))
+        .map((value) => new Date(value).getTime());
+    const lastAgentActivity = activityTimes.length
+        ? new Date(Math.max(...activityTimes))
+        : null;
+    if (!lastAgentActivity) {
+        // Legacy assignments created before agentLastActiveAt was added do not
+        // have a reliable inactivity start, so let the bot continue safely.
         return 0;
     }
-    return (Date.now() - new Date(lastAgentMessage.timestamp).getTime()) /
+    return (Date.now() - lastAgentActivity.getTime()) /
         (1000 * 60 * 60);
 }
 const AGENT_INACTIVITY_TIMEOUT_MINUTES = 10;
@@ -370,6 +385,7 @@ async function sendBotReply(patient, incomingMessage) {
             data: {
                 chatStatus: 'BOT',
                 assignedTo: null,
+                agentLastActiveAt: null,
             },
         });
         patient = {
@@ -903,6 +919,7 @@ async function handleWhatsAppWebhook(req, res) {
                             phoneNumber: true,
                             chatStatus: true,
                             assignedTo: true,
+                            agentLastActiveAt: true,
                             fullName: true,
                         },
                     });
@@ -923,6 +940,7 @@ async function handleWhatsAppWebhook(req, res) {
                                 phoneNumber: true,
                                 chatStatus: true,
                                 assignedTo: true,
+                                agentLastActiveAt: true,
                                 fullName: true,
                             },
                         });
@@ -954,6 +972,7 @@ async function handleWhatsAppWebhook(req, res) {
                                 phoneNumber: true,
                                 chatStatus: true,
                                 assignedTo: true,
+                                agentLastActiveAt: true,
                                 fullName: true,
                             },
                         });
@@ -1019,6 +1038,7 @@ async function handleWhatsAppWebhook(req, res) {
                                 phoneNumber: true,
                                 chatStatus: true,
                                 assignedTo: true,
+                                agentLastActiveAt: true,
                             },
                         }),
                     ]);

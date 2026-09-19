@@ -265,7 +265,7 @@ function isCancellationRequest(message: string): boolean {
 }
 
 function isAvailableAppointmentsRequest(message: string): boolean {
-  return /\b(available appointment|available appointments|next available slot|available slots|next available appointment|open slots|what slots are free|when can i get an appointment|is there an opening|do you have any free slots)\b/i.test(message);
+  return /\b(available appointment|available appointments|next available slot|available slots|next available appointment|open slots|what slots are free|when can i get an appointment|is there an opening|do you have any free slots|any slot available|slot available)\b/i.test(message);
 }
 
 function formatKenyaDateTime(date: Date): string {
@@ -518,7 +518,7 @@ function buildAppointmentInteractive(
   }
 
   if (!appointmentState.department) {
-    const rows = appointmentServiceOptions.map((service) => ({
+    const rows = appointmentServiceOptions.slice(0, 10).map((service) => ({
       id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       title: service.slice(0, 24),
     }));
@@ -611,12 +611,6 @@ function buildPatientMenu(): WhatsAppInteractivePayload {
           { id: 'menu_reschedule', title: 'Reschedule appointment', description: 'Choose a new date and time' },
           { id: 'menu_cancel', title: 'Cancel appointment', description: 'Cancel an active appointment' },
           { id: 'menu_doctor', title: 'Talk to a Doctor/Clinic', description: 'Request doctor or clinic support' },
-          { id: 'menu_services', title: 'Our services', description: 'Browse hospital services' },
-          { id: 'menu_departments', title: 'Departments', description: 'View hospital departments' },
-          { id: 'menu_locations', title: 'Locations and contacts', description: 'Find our branches' },
-          { id: 'menu_prices', title: 'Prices and fees', description: 'View available prices' },
-          { id: 'menu_insurance', title: 'SHA and insurance', description: 'Check accepted covers' },
-          { id: 'menu_human', title: 'Speak to staff', description: 'Request human assistance' },
         ],
       }],
     },
@@ -747,20 +741,6 @@ async function sendBotReply(
   }
 
   if (nameWasJustCaptured) {
-    const menu = buildPatientMenu();
-    await sendWhatsAppMessage({ recipientPhone: patient.phoneNumber, interactive: menu });
-    await prisma.messageLog.create({
-      data: {
-        patientId: patient.id,
-        sender: 'BOT',
-        body: menu.body.text,
-        timestamp: new Date(),
-      },
-    });
-    return;
-  }
-
-  if (isNewBookingRequest(effectiveMessage) && effectiveMessage !== 'start appointment booking') {
     const menu = buildPatientMenu();
     await sendWhatsAppMessage({ recipientPhone: patient.phoneNumber, interactive: menu });
     await prisma.messageLog.create({
