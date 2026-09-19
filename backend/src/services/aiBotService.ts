@@ -1057,10 +1057,22 @@ function isBookingIntent(message: string): boolean {
     /\bcheckup\b/i.test(text) ||
     /\bvisit\b/i.test(text) ||
     /\bslot\b/i.test(text) ||
+    /\bslots?\b/i.test(text) ||
     /\bschedule\b/i.test(text) ||
     /\bsee a doctor\b/i.test(text) ||
     /\bsee doctor\b/i.test(text) ||
     /\bmeet a doctor\b/i.test(text) ||
+    /\bsee a specialist\b/i.test(text) ||
+    /\b(?:see|book|talk to|get)\s+(?:dr\.?|doctor)\s+[a-z][a-z.'-]+\b/i.test(text) ||
+    /\b(?:book|schedule|see|talk to|get)\s+(?:a\s+)?(?:doctor|specialist|clinic)\b/i.test(text) ||
+    /\b(?:schedule|book)\s+me\b/i.test(text) ||
+    /\b(?:what|which)\s+(?:times?|slots?)\s+(?:are|is)\s+available\b/i.test(text) ||
+    /\b(?:when|where)\s+can\s+i\s+get\s+(?:an?\s+)?(?:appointment|booking|slot)\b/i.test(text) ||
+    /\b(?:is there|do you have)\s+(?:an?\s+)?(?:opening|free slot|available slot)\b/i.test(text) ||
+    /\b(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+(?:schedule|arrange|book|make|do)\b/i.test(text) ||
+    /\b(?:can|could|would)\s+i\s+(?:make|do|schedule|arrange)\b/i.test(text) ||
+    /\b(?:help|please help)\s+(?:me|us)\s+(?:make|do|schedule|arrange)\b/i.test(text) ||
+    /\b(?:book|make|schedule|arrange)\s+(?:for me|me)\b/i.test(text) ||
     /\bbook a (visit|slot)\b/i.test(text) ||
     /\bneed (an? )?(appointment|visit|consultation|doctor|checkup|slot)\b/i.test(text) ||
     /\b(?:i|we)\s+(?:want|need|would\s+like|would\s+love|hope to)\s+(?:to\s+)?(?:book|schedule|reserve|arrange|set up|do)\b/i.test(text) ||

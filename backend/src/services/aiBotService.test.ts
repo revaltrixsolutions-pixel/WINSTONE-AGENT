@@ -249,6 +249,68 @@ test('recognizes common booking commands and synonyms', () => {
   }
 });
 
+test('understands the complete appointment phrase set', () => {
+  const phrases = [
+    'Can I make an appointment?', 'Can I book an appointment?',
+    'I want to make an appointment.', 'I want to book an appointment.',
+    'I need an appointment.', 'I need to book an appointment.',
+    'I need to make an appointment.', 'I\'d like to make an appointment.',
+    'I\'d like to book an appointment.', 'I would like to make an appointment.',
+    'I would like to book an appointment.', 'Help me make an appointment.',
+    'Help me book an appointment.', 'Please help me make an appointment.',
+    'Please help me book an appointment.', 'Can I make a new appointment?',
+    'Can I book a new appointment?', 'I want to make a new appointment.',
+    'I want to book a new appointment.', 'I need a new appointment.',
+    'Help me make a new appointment.', 'Help me book a new appointment.',
+    'Can I do a new appointment?', 'I want to do a new appointment.',
+    'I need to schedule a new appointment.', 'Can I schedule an appointment?',
+    'I want to schedule an appointment.', 'I need to schedule an appointment.',
+    'I\'d like to schedule an appointment.', 'Help me schedule an appointment.',
+    'Can you schedule an appointment for me?', 'Please schedule an appointment for me.',
+    'I want to arrange an appointment.', 'I need to arrange an appointment.',
+    'Can you arrange an appointment for me?', 'I want to see a doctor.',
+    'I need to see a doctor.', 'Can I see a doctor?', 'I want to book a doctor.',
+    'I need to book a doctor.', 'I want to see a specialist.',
+    'I need an appointment with a doctor.', 'I need an appointment with a specialist.',
+    'Can I book an appointment with a doctor?', 'I want to see Dr. Kamau.',
+    'I need to see Dr. Kamau.', 'I want an appointment today.',
+    'Can I book an appointment today?', 'Do you have appointments today?',
+    'I need an appointment tomorrow.', 'Can I book for tomorrow?',
+    'I want to book for Monday.', 'Can I get an appointment on Monday?',
+    'I need an appointment this week.', 'Do you have any available appointments?',
+    'What appointments are available?', 'What times are available?',
+    'When can I get an appointment?', 'When is the next available appointment?',
+    'Can I book the next available appointment?', 'Is there any slot available?',
+    'Do you have any free slots?', 'Is there an opening today?',
+    'Is there an opening tomorrow?', 'Appointment', 'Book appointment',
+    'Make appointment', 'New appointment', 'Need appointment',
+    'Need to see doctor', 'Book doctor', 'Doctor appointment',
+    'Schedule appointment', 'Schedule doctor', 'Help appointment',
+    'Help me book', 'I need to book', 'I want to book', 'Book for me',
+    'Can you book for me?', 'Appointment please', 'I need a slot',
+    'Need a slot with doctor', 'Any available slot?', 'Any appointment available?',
+    'Can I make appointment', 'Can I book appointment', 'Can I do new appointment',
+    'Help me do appointment', 'Help me make appointment', 'Help me book appointment',
+    'I want appointment', 'I need appointment', 'I want to see doctor',
+    'I need to see doctor', 'Book me an appointment', 'Make an appointment for me',
+    'Schedule me', 'I want to schedule', 'I need to schedule',
+    'I want a doctor appointment', 'I need a doctor appointment',
+    'Can I get a doctor',
+  ];
+
+  for (const message of phrases) {
+    const reply = generateBotReply({
+      patientName: 'Revaltrix Solutions',
+      message,
+      isReturning: false,
+      lastInteractionHours: 0,
+    });
+
+    assert.doesNotMatch(reply, /I don't have that information on hand/i, `Unrecognized phrase: ${message}`);
+    assert.match(reply, /appointment|doctor|specialist|slot|available|department|date|time/i, `Unexpected response for: ${message}`);
+  }
+});
+
 test('normalizes afternoon booking times to 12-hour display format', () => {
   const booking = parseAppointmentRequest('book maternity today at 3pm');
 

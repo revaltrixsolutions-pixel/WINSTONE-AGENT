@@ -221,7 +221,7 @@ async function getLastAgentInteractionHours(
 const AGENT_INACTIVITY_TIMEOUT_MINUTES = 10;
 
 function isAppointmentLookupRequest(message: string): boolean {
-  if (isNewBookingRequest(message) || isRescheduleRequest(message)) return false;
+  if (isNewBookingRequest(message) || isRescheduleRequest(message) || isCancellationRequest(message) || isAvailableAppointmentsRequest(message)) return false;
 
   return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
     /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(message) ||
@@ -237,7 +237,17 @@ function isNewBookingRequest(message: string): boolean {
     /\b(?:book|booke)\s+(?:an?\s+)?new\s+appointment\b/i.test(message) ||
     /\b(?:can|could|would)\s+i\s+(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
     /\b(?:help|guide|assist)\s+me\s+(?:to\s+)?(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
-    /\b(?:i|we)\s+(?:need|want|would\s+like)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message);
+    /\b(?:i|we)\s+(?:need|want|would\s+like)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message) ||
+    /\b(?:see|book|schedule|get|talk to)\s+(?:a\s+)?(?:doctor|specialist|clinic)\b/i.test(message) ||
+    /\b(?:see|book|talk to|get)\s+(?:dr\.?|doctor)\s+[a-z][a-z.'-]+\b/i.test(message) ||
+    /\b(?:schedule|book)\s+me\b/i.test(message) ||
+    /\b(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+(?:schedule|arrange|book|make|do)\b/i.test(message) ||
+    /\b(?:can|could|would)\s+i\s+(?:make|do|schedule|arrange)\b/i.test(message) ||
+    /\b(?:help|please help)\s+(?:me|us)\s+(?:make|do|schedule|arrange)\b/i.test(message) ||
+    /\b(?:book|make|schedule|arrange)\s+(?:for me|me)\b/i.test(message) ||
+    /\b(?:can|could|would)\s+you\s+(?:book|make|schedule|arrange)\b/i.test(message) ||
+    /\b(?:can|could|would)\s+i\s+get\s+(?:an?\s+)?(?:appointment|booking|slot|doctor)\b/i.test(message) ||
+    /^(?:appointment|new appointment|appointment please|help appointment|need appointment)$/i.test(message.trim());
 }
 
 function isAppointmentHistoryRequest(message: string): boolean {
@@ -249,8 +259,13 @@ function isRescheduleRequest(message: string): boolean {
   return /\b(reschedule my appointment|reschedule appointment|reschedule it|need to reschedule|change my appointment|change appointment|change it|move my appointment|rescheduling|rebook|rebooking)\b/i.test(message);
 }
 
+function isCancellationRequest(message: string): boolean {
+  return /\b(?:cancel|cancelled|cancelling|remove|drop)\b.*\b(?:appointment|booking|visit|it)\b/i.test(message) ||
+    /^cancel(?:\s+my)?$/i.test(message.trim());
+}
+
 function isAvailableAppointmentsRequest(message: string): boolean {
-  return /\b(available appointment|available appointments|next available slot|available slots|next available appointment|open slots|what slots are free)\b/i.test(message);
+  return /\b(available appointment|available appointments|next available slot|available slots|next available appointment|open slots|what slots are free|when can i get an appointment|is there an opening|do you have any free slots)\b/i.test(message);
 }
 
 function formatKenyaDateTime(date: Date): string {
@@ -363,6 +378,33 @@ async function handleAppointmentReschedule(
   });
 
   return `${patientName}, your appointment has been rescheduled successfully.\n\nDepartment: ${updatedAppointment.specialty}\nDate: ${formatKenyaDateTime(updatedAppointment.slotTime)}\nStatus: ${updatedAppointment.status}\nReference: ${updatedAppointment.id.slice(0, 8)}\n\nThe updated booking is now visible to the admin team.`;
+}
+
+async function handleAppointmentCancellation(
+  patientId: string,
+  patientName: string,
+  message: string,
+): Promise<string | null> {
+  if (!isCancellationRequest(message)) return null;
+
+  const existingAppointment = await prisma.appointment.findFirst({
+    where: {
+      patientId,
+      status: { not: 'CANCELLED' },
+    },
+    orderBy: { slotTime: 'asc' },
+  });
+
+  if (!existingAppointment) {
+    return `${patientName}, I could not find an active appointment to cancel. You can book a new appointment whenever you are ready.`;
+  }
+
+  const cancelledAppointment = await prisma.appointment.update({
+    where: { id: existingAppointment.id },
+    data: { status: 'CANCELLED' },
+  });
+
+  return `${patientName}, your appointment has been cancelled successfully.\n\nDepartment: ${cancelledAppointment.specialty}\nDate: ${formatKenyaDateTime(cancelledAppointment.slotTime)}\nReference: ${cancelledAppointment.id.slice(0, 8)}\n\nYou can book a new appointment whenever you are ready.`;
 }
 
 function parseAppointmentDate(dateText: string, timeText: string): Date {
@@ -557,15 +599,18 @@ function buildPatientMenu(): WhatsAppInteractivePayload {
   return {
     type: 'list',
     body: {
-      text: 'Welcome to Phadam Hospital. Choose what you need below. You only need to type your name; all other options can be selected.',
+      text: 'Welcome to Phadam Hospital. Choose an option below:\n\n1️⃣ Book an Appointment\n2️⃣ View My Appointments\n3️⃣ Reschedule Appointment\n4️⃣ Cancel Appointment\n5️⃣ Talk to a Doctor/Clinic',
     },
     action: {
       button: 'Open hospital menu',
       sections: [{
         title: 'How can we help?',
         rows: [
-          { id: 'menu_appointments', title: 'Book appointment', description: 'Choose service, date and time' },
+          { id: 'menu_appointments', title: '1. Book an Appointment', description: 'Choose service, date and time' },
           { id: 'menu_scheduled', title: 'My appointments', description: 'View scheduled appointments' },
+          { id: 'menu_reschedule', title: 'Reschedule appointment', description: 'Choose a new date and time' },
+          { id: 'menu_cancel', title: 'Cancel appointment', description: 'Cancel an active appointment' },
+          { id: 'menu_doctor', title: 'Talk to a Doctor/Clinic', description: 'Request doctor or clinic support' },
           { id: 'menu_services', title: 'Our services', description: 'Browse hospital services' },
           { id: 'menu_departments', title: 'Departments', description: 'View hospital departments' },
           { id: 'menu_locations', title: 'Locations and contacts', description: 'Find our branches' },
@@ -603,8 +648,11 @@ function buildKnowledgeMenu(): WhatsAppInteractivePayload {
 
 function normalizeInteractiveSelection(message: string): string {
   const selections: Record<string, string> = {
-    menu_appointments: 'book appointment',
+    menu_appointments: 'start appointment booking',
     menu_scheduled: 'show my scheduled appointments',
+    menu_reschedule: 'reschedule it',
+    menu_cancel: 'cancel my appointment',
+    menu_doctor: 'I want to speak to a human staff member',
     menu_services: 'show our services',
     menu_departments: 'show our departments',
     menu_specialists: 'show our specialist clinics',
@@ -699,6 +747,20 @@ async function sendBotReply(
   }
 
   if (nameWasJustCaptured) {
+    const menu = buildPatientMenu();
+    await sendWhatsAppMessage({ recipientPhone: patient.phoneNumber, interactive: menu });
+    await prisma.messageLog.create({
+      data: {
+        patientId: patient.id,
+        sender: 'BOT',
+        body: menu.body.text,
+        timestamp: new Date(),
+      },
+    });
+    return;
+  }
+
+  if (isNewBookingRequest(effectiveMessage) && effectiveMessage !== 'start appointment booking') {
     const menu = buildPatientMenu();
     await sendWhatsAppMessage({ recipientPhone: patient.phoneNumber, interactive: menu });
     await prisma.messageLog.create({
@@ -823,6 +885,33 @@ async function sendBotReply(
       });
     }
 
+    return;
+  }
+
+  const cancellationReply = hasPatientName
+    ? await handleAppointmentCancellation(patient.id, patientName, effectiveMessage)
+    : null;
+
+  if (cancellationReply) {
+    try {
+      await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText: cancellationReply,
+      });
+      await prisma.messageLog.create({
+        data: {
+          patientId: patient.id,
+          sender: 'BOT',
+          body: cancellationReply,
+          timestamp: new Date(),
+        },
+      });
+    } catch (error) {
+      console.error('[WhatsApp Cancellation Reply Failed]', {
+        patientId: patient.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
     return;
   }
 
