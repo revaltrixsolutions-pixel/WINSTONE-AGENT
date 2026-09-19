@@ -249,6 +249,24 @@ test('recognizes common booking commands and synonyms', () => {
   }
 });
 
+test('normalizes afternoon booking times to 12-hour display format', () => {
+  const booking = parseAppointmentRequest('book maternity today at 3pm');
+
+  assert.equal(booking.time, '03:00 PM');
+  assert.equal(booking.department, 'Maternity');
+});
+
+test('understands a misspelled new appointment request', () => {
+  const reply = generateBotReply({
+    patientName: 'Revaltrix Solutions',
+    message: 'can I booke new appointment',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /appointment|department|date|time/i);
+});
+
 test('recognizes requests to get appointment history', () => {
   const reply = generateBotReply({
     patientName: 'Revaltrix Solutions',

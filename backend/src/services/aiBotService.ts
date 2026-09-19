@@ -737,7 +737,8 @@ function normalizeTime(hour: number, minute: number, suffix?: string): string | 
     return undefined;
   }
 
-  return `${String(h).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${
+  const displayHour = h % 12 || 12;
+  return `${String(displayHour).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${
     h >= 12 ? "PM" : "AM"
   }`;
 }

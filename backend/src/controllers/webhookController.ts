@@ -13,6 +13,7 @@ import {
   isHumanSupportRequest,
   parseAppointmentRequest,
   appointmentConversationState,
+  resetPatientSession,
   updateAppointmentConversation,
 } from '../services/aiBotService';
 import {
@@ -220,7 +221,7 @@ async function getLastAgentInteractionHours(
 const AGENT_INACTIVITY_TIMEOUT_MINUTES = 10;
 
 function isAppointmentLookupRequest(message: string): boolean {
-  if (isNewBookingRequest(message)) return false;
+  if (isNewBookingRequest(message) || isRescheduleRequest(message)) return false;
 
   return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
     /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(message) ||
@@ -232,9 +233,10 @@ function isAppointmentLookupRequest(message: string): boolean {
 }
 
 function isNewBookingRequest(message: string): boolean {
-  return /\b(?:book|make|do|schedule|reserve|arrange|set\s+up)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message) ||
-    /\b(?:can|could|would)\s+i\s+(?:book|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
-    /\b(?:help|guide|assist)\s+me\s+(?:to\s+)?(?:book|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
+  return /\b(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message) ||
+    /\b(?:book|booke)\s+(?:an?\s+)?new\s+appointment\b/i.test(message) ||
+    /\b(?:can|could|would)\s+i\s+(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
+    /\b(?:help|guide|assist)\s+me\s+(?:to\s+)?(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
     /\b(?:i|we)\s+(?:need|want|would\s+like)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message);
 }
 
@@ -244,7 +246,7 @@ function isAppointmentHistoryRequest(message: string): boolean {
 }
 
 function isRescheduleRequest(message: string): boolean {
-  return /\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment|rescheduling|rebook|rebooking)\b/i.test(message);
+  return /\b(reschedule my appointment|reschedule appointment|reschedule it|need to reschedule|change my appointment|change appointment|change it|move my appointment|rescheduling|rebook|rebooking)\b/i.test(message);
 }
 
 function isAvailableAppointmentsRequest(message: string): boolean {
@@ -649,6 +651,10 @@ async function sendBotReply(
   const hasPatientName = patientName !== 'Patient';
   const appointmentDetails = parseAppointmentRequest(effectiveMessage);
   const nameWasJustCaptured = patient.nameWasJustCaptured === true;
+
+  if (isNewBookingRequest(effectiveMessage)) {
+    resetPatientSession(patient.id);
+  }
 
   if (
     appointmentConversationState.has(patient.id) &&
