@@ -17,15 +17,47 @@ type AdminAppointmentsPageProps = {
 
 const services = [
   'General Consultation',
+  'Doctors consultation',
+  'Antenatal clinic',
+  'Postnatal clinic',
+  'Maternity services',
+  'Well-baby clinic',
+  'Pediatric outpatient clinic',
+  'Immunization',
+  'Family planning',
+  'Pharmacy',
+  'Laboratory',
+  'Radiology, including X-ray and ultrasound',
+  'Inpatient services',
+  'Endoscopy',
+  'Colonoscopy',
+  'High Dependency Unit',
+  'Intensive Care Unit',
+  'Newborn Unit',
+  'Theatre services for minor and major surgeries',
+  'Ambulance services',
+  'Emergency services',
+  'Dermatology clinic',
+  'Orthopedic clinic',
+  'Ear, Nose and Throat clinic',
   'Maternity',
   'Pediatrics',
   'Dental',
-  'Laboratory',
-  'Radiology',
   'Physiotherapy',
   'Obstetrics and Gynecology',
-  'Emergency',
+  'Optical clinic',
+  'Psychology and counselling',
+  'Nutrition clinic',
+  'Surgical outpatient clinic',
+  'Gynecology clinic',
+  'Urology clinic',
 ];
+
+const formatNairobiDateTime = (value: string) => new Intl.DateTimeFormat('en-KE', {
+  timeZone: 'Africa/Nairobi',
+  dateStyle: 'medium',
+  timeStyle: 'short',
+}).format(new Date(value));
 
 export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
   appointments,
@@ -244,13 +276,13 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
                 const isSelected = selectedAppointmentId === appointment.id;
                 return <article key={appointment.id} className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div><p className="font-black text-slate-900">{appointment.patientName || 'Patient'} <span className="font-normal text-slate-500">· {appointment.patientPhone || 'No phone'}</span></p><p className="mt-1 text-sm font-bold text-cyan-800">{appointment.specialty}</p><p className="text-xs text-slate-500">{new Date(appointment.slotTime).toLocaleString()} · {appointment.status}</p></div>
+                    <div><p className="font-black text-slate-900">{appointment.patientName || 'Patient'} <span className="font-normal text-slate-500">· {appointment.patientPhone || 'No phone'}</span></p><p className="mt-1 text-sm font-bold text-cyan-800">{appointment.specialty}</p><p className="text-xs text-slate-500">{formatNairobiDateTime(appointment.slotTime)} · {appointment.status}</p></div>
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => makeCall(appointment)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Call</button>
                       <button type="button" onClick={() => setSelectedAppointmentId(isSelected ? null : appointment.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">{isSelected ? 'Close' : 'Add follow-up'}</button>
                     </div>
                   </div>
-                  {(appointment.followUps || []).map((followUp) => <div key={followUp.id} className="mt-3 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-bold text-slate-700">{followUp.authorName} · {new Date(followUp.createdAt).toLocaleString()}</p><p className="mt-1 text-slate-600">{followUp.note}</p></div>)}
+                  {(appointment.followUps || []).map((followUp) => <div key={followUp.id} className="mt-3 rounded-xl bg-slate-50 p-3 text-sm"><p className="font-bold text-slate-700">{followUp.authorName} · {formatNairobiDateTime(followUp.createdAt)}</p><p className="mt-1 text-slate-600">{followUp.note}</p></div>)}
                   {isSelected && <div className="mt-4 space-y-2"><div className="flex gap-2"><input value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="What did you follow up on?" /></div><div className="flex gap-2"><button type="button" disabled={followUpBusy || !followUpNote.trim()} onClick={() => void submitFollowUp(appointment.id, 'save')} className="rounded-xl bg-slate-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">Save note</button>{canSendFollowUp(appointment) ? <button type="button" disabled={followUpBusy || !followUpNote.trim()} onClick={() => void submitFollowUp(appointment.id, 'send')} className="rounded-xl bg-cyan-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">Send text now</button> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-bold text-slate-500">Text sends only within 3 hrs</span>}</div></div>}
                 </article>;
               })}
