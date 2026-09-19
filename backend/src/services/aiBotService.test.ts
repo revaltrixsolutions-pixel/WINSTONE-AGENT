@@ -179,6 +179,32 @@ test('handles appointment history and reschedule keywords with patient-friendly 
   assert.match(rescheduleReply, /reschedule|appointment|tomorrow|3pm|available/i);
 });
 
+test('understands natural booking phrases for appointments', () => {
+  const helpReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'help me book an appointment',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(helpReply, /appointment|department|date|time|book/i);
+
+  const guideReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'guide me to book a consultation',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(guideReply, /appointment|department|date|time|book/i);
+
+  const canBookReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'can I book appointments?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(canBookReply, /appointment|book|department|date|time/i);
+});
+
 test('handles real-world patient phrases like confirmation, doctor availability, and late arrival', () => {
   const confirmReply = generateBotReply({
     patientName: 'Mary',

@@ -1037,41 +1037,49 @@ function isGreeting(message: string): boolean {
 }
 
 function isBookingIntent(message: string): boolean {
+  const text = message.trim();
+
   return (
-    /\bbook(ing)?\b/i.test(message) ||
-    /\bshow\s+(my|the)\s+appointment(s)?\b/i.test(message) ||
-    /\bappointment history\b/i.test(message) ||
-    /\bhistory of my appointment\b/i.test(message) ||
-    /\b(reschedule|rescheduling|rebook|rebooking|change my appointment|change appointment)\b/i.test(message) ||
-    /\bavailable appointment(s)?\b/i.test(message) ||
-    /\bappointment\b/i.test(message) ||
-    /\bappointments?\b/i.test(message) ||
-    /\bconsult(ation)?\b/i.test(message) ||
-    /\bcheckup\b/i.test(message) ||
-    /\bvisit\b/i.test(message) ||
-    /\bslot\b/i.test(message) ||
-    /\bschedule\b/i.test(message) ||
-    /\bsee a doctor\b/i.test(message) ||
-    /\bsee doctor\b/i.test(message) ||
-    /\bmeet a doctor\b/i.test(message) ||
-    /\bbook a (visit|slot)\b/i.test(message) ||
-    /\bneed (an? )?(appointment|visit|consultation|doctor|checkup|slot)\b/i.test(message) ||
-    /\bi want to book\b/i.test(message) ||
-    /\bi'd like to book\b/i.test(message) ||
-    /\bi would like to book\b/i.test(message) ||
-    /\bbook me\b/i.test(message) ||
-    /\b(reserve|arrange|set up|schedule|book)\s+(an? )?(appointment|visit|consultation|checkup|slot)\b/i.test(message) ||
-    /\bcan i do it (tomorrow|today|next week|on [a-z]+)?\b/i.test(message) ||
-    /\bcan i (book|schedule|reserve|arrange)\b/i.test(message) ||
-    /\bmake appointment\b/i.test(message) ||
-    /\bwould like an appointment\b/i.test(message) ||
-    /\bneed to see a doctor\b/i.test(message) ||
-    /\bneed a doctor\b/i.test(message) ||
-    /\bi need a consultation\b/i.test(message) ||
-    /\bcan i get a same day appointment\b/i.test(message) ||
-    /\bsame day appointment\b/i.test(message) ||
-    /\bcan i book today\b/i.test(message) ||
-    /\bbook for today\b/i.test(message)
+    /\bbook(ing)?\b/i.test(text) ||
+    /\bshow\s+(my|the)\s+appointment(s)?\b/i.test(text) ||
+    /\bappointment history\b/i.test(text) ||
+    /\bhistory of my appointment\b/i.test(text) ||
+    /\b(reschedule|rescheduling|rebook|rebooking|change my appointment|change appointment)\b/i.test(text) ||
+    /\bavailable appointment(s)?\b/i.test(text) ||
+    /\bappointment\b/i.test(text) ||
+    /\bappointments?\b/i.test(text) ||
+    /\bconsult(ation)?\b/i.test(text) ||
+    /\bcheckup\b/i.test(text) ||
+    /\bvisit\b/i.test(text) ||
+    /\bslot\b/i.test(text) ||
+    /\bschedule\b/i.test(text) ||
+    /\bsee a doctor\b/i.test(text) ||
+    /\bsee doctor\b/i.test(text) ||
+    /\bmeet a doctor\b/i.test(text) ||
+    /\bbook a (visit|slot)\b/i.test(text) ||
+    /\bneed (an? )?(appointment|visit|consultation|doctor|checkup|slot)\b/i.test(text) ||
+    /\b(?:i|we)\s+(?:want|need|would\s+like|would\s+love|hope to)\s+(?:to\s+)?(?:book|schedule|reserve|arrange|set up|do)\b/i.test(text) ||
+    /\b(?:i|we)\s+(?:want|need|would\s+like)\s+(?:to\s+)?do\s+(?:an?\s+)?(?:booking|appointment|visit|consultation|slot)\b/i.test(text) ||
+    /\b(?:help|guide|assist|show)\s+(?:me|us)\s+(?:how\s+to\s+)?(?:book|schedule|reserve|arrange)\b/i.test(text) ||
+    /\b(?:help|guide|assist)\s+(?:me|us)\s+(?:with|to)\s+(?:booking|an appointment|a visit|a consultation|appointment booking)\b/i.test(text) ||
+    /\b(?:i|we)\s+want\s+to\s+do\s+booking\b/i.test(text) ||
+    /\bi\s+want\s+to\s+to\s+book\b/i.test(text) ||
+    /\bi\s+want\s+to\s+book\b/i.test(text) ||
+    /\bi'd like to book\b/i.test(text) ||
+    /\bi would like to book\b/i.test(text) ||
+    /\bbook me\b/i.test(text) ||
+    /\b(?:reserve|arrange|set up|schedule|book)\s+(an? )?(appointment|visit|consultation|checkup|slot)\b/i.test(text) ||
+    /\bcan i do it (tomorrow|today|next week|on [a-z]+)?\b/i.test(text) ||
+    /\bcan i (book|schedule|reserve|arrange)\b/i.test(text) ||
+    /\bmake appointment\b/i.test(text) ||
+    /\bwould like an appointment\b/i.test(text) ||
+    /\bneed to see a doctor\b/i.test(text) ||
+    /\bneed a doctor\b/i.test(text) ||
+    /\bi need a consultation\b/i.test(text) ||
+    /\bcan i get a same day appointment\b/i.test(text) ||
+    /\bsame day appointment\b/i.test(text) ||
+    /\bcan i book today\b/i.test(text) ||
+    /\bbook for today\b/i.test(text)
   );
 }
 
@@ -1279,7 +1287,9 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     state.stage === "confirming_appointment" ||
     isBookingIntent(message) ||
     /\b(can|could|would) (i|we) (do|book|schedule|reserve)\b/i.test(message) ||
-    /\b(i want|i need|can i) (to )?(book|schedule|reserve|change|cancel)\b/i.test(message);
+    /\b(?:help|guide|assist)\s+(?:me|us)\s+(?:with|to)\s+(?:booking|book|schedule|reserve|arrange)\b/i.test(message) ||
+    /\b(?:i|we)\s+(?:want|need|would\s+like)\s+(?:to\s+)?(?:do|book|schedule|reserve|arrange|set up)\b/i.test(message) ||
+    /\b(?:i want|i need|can i|could i|would i|can we|could we)\s+(?:to\s+)?(?:book|schedule|reserve|change|cancel)\b/i.test(message);
 
   if (inAppointmentFlow) {
     const appointment: Partial<AppointmentRequestData> = {
