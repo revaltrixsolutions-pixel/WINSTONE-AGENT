@@ -974,6 +974,7 @@ export const StaffDashboard: React.FC = () => {
               appointments={appointments}
               reminders={adminReminders}
               onChanged={loadDashboardRecords}
+              isSuperAdmin={currentUser?.role === 'SUPER_ADMIN'}
             />
           )}
 

@@ -12,6 +12,7 @@ type AdminAppointmentsPageProps = {
   appointments: Appointment[];
   reminders: AdminReminder[];
   onChanged: () => Promise<void>;
+  isSuperAdmin: boolean;
 };
 
 const services = [
@@ -30,6 +31,7 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
   appointments,
   reminders,
   onChanged,
+  isSuperAdmin,
 }) => {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [followUpNote, setFollowUpNote] = useState('');
@@ -205,7 +207,7 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
         {message && <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-bold text-cyan-900">{message}</div>}
 
         <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
+          {isSuperAdmin && <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
             <h3 className="text-xl font-black text-slate-900">Hospital calling line</h3>
             <p className="mt-1 text-sm text-slate-500">Set the hospital number used for outbound calls from the admin dashboard.</p>
             <div className="mt-5 space-y-4">
@@ -213,7 +215,7 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
               <button type="button" disabled={hospitalPhoneBusy} onClick={() => void submitHospitalPhone()} className="w-full rounded-2xl bg-violet-700 px-4 py-3 text-sm font-black text-white transition hover:bg-violet-800 disabled:opacity-50">{hospitalPhoneBusy ? 'Saving...' : 'Save hospital phone number'}</button>
               {hospitalPhoneNumber && <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">Current hospital line: {hospitalPhoneNumber}</div>}
             </div>
-          </div>
+          </div>}
 
           <form onSubmit={submitPatient} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
             <h3 className="text-xl font-black text-slate-900">Add patient with appointment</h3>
