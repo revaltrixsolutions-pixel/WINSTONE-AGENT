@@ -311,6 +311,25 @@ test('understands the complete appointment phrase set', () => {
   }
 });
 
+test('recognizes available-slot questions', () => {
+  const availabilityPhrases = [
+    'Can I book the next available appointment?',
+    'Is there any slot available?',
+    'Do you have any free slots?',
+  ];
+
+  for (const message of availabilityPhrases) {
+    const reply = generateBotReply({
+      patientName: 'Revaltrix Solutions',
+      message,
+      isReturning: false,
+      lastInteractionHours: 0,
+    });
+
+    assert.match(reply, /available|appointment|slot|department|date|time/i);
+  }
+});
+
 test('normalizes afternoon booking times to 12-hour display format', () => {
   const booking = parseAppointmentRequest('book maternity today at 3pm');
 
@@ -327,6 +346,19 @@ test('understands a misspelled new appointment request', () => {
   });
 
   assert.match(reply, /appointment|department|date|time/i);
+});
+
+test('starts booking when the appointment is for a family member', () => {
+  const reply = generateBotReply({
+    patientName: 'Revaltrix Solutions',
+    message: 'i need an appointment for my mother',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /appointment/i);
+  assert.match(reply, /department|date|time|patient/i);
+  assert.doesNotMatch(reply, /I don't have that information on hand/i);
 });
 
 test('recognizes requests to get appointment history', () => {

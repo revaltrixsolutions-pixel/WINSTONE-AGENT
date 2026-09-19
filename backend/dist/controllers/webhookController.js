@@ -67,6 +67,8 @@ async function getLastAgentInteractionHours(patientId) {
 }
 const AGENT_INACTIVITY_TIMEOUT_MINUTES = 10;
 function isAppointmentLookupRequest(message) {
+    if (isNewBookingRequest(message) || isRescheduleRequest(message) || isCancellationRequest(message) || isAvailableAppointmentsRequest(message))
+        return false;
     return /\b(my|our|the)\b.*\b(appointment|appointments|booking|bookings|visit|visits)\b/i.test(message) ||
         /\b(appointment|appointments|booking|bookings|visit|visits)\b.*\b(details|status|when|date|time|schedule|scheduled|confirm|check|see)\b/i.test(message) ||
         /\b(appointment history|my appointment history|show my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message) ||
@@ -75,14 +77,36 @@ function isAppointmentLookupRequest(message) {
         /\b(when|where|what time)\b.*\b(appointment|visit|doctor|clinic)\b/i.test(message) ||
         /\b(scheduled|upcoming|confirmed)\b.*\b(appointment|visit|booking)\b/i.test(message);
 }
+function isNewBookingRequest(message) {
+    return /\b(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message) ||
+        /\b(?:book|booke)\s+(?:an?\s+)?new\s+appointment\b/i.test(message) ||
+        /\b(?:can|could|would)\s+i\s+(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
+        /\b(?:help|guide|assist)\s+me\s+(?:to\s+)?(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
+        /\b(?:i|we)\s+(?:need|want|would\s+like)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message) ||
+        /\b(?:see|book|schedule|get|talk to)\s+(?:a\s+)?(?:doctor|specialist|clinic)\b/i.test(message) ||
+        /\b(?:see|book|talk to|get)\s+(?:dr\.?|doctor)\s+[a-z][a-z.'-]+\b/i.test(message) ||
+        /\b(?:schedule|book)\s+me\b/i.test(message) ||
+        /\b(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+(?:schedule|arrange|book|make|do)\b/i.test(message) ||
+        /\b(?:can|could|would)\s+i\s+(?:make|do|schedule|arrange)\b/i.test(message) ||
+        /\b(?:help|please help)\s+(?:me|us)\s+(?:make|do|schedule|arrange)\b/i.test(message) ||
+        /\b(?:book|make|schedule|arrange)\s+(?:for me|me)\b/i.test(message) ||
+        /\b(?:can|could|would)\s+you\s+(?:book|make|schedule|arrange)\b/i.test(message) ||
+        /\b(?:can|could|would)\s+i\s+get\s+(?:an?\s+)?(?:appointment|booking|slot|doctor)\b/i.test(message) ||
+        /^(?:appointment|new appointment|appointment please|help appointment|need appointment)$/i.test(message.trim());
+}
 function isAppointmentHistoryRequest(message) {
-    return /\b(show my appointment history|appointment history|my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message);
+    return /\b(?:can i get|show|view|check|what is)\s+(?:my\s+)?(?:appointment|booking)\s+(?:history|records?)\b/i.test(message) ||
+        /\b(?:show my appointment history|appointment history|my appointment history|my booking history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message);
 }
 function isRescheduleRequest(message) {
-    return /\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment|rescheduling|rebook|rebooking)\b/i.test(message);
+    return /\b(reschedule my appointment|reschedule appointment|reschedule it|need to reschedule|change my appointment|change appointment|change it|move my appointment|rescheduling|rebook|rebooking)\b/i.test(message);
+}
+function isCancellationRequest(message) {
+    return /\b(?:cancel|cancelled|cancelling|remove|drop)\b.*\b(?:appointment|booking|visit|it)\b/i.test(message) ||
+        /^cancel(?:\s+my)?$/i.test(message.trim());
 }
 function isAvailableAppointmentsRequest(message) {
-    return /\b(available appointment|available appointments|next available slot|available slots|next available appointment|open slots|what slots are free)\b/i.test(message);
+    return /\b(available appointment|available appointments|next available slot|available slots|next available appointment|open slots|what slots are free|when can i get an appointment|is there an opening|do you have any free slots|any slot available|slot available)\b/i.test(message);
 }
 function formatKenyaDateTime(date) {
     return new Intl.DateTimeFormat('en-KE', {
@@ -152,6 +176,9 @@ async function handleAppointmentReschedule(patientId, patientName, message) {
         return `${patientName}, I can help reschedule. Please tell me the new date and time for your ${existingAppointment.specialty} appointment.`;
     }
     const updatedDate = parseAppointmentDate(parsed.date, parsed.time);
+    if (updatedDate.getTime() <= Date.now()) {
+        return `${patientName}, that time has already passed. Please choose a future time for your appointment.`;
+    }
     const updatedDepartment = parsed.department || existingAppointment.specialty;
     const updatedAppointment = await prisma_1.prisma.appointment.update({
         where: { id: existingAppointment.id },
@@ -165,12 +192,31 @@ async function handleAppointmentReschedule(patientId, patientName, message) {
     });
     return `${patientName}, your appointment has been rescheduled successfully.\n\nDepartment: ${updatedAppointment.specialty}\nDate: ${formatKenyaDateTime(updatedAppointment.slotTime)}\nStatus: ${updatedAppointment.status}\nReference: ${updatedAppointment.id.slice(0, 8)}\n\nThe updated booking is now visible to the admin team.`;
 }
+async function handleAppointmentCancellation(patientId, patientName, message) {
+    if (!isCancellationRequest(message))
+        return null;
+    const existingAppointment = await prisma_1.prisma.appointment.findFirst({
+        where: {
+            patientId,
+            status: { not: 'CANCELLED' },
+        },
+        orderBy: { slotTime: 'asc' },
+    });
+    if (!existingAppointment) {
+        return `${patientName}, I could not find an active appointment to cancel. You can book a new appointment whenever you are ready.`;
+    }
+    const cancelledAppointment = await prisma_1.prisma.appointment.update({
+        where: { id: existingAppointment.id },
+        data: { status: 'CANCELLED' },
+    });
+    return `${patientName}, your appointment has been cancelled successfully.\n\nDepartment: ${cancelledAppointment.specialty}\nDate: ${formatKenyaDateTime(cancelledAppointment.slotTime)}\nReference: ${cancelledAppointment.id.slice(0, 8)}\n\nYou can book a new appointment whenever you are ready.`;
+}
 function parseAppointmentDate(dateText, timeText) {
     const normalizedDate = dateText.toLowerCase();
     const normalizedTime = timeText.toLowerCase();
-    const base = new Date();
-    const dateOnly = new Date(base);
-    dateOnly.setHours(0, 0, 0, 0);
+    const kenyaNow = getKenyaTimeParts();
+    const [year, month, day] = kenyaNow.date.split('-').map(Number);
+    const dateOnly = new Date(Date.UTC(year, month - 1, day));
     const timeMatch = normalizedTime.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
     const parsedHour = timeMatch ? Number(timeMatch[1]) : 9;
     const parsedMinute = timeMatch && timeMatch[2] ? Number(timeMatch[2]) : 0;
@@ -183,35 +229,64 @@ function parseAppointmentDate(dateText, timeText) {
         hour = 0;
     }
     if (normalizedDate.includes('today')) {
-        dateOnly.setHours(hour, parsedMinute, 0, 0);
-        return dateOnly;
+        return new Date(Date.UTC(year, month - 1, day, hour - 3, parsedMinute));
     }
     if (normalizedDate.includes('tomorrow')) {
-        dateOnly.setDate(dateOnly.getDate() + 1);
-        dateOnly.setHours(hour, parsedMinute, 0, 0);
-        return dateOnly;
+        dateOnly.setUTCDate(dateOnly.getUTCDate() + 1);
+        return new Date(Date.UTC(dateOnly.getUTCFullYear(), dateOnly.getUTCMonth(), dateOnly.getUTCDate(), hour - 3, parsedMinute));
     }
     const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const weekdayIndex = weekdays.findIndex((day) => normalizedDate.includes(day));
     if (weekdayIndex >= 0) {
-        const currentIndex = dateOnly.getDay();
+        const currentIndex = dateOnly.getUTCDay();
         const daysUntil = (weekdayIndex - currentIndex + 7) % 7 || 7;
-        dateOnly.setDate(dateOnly.getDate() + daysUntil);
-        dateOnly.setHours(hour, parsedMinute, 0, 0);
-        return dateOnly;
+        dateOnly.setUTCDate(dateOnly.getUTCDate() + daysUntil);
+        return new Date(Date.UTC(dateOnly.getUTCFullYear(), dateOnly.getUTCMonth(), dateOnly.getUTCDate(), hour - 3, parsedMinute));
     }
     if (normalizedDate.includes('next week')) {
-        dateOnly.setDate(dateOnly.getDate() + 7);
-        dateOnly.setHours(hour, parsedMinute, 0, 0);
-        return dateOnly;
+        dateOnly.setUTCDate(dateOnly.getUTCDate() + 7);
+        return new Date(Date.UTC(dateOnly.getUTCFullYear(), dateOnly.getUTCMonth(), dateOnly.getUTCDate(), hour - 3, parsedMinute));
     }
     const directDate = new Date(normalizedDate);
     if (!Number.isNaN(directDate.getTime())) {
-        directDate.setHours(hour, parsedMinute, 0, 0);
-        return directDate;
+        return new Date(Date.UTC(directDate.getFullYear(), directDate.getMonth(), directDate.getDate(), hour - 3, parsedMinute));
     }
-    dateOnly.setHours(hour, parsedMinute, 0, 0);
-    return dateOnly;
+    return new Date(Date.UTC(year, month - 1, day, hour - 3, parsedMinute));
+}
+const APPOINTMENT_TIME_SLOTS = ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'];
+function getKenyaTimeParts(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Nairobi',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return {
+        date: `${values.year}-${values.month}-${values.day}`,
+        minutes: Number(values.hour) * 60 + Number(values.minute),
+    };
+}
+function getAvailableTimeSlots(dateText) {
+    if (!dateText || !dateText.toLowerCase().includes('today')) {
+        return APPOINTMENT_TIME_SLOTS;
+    }
+    const current = getKenyaTimeParts();
+    return APPOINTMENT_TIME_SLOTS.filter((slot) => {
+        const match = slot.match(/^(\d{2}):(\d{2})\s+(AM|PM)$/);
+        if (!match)
+            return false;
+        let hour = Number(match[1]);
+        const minute = Number(match[2]);
+        if (match[3] === 'PM' && hour < 12)
+            hour += 12;
+        if (match[3] === 'AM' && hour === 12)
+            hour = 0;
+        return hour * 60 + minute > current.minutes;
+    });
 }
 function buildAppointmentInteractive(prompt, appointmentState) {
     if (appointmentState.awaitingConfirmation) {
@@ -227,14 +302,15 @@ function buildAppointmentInteractive(prompt, appointmentState) {
         };
     }
     if (!appointmentState.department) {
-        const rows = aiBotService_1.appointmentServiceOptions.map((service) => ({
+        const rows = aiBotService_1.appointmentServiceOptions.slice(0, 10).map((service) => ({
             id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
             title: service.slice(0, 24),
         }));
+        const serviceList = aiBotService_1.appointmentServiceOptions.map((service, index) => `${index + 1}. ${service}`).join('\n');
         return {
             type: 'list',
             body: {
-                text: `${prompt} Please choose the department you want from the menu below.`,
+                text: `${prompt}\n\nAll hospital services:\n${serviceList}\n\nYou can choose from the first options below or type any service name exactly.`,
             },
             action: {
                 button: 'Choose a service',
@@ -263,6 +339,23 @@ function buildAppointmentInteractive(prompt, appointmentState) {
         };
     }
     if (!appointmentState.time) {
+        const availableTimeSlots = getAvailableTimeSlots(appointmentState.date);
+        if (availableTimeSlots.length === 0) {
+            return {
+                type: 'list',
+                body: { text: `${prompt} There are no remaining appointment times today. Please choose another date.` },
+                action: {
+                    button: 'Choose another date',
+                    sections: [{
+                            title: 'Appointment date',
+                            rows: [
+                                { id: 'date_tomorrow', title: 'Tomorrow' },
+                                { id: 'date_next_week', title: 'Next week' },
+                            ],
+                        }],
+                },
+            };
+        }
         return {
             type: 'list',
             body: { text: prompt },
@@ -270,7 +363,7 @@ function buildAppointmentInteractive(prompt, appointmentState) {
                 button: 'Choose a time',
                 sections: [{
                         title: 'Available times',
-                        rows: ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'].map((time) => ({
+                        rows: availableTimeSlots.map((time) => ({
                             id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
                             title: time,
                         })),
@@ -284,21 +377,18 @@ function buildPatientMenu() {
     return {
         type: 'list',
         body: {
-            text: 'Welcome to Phadam Hospital. Choose what you need below. You only need to type your name; all other options can be selected.',
+            text: 'Welcome to Phadam Hospital. Choose an option below:\n\n1️⃣ Book an Appointment\n2️⃣ View My Appointments\n3️⃣ Reschedule Appointment\n4️⃣ Cancel Appointment\n5️⃣ Talk to a Doctor/Clinic',
         },
         action: {
             button: 'Open hospital menu',
             sections: [{
                     title: 'How can we help?',
                     rows: [
-                        { id: 'menu_appointments', title: 'Book appointment', description: 'Choose service, date and time' },
+                        { id: 'menu_appointments', title: '1. Book an Appointment', description: 'Choose service, date and time' },
                         { id: 'menu_scheduled', title: 'My appointments', description: 'View scheduled appointments' },
-                        { id: 'menu_services', title: 'Our services', description: 'Browse hospital services' },
-                        { id: 'menu_departments', title: 'Departments', description: 'View hospital departments' },
-                        { id: 'menu_locations', title: 'Locations and contacts', description: 'Find our branches' },
-                        { id: 'menu_prices', title: 'Prices and fees', description: 'View available prices' },
-                        { id: 'menu_insurance', title: 'SHA and insurance', description: 'Check accepted covers' },
-                        { id: 'menu_human', title: 'Speak to staff', description: 'Request human assistance' },
+                        { id: 'menu_reschedule', title: 'Reschedule appointment', description: 'Choose a new date and time' },
+                        { id: 'menu_cancel', title: 'Cancel appointment', description: 'Cancel an active appointment' },
+                        { id: 'menu_doctor', title: 'Talk to a Doctor/Clinic', description: 'Request doctor or clinic support' },
                     ],
                 }],
         },
@@ -328,8 +418,11 @@ function buildKnowledgeMenu() {
 }
 function normalizeInteractiveSelection(message) {
     const selections = {
-        menu_appointments: 'book appointment',
+        menu_appointments: 'start appointment booking',
         menu_scheduled: 'show my scheduled appointments',
+        menu_reschedule: 'reschedule it',
+        menu_cancel: 'cancel my appointment',
+        menu_doctor: 'I want to speak to a human staff member',
         menu_services: 'show our services',
         menu_departments: 'show our departments',
         menu_specialists: 'show our specialist clinics',
@@ -363,6 +456,9 @@ async function sendBotReply(patient, incomingMessage) {
     const hasPatientName = patientName !== 'Patient';
     const appointmentDetails = (0, aiBotService_1.parseAppointmentRequest)(effectiveMessage);
     const nameWasJustCaptured = patient.nameWasJustCaptured === true;
+    if (isNewBookingRequest(effectiveMessage)) {
+        (0, aiBotService_1.resetPatientSession)(patient.id);
+    }
     if (aiBotService_1.appointmentConversationState.has(patient.id) &&
         !bookingIntent &&
         !appointmentDetails.date &&
@@ -507,6 +603,32 @@ async function sendBotReply(patient, incomingMessage) {
         }
         return;
     }
+    const cancellationReply = hasPatientName
+        ? await handleAppointmentCancellation(patient.id, patientName, effectiveMessage)
+        : null;
+    if (cancellationReply) {
+        try {
+            await (0, whatsappService_1.sendWhatsAppMessage)({
+                recipientPhone: patient.phoneNumber,
+                messageText: cancellationReply,
+            });
+            await prisma_1.prisma.messageLog.create({
+                data: {
+                    patientId: patient.id,
+                    sender: 'BOT',
+                    body: cancellationReply,
+                    timestamp: new Date(),
+                },
+            });
+        }
+        catch (error) {
+            console.error('[WhatsApp Cancellation Reply Failed]', {
+                patientId: patient.id,
+                error: error instanceof Error ? error.message : error,
+            });
+        }
+        return;
+    }
     const rescheduleReply = hasPatientName
         ? await handleAppointmentReschedule(patient.id, patientName, effectiveMessage)
         : null;
@@ -580,6 +702,30 @@ async function sendBotReply(patient, incomingMessage) {
             return;
         }
         const slotTime = parseAppointmentDate(date, time);
+        if (slotTime.getTime() <= Date.now()) {
+            const pastTimeReply = `${patientName}, that appointment time has already passed. Please choose a future time so I can complete the booking.`;
+            try {
+                await (0, whatsappService_1.sendWhatsAppMessage)({
+                    recipientPhone: patient.phoneNumber,
+                    messageText: pastTimeReply,
+                });
+                await prisma_1.prisma.messageLog.create({
+                    data: {
+                        patientId: patient.id,
+                        sender: 'BOT',
+                        body: pastTimeReply,
+                        timestamp: new Date(),
+                    },
+                });
+            }
+            catch (error) {
+                console.error('[WhatsApp Past Appointment Reply Failed]', {
+                    patientId: patient.id,
+                    error: error instanceof Error ? error.message : error,
+                });
+            }
+            return;
+        }
         try {
             const appointment = await prisma_1.prisma.appointment.create({
                 data: {

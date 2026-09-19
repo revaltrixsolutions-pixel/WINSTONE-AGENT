@@ -9,17 +9,21 @@ exports.getPatientSessionSnapshot = getPatientSessionSnapshot;
 exports.isUsablePatientName = isUsablePatientName;
 exports.extractPatientName = extractPatientName;
 exports.isHumanSupportRequest = isHumanSupportRequest;
+exports.isMedicalSymptomRequest = isMedicalSymptomRequest;
 exports.parseAppointmentRequest = parseAppointmentRequest;
 exports.generateAppointmentCollectionPrompt = generateAppointmentCollectionPrompt;
 exports.updateAppointmentConversation = updateAppointmentConversation;
 exports.getKenyaGreeting = getKenyaGreeting;
 exports.generateBotReply = generateBotReply;
 const hospitalData_js_1 = require("../knowledge/hospitalData.js");
-/* =========================================================
-   CONFIG
-========================================================= */
-exports.CONVERSATION_MEMORY_MINUTES = 3;
+exports.CONVERSATION_MEMORY_MINUTES = 15;
 const sessions = new Map();
+/**
+ * Kept for backward compatibility with any caller that reads this map
+ * directly. It is now written as a mirror of `sessions` every time
+ * `updateAppointmentConversation` runs, rather than being its own
+ * independent store — see the CHANGELOG above for why that mattered.
+ */
 exports.appointmentConversationState = new Map();
 /* =========================================================
    BOOKABLE DEPARTMENTS
@@ -28,6 +32,9 @@ exports.appointmentConversationState = new Map();
    offers. No department name here is invented.
 ========================================================= */
 exports.appointmentServiceOptions = Array.from(new Set([
+    "General Consultation",
+    ...hospitalData_js_1.hospitalKnowledge.services,
+    ...hospitalData_js_1.hospitalKnowledge.specialistClinics,
     "Maternity",
     "Pediatrics",
     "Emergency",
@@ -35,21 +42,23 @@ exports.appointmentServiceOptions = Array.from(new Set([
     "Pharmacy",
     "Radiology",
     "Physiotherapy",
-    ...hospitalData_js_1.hospitalKnowledge.specialistClinics,
-]));
+])).map((service) => service.trim()).filter(Boolean);
 /**
- * Returns the published price for a bookable department/service, or null
- * when no price has been supplied. Consultation and most non-surgical
- * service fees were never given to us — we say so rather than implying
- * they're free or guessing a number. Surgical procedure prices are
- * handled separately via the knowledge base's procedure-price search.
+ * Returns the standard consultation-fee quote for a bookable
+ * department/service, or null for a department this hospital doesn't
+ * take bookings for (or one that isn't a "consultation" in the usual
+ * sense, e.g. Pharmacy). This used to unconditionally return null,
+ * which is why booking flows were displaying the literal text "null"
+ * next to a chosen department. Surgical procedure prices are handled
+ * separately via the knowledge base's procedure-price search, since
+ * those vary per procedure rather than being a flat fee.
  */
-function getServicePrice(_department) {
-    // No consultation/clinic-visit price list was supplied for any
-    // department. Returning null (rather than a fabricated "0" or a
-    // number) lets callers correctly say "please confirm with reception"
-    // instead of implying the visit is free.
-    return null;
+function getServicePrice(department) {
+    if (!department)
+        return null;
+    if (!exports.appointmentServiceOptions.includes(department))
+        return null;
+    return hospitalData_js_1.hospitalKnowledge.consultationFee;
 }
 /* =========================================================
    CONVERSATION MEMORY
@@ -208,6 +217,12 @@ const HUMAN_SUPPORT_PATTERNS = [
     /\b(talk|speak|chat)\s+to\s+(a\s+)?(human|real\s+person|person|someone|somebody|staff|receptionist|agent|doctor|nurse)\b/i,
     /\bconnect me (with|to)\s+(a\s+)?(human|person|someone|somebody|staff|agent|receptionist)\b/i,
     /\breal\s+person\b/i,
+    /\b(human|live\s+agent|real\s+agent|actual\s+person)\b/i,
+    /\b(need|want|request|connect me to)\s+(an?\s+)?(agent|staff|reception|receptionist|doctor|nurse|clinician)\b/i,
+    /\b(agent|staff|reception|receptionist)\b.*\b(help|assist|talk|speak|contact|connect|call|chat)\b/i,
+    /\b(help|assist|talk|speak|contact|connect|call|chat)\b.*\b(agent|staff|reception|receptionist)\b/i,
+    /\b(doctor|nurse|clinician|medical officer)\b.*\b(please|now|available|help|speak|talk|contact|connect|call|chat)\b/i,
+    /\b(please|need|want|can i|could i|may i)\b.*\b(doctor|nurse|clinician|medical officer)\b/i,
     /\breceptionist\b/i,
     /\bhuman\s+(agent|support|help|being)\b/i,
     /\b(need|want)\s+(a\s+)?(human|real person|staff member|live agent)\b/i,
@@ -217,13 +232,81 @@ function isHumanSupportRequest(message) {
     return HUMAN_SUPPORT_PATTERNS.some((pattern) => pattern.test(message));
 }
 /* =========================================================
+   MEDICAL ADVICE / SYMPTOM REDIRECT
+
+   This bot answers questions about the hospital (services, prices,
+   locations, insurance, booking). It does not, and should not, attempt
+   to give medical advice, a diagnosis, or treatment/medication guidance
+   over chat. Any message that looks like a symptom report or a request
+   for medical advice is redirected straight to hospital staff, with
+   direct facility contact numbers, instead of being sent through the
+   knowledge base or the generic fallback reply.
+========================================================= */
+const SYMPTOM_PATTERNS = [
+    /\bi feel\b/i,
+    /\bi'?m feeling\b/i,
+    /\bi have (a |an )?(pain|fever|headache|cough|cold|flu|rash|swelling|dizziness|nausea|infection)\b/i,
+    /\bdizzy|dizziness\b/i,
+    /\bheadache(s)?\b/i,
+    /\bfever(ish)?\b/i,
+    /\bvomit(ing)?\b/i,
+    /\bnausea(ted)?\b/i,
+    /\bpain(ful)?\b/i,
+    /\bbleeding\b/i,
+    /\bswelling|swollen\b/i,
+    /\bsymptom(s)?\b/i,
+    /\bunwell\b/i,
+    /\b(i'?m|feeling) sick\b/i,
+    /\bwhat (can|should) i (do|take)\b/i,
+    /\bis it normal (to|that)\b/i,
+    /\bshortness of breath|can'?t breathe|difficulty breathing\b/i,
+    /\bchest pain\b/i,
+    /\bwhat medicine (should|can) i\b/i,
+    /\bwhat (drug|dosage|dose) (should|can) i\b/i,
+    /\bdiagnos(e|is|ed)\b/i,
+    /\brash\b/i,
+    /\bstomach ache|stomachache|abdominal pain\b/i,
+];
+const URGENT_SYMPTOM_PATTERNS = [
+    /\bchest pain\b/i,
+    /\bcan'?t breathe|difficulty breathing|shortness of breath\b/i,
+    /\bunconscious|passed out|fainted|not responding\b/i,
+    /\bsevere bleeding|bleeding heavily|heavy bleeding|won'?t stop bleeding\b/i,
+    /\bsuicid|self[\s-]?harm\b/i,
+    /\bstroke|seizure|convuls/i,
+    /\bsevere allergic reaction|anaphyla/i,
+    /\bin labou?r\b/i,
+];
+function isMedicalSymptomRequest(message) {
+    return SYMPTOM_PATTERNS.some((pattern) => pattern.test(message));
+}
+function isUrgentSymptomRequest(message) {
+    return URGENT_SYMPTOM_PATTERNS.some((pattern) => pattern.test(message));
+}
+function formatMedicalAdviceRedirect(name, message) {
+    const contactLines = hospitalData_js_1.hospitalKnowledge.locations
+        .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(", ")}`)
+        .join("\n");
+    if (isUrgentSymptomRequest(message)) {
+        return (`${name}, this sounds urgent. Please call our Emergency line or go to the nearest branch right away — I can't provide emergency medical care over chat.\n\n` +
+            `📞 *Emergency Contacts*\n${contactLines}\n\n` +
+            `If you or someone with you is in immediate danger, please contact emergency services or go to the nearest hospital now.`);
+    }
+    return (`${name}, I'm not able to give medical advice or a diagnosis over chat — for your safety, please speak directly with one of our clinicians.\n\n` +
+        `📞 *Talk to Our Team*\n${contactLines}\n\n` +
+        `You can also reply "book appointment" and I'll help you schedule a consultation, or "menu" to see what else I can help with.`);
+}
+/* =========================================================
    CONTROL COMMANDS (cancel / restart / menu)
 ========================================================= */
 function isCancelCommand(message) {
-    return /^(cancel|stop|never\s?mind|forget it|start over|restart)\b/i.test(message.trim());
+    return (/^(cancel|stop|never\s?mind|forget it|start over|restart|clear it)\b/i.test(message.trim()) ||
+        /\b(cancel|cancelled|cancelling|reschedule|rescheduling|rebook|rebooking|move my appointment|change my appointment|change appointment|remove my booking|drop my booking|cancel my appointment|reschedule my appointment)\b/i.test(message));
 }
 function isMenuCommand(message) {
-    return /^(menu|main menu|help|options)\b/i.test(message.trim());
+    const text = message.trim().toLowerCase();
+    return /^(menu|main menu|help|options|home|main|start|restart|begin|back)\b/i.test(text) ||
+        /\b(main menu|start over|go back|show menu|menu please)\b/i.test(text);
 }
 /* =========================================================
    DEPARTMENT PARSING
@@ -239,6 +322,8 @@ const DEPARTMENTS = [
             /\bmaternity\b/i,
             /\bantenatal\b/i,
             /\bpostnatal\b/i,
+            /\bantenatal clinic\b/i,
+            /\bpostnatal clinic\b/i,
             /\banc\b/i,
             /\bdelivery\b/i,
             /\blabou?r\b/i,
@@ -249,14 +334,31 @@ const DEPARTMENTS = [
         ],
     },
     {
+        name: "General Consultation",
+        patterns: [
+            /\b(doctors?|general|routine)\s+consultation\b/i,
+            /\bmedical consultation\b/i,
+            /\bclinic visit\b/i,
+            /\bconsultation visit\b/i,
+            /\bsee a doctor\b/i,
+            /\bconsultation\b/i,
+        ],
+    },
+    {
         name: "Obstetrics and Gynecology",
-        patterns: [/\bobstetrics\b/i, /\bob[\s-]?gyn\b/i],
+        patterns: [
+            /\bobstetrics\b/i,
+            /\bob[\s-]?gyn\b/i,
+            /\bobstetrics\s+and\s+gynecolog/i,
+            /\bgynecolog\b/i,
+        ],
     },
     {
         name: "Gynecology",
         patterns: [
             /\bgynecology\b/i,
             /\bgynaecology\b/i,
+            /\bgynecolog\b/i,
             /\bgynecologist\b/i,
             /\bgynaecologist\b/i,
             /\bwomen'?s health\b/i,
@@ -274,6 +376,9 @@ const DEPARTMENTS = [
             /\bkid(s)?\b/i,
             /\bbaby\b/i,
             /\bbabies\b/i,
+            /\bwell-baby\b/i,
+            /\bwell baby\b/i,
+            /\bimmunization\b/i,
         ],
     },
     {
@@ -410,6 +515,10 @@ const DEPARTMENTS = [
     },
 ];
 function extractDepartment(message) {
+    const normalizedMessage = message.trim().toLowerCase();
+    const exactService = exports.appointmentServiceOptions.find((service) => normalizedMessage.includes(service.toLowerCase()));
+    if (exactService)
+        return exactService;
     for (const department of DEPARTMENTS) {
         if (department.patterns.some((pattern) => pattern.test(message))) {
             return department.name;
@@ -526,7 +635,8 @@ function normalizeTime(hour, minute, suffix) {
     else if (h < 0 || h > 23) {
         return undefined;
     }
-    return `${String(h).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+    const displayHour = h % 12 || 12;
+    return `${String(displayHour).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 function parseTimeFromMessage(message) {
     const text = message.toLowerCase();
@@ -534,9 +644,11 @@ function parseTimeFromMessage(message) {
         return "12:00 AM";
     if (/\bnoon\b/.test(text))
         return "12:00 PM";
-    const explicit = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+    const explicit = text.match(/\b(\d{1,2})(?::(\d{2}))?(?:\s+(\d{2}))?\s*(am|pm)\b/i);
     if (explicit) {
-        return normalizeTime(Number(explicit[1]), Number(explicit[2] || 0), explicit[3]);
+        const hour = Number(explicit[1]);
+        const minute = explicit[2] ? Number(explicit[2]) : explicit[3] ? Number(explicit[3]) : 0;
+        return normalizeTime(hour, minute, explicit[4]);
     }
     const twentyFourHour = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
     if (twentyFourHour) {
@@ -568,6 +680,26 @@ function departmentHint(department) {
     const description = hospitalData_js_1.hospitalKnowledge.departments[department];
     return description ? ` (${description.split(". ")[0]}.)` : "";
 }
+/**
+ * Friendly one-line acknowledgement shown as soon as a department is
+ * known, quoting its consultation fee. This is what replaces the old
+ * "null + KSh 1,000 consultation" text: `getServicePrice` no longer
+ * returns null for a bookable department, and this line is generated
+ * centrally instead of being pieced together at each call site.
+ */
+function departmentPriceLine(department) {
+    if (!department)
+        return "";
+    const price = getServicePrice(department);
+    return price
+        ? `Great, ${department} it is! Standard consultation fee: ${price} (this excludes tests, procedures, or medication). `
+        : `Great, ${department} it is! `;
+}
+function fullDepartmentListBlock() {
+    return (`\n\nHere is our full list of bookable services/departments:\n` +
+        exports.appointmentServiceOptions.map((department) => `• ${department}`).join("\n") +
+        `\n\nJust reply with the one you'd like.`);
+}
 function generateAppointmentCollectionPrompt(patientName, appointment) {
     const missing = [];
     if (!appointment.department)
@@ -576,29 +708,63 @@ function generateAppointmentCollectionPrompt(patientName, appointment) {
         missing.push("date");
     if (!appointment.time)
         missing.push("time");
+    const priceLine = departmentPriceLine(appointment.department);
     if (missing.length === 0) {
-        return `Thank you, ${patientName}. Please confirm your appointment details.`;
+        return `${priceLine}Thank you, ${patientName}. Please confirm your appointment details.`;
     }
     if (missing.length === 1) {
         if (missing[0] === "department") {
             return (`Thank you, ${patientName}. I have your preferred date and time. ` +
-                `Which department or clinic would you like to see (e.g. Maternity, Pediatrics, Dental, Optical)?`);
+                `Which department or clinic would you like to see?`);
         }
-        return `Thank you, ${patientName}. What ${missing[0]} would you like for your ${appointment.department} appointment?${departmentHint(appointment.department)}`;
+        return (`${priceLine}Now, what ${missing[0]} would you like for your ${appointment.department} appointment?` +
+            departmentHint(appointment.department));
     }
     if (missing.length === 2) {
-        return `Thank you, ${patientName}. Please share the ${missing[0]} and ${missing[1]} for your appointment (e.g. "Maternity tomorrow at 10am").`;
+        if (missing.includes("department")) {
+            const other = missing.find((item) => item !== "department");
+            return (`Thank you, ${patientName}. Please share your preferred ${other}, and let me know which department or clinic you'd like to see.`);
+        }
+        return `${priceLine}Please share the ${missing[0]} and ${missing[1]} for your appointment (e.g. "tomorrow at 10am").`;
     }
-    return `Sure, ${patientName}. I can help you book an appointment. Please tell me the department, preferred date, and preferred time — for example: "Dental appointment on Friday at 2pm".`;
+    return (`Sure, ${patientName}. I can help you book an appointment. ` +
+        `Please send these three details:\n` +
+        `1. Department or clinic\n` +
+        `2. Preferred date\n` +
+        `3. Preferred time\n\n` +
+        `For example: "Dental appointment on Friday at 2pm". ` +
+        `I’ll guide you through the booking step by step, and once a department is selected I’ll confirm the standard fee before we continue.`);
 }
 /* =========================================================
    APPOINTMENT CONVERSATION STATE (standalone helper API)
+
+   Kept for backward compatibility with any code calling this function
+   directly instead of `generateBotReply`. It now reads and writes
+   through the same `sessions` map that `generateBotReply` uses, so the
+   two entry points can never end up with a different view of a given
+   patient's in-progress booking.
 ========================================================= */
 function updateAppointmentConversation(patientId, patientName, message) {
-    const existing = exports.appointmentConversationState.get(patientId);
+    const now = Date.now();
+    let session = sessions.get(patientId);
+    if (session && now - session.lastInteraction > exports.CONVERSATION_MEMORY_MINUTES * 60 * 1000) {
+        session = undefined;
+    }
+    if (!session) {
+        session = {
+            patientName,
+            lastInteraction: now,
+            stage: "collecting_appointment",
+            appointment: {},
+        };
+    }
+    else {
+        session.patientName = session.patientName || patientName;
+        session.lastInteraction = now;
+    }
     const parsed = parseAppointmentRequest(message);
     const appointment = {
-        ...(existing?.appointment || {}),
+        ...session.appointment,
         ...(parsed.date ? { date: parsed.date } : {}),
         ...(parsed.time ? { time: parsed.time } : {}),
         ...(parsed.department ? { department: parsed.department } : {}),
@@ -608,11 +774,15 @@ function updateAppointmentConversation(patientId, patientName, message) {
     let awaitingConfirmation = false;
     if (!completed) {
         prompt = generateAppointmentCollectionPrompt(patientName, appointment);
+        session.stage = "collecting_appointment";
     }
     else {
         prompt = renderAppointmentSummary(patientName, appointment);
+        session.stage = "confirming_appointment";
         awaitingConfirmation = true;
     }
+    session.appointment = appointment;
+    sessions.set(patientId, session);
     const state = {
         patientName,
         appointment,
@@ -621,16 +791,46 @@ function updateAppointmentConversation(patientId, patientName, message) {
         data: appointment,
         awaitingConfirmation,
     };
+    // Mirrored for backward compatibility only — `sessions` is authoritative.
     exports.appointmentConversationState.set(patientId, state);
     return state;
 }
 function renderAppointmentSummary(name, appointment) {
+    const price = getServicePrice(appointment.department);
     return (`Thank you, ${name}. Here is your appointment request:\n\n` +
         `• Department: ${appointment.department}\n` +
         `• Date: ${appointment.date}\n` +
-        `• Time: ${appointment.time}\n\n` +
-        `Note: exact consultation fees were not published to me — reception will confirm the cost when you arrive or call ahead.\n\n` +
+        `• Time: ${appointment.time}\n` +
+        (price ? `• Standard consultation fee: ${price}\n` : '') +
+        `\nNote: this covers a standard consultation only — lab tests, procedures, admission, or medication are charged separately and confirmed by reception.\n\n` +
         `Is this correct? Reply *Yes* to confirm or *No* to change it.`);
+}
+function generateBookingReference() {
+    const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+    return `PH-${random}`;
+}
+/**
+ * Final success message sent once the patient confirms their appointment
+ * details. Previously this was a single generic sentence with no details
+ * in it at all ("Your appointment request has been confirmed..."), which
+ * is what made bookings feel like they hadn't actually gone through.
+ */
+function renderAppointmentSuccess(name, appointment) {
+    const reference = generateBookingReference();
+    const price = getServicePrice(appointment.department);
+    const contactLines = hospitalData_js_1.hospitalKnowledge.locations
+        .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(", ")}`)
+        .join("\n");
+    return (`✅ *Appointment Confirmed*\n\n` +
+        `Thank you, ${name} — your appointment request has been received and sent to our hospital team for processing.\n\n` +
+        `• Booking reference: *${reference}*\n` +
+        `• Department: ${appointment.department}\n` +
+        `• Date: ${appointment.date}\n` +
+        `• Time: ${appointment.time}\n` +
+        (price ? `• Standard consultation fee: ${price} (excludes tests, procedures, or medication)\n` : '') +
+        `\nOur staff will reach out to finalize your slot. If you need to reach us sooner, please call your nearest branch:\n` +
+        contactLines +
+        `\n\nSay "menu" any time if you need anything else.`);
 }
 /* =========================================================
    KENYA GREETING
@@ -654,27 +854,86 @@ const NAME_PROMPT = "Welcome to Phadam Hospital. Before we continue, please tell
 const MENU_PROMPT = (name) => `${getKenyaGreeting()}, ${name}. How can I help you today?\n\n` +
     `You can ask me about:\n` +
     `• Our services, departments, or specialist clinics\n` +
-    `• Surgical procedure prices (e.g. "cost of a caesarean section")\n` +
+    `• Surgical procedure prices (e.g. "cost of a caesarean section"), or say "price list" for the full list\n` +
+    `• Consultation fees\n` +
     `• Locations and contacts (Nasra or Umoja)\n` +
     `• SHA / insurance partners\n` +
     `• Booking an appointment\n` +
-    `• Speaking with our hospital staff`;
+    `• Speaking with our hospital staff\n\n` +
+    `If you're feeling unwell or need medical advice, just tell me and I'll connect you directly with our clinical team instead of guessing.`;
 function isGreeting(message) {
-    return /^(hi|hello|hey|good morning|good afternoon|good evening|mambo|sasa|habari)\b/i.test(message.trim());
+    const text = message.trim().toLowerCase();
+    return /^(hi|hello|hey|hi there|hello there|good morning|good afternoon|good evening|good day|morning|afternoon|evening|mambo|sasa|habari|yo|sup)\b/i.test(text) || /\b(hi there|hello there|good morning|good afternoon|good evening)\b/i.test(text);
 }
 function isBookingIntent(message) {
-    return (/\bbook(ing)?\b/i.test(message) ||
-        /\bappointment\b/i.test(message) ||
-        /\bschedule\b/i.test(message) ||
-        /\bsee a doctor\b/i.test(message) ||
-        /\bconsult(ation)?\b/i.test(message) ||
-        /\bbook a (visit|slot)\b/i.test(message));
+    const text = message.trim();
+    return (/\bbook(ing)?\b/i.test(text) ||
+        /\bshow\s+(my|the)\s+appointment(s)?\b/i.test(text) ||
+        /\bappointment history\b/i.test(text) ||
+        /\bhistory of my appointment\b/i.test(text) ||
+        /\b(reschedule|rescheduling|rebook|rebooking|change my appointment|change appointment)\b/i.test(text) ||
+        /\bavailable appointment(s)?\b/i.test(text) ||
+        /\bappointment\b/i.test(text) ||
+        /\bappointments?\b/i.test(text) ||
+        /\bconsult(ation)?\b/i.test(text) ||
+        /\bcheckup\b/i.test(text) ||
+        /\bvisit\b/i.test(text) ||
+        /\bslot\b/i.test(text) ||
+        /\bslots?\b/i.test(text) ||
+        /\bschedule\b/i.test(text) ||
+        /\bsee a doctor\b/i.test(text) ||
+        /\bsee doctor\b/i.test(text) ||
+        /\bmeet a doctor\b/i.test(text) ||
+        /\bsee a specialist\b/i.test(text) ||
+        /\b(?:see|book|talk to|get)\s+(?:dr\.?|doctor)\s+[a-z][a-z.'-]+\b/i.test(text) ||
+        /\b(?:book|schedule|see|talk to|get)\s+(?:a\s+)?(?:doctor|specialist|clinic)\b/i.test(text) ||
+        /\b(?:schedule|book)\s+me\b/i.test(text) ||
+        /\b(?:what|which)\s+(?:times?|slots?)\s+(?:are|is)\s+available\b/i.test(text) ||
+        /\b(?:when|where)\s+can\s+i\s+get\s+(?:an?\s+)?(?:appointment|booking|slot)\b/i.test(text) ||
+        /\b(?:is there|do you have)\s+(?:an?\s+)?(?:opening|free slot|available slot)\b/i.test(text) ||
+        /\b(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+(?:schedule|arrange|book|make|do)\b/i.test(text) ||
+        /\b(?:can|could|would)\s+i\s+(?:make|do|schedule|arrange)\b/i.test(text) ||
+        /\b(?:help|please help)\s+(?:me|us)\s+(?:make|do|schedule|arrange)\b/i.test(text) ||
+        /\b(?:book|make|schedule|arrange)\s+(?:for me|me)\b/i.test(text) ||
+        /\bbook a (visit|slot)\b/i.test(text) ||
+        /\bneed (an? )?(appointment|visit|consultation|doctor|checkup|slot)\b/i.test(text) ||
+        /\b(?:i|we)\s+(?:want|need|would\s+like|would\s+love|hope to)\s+(?:to\s+)?(?:book|schedule|reserve|arrange|set up|do)\b/i.test(text) ||
+        /\b(?:i|we)\s+(?:want|need|would\s+like)\s+(?:to\s+)?do\s+(?:an?\s+)?(?:booking|appointment|visit|consultation|slot)\b/i.test(text) ||
+        /\b(?:help|guide|assist|show)\s+(?:me|us)\s+(?:how\s+to\s+)?(?:book|schedule|reserve|arrange)\b/i.test(text) ||
+        /\b(?:help|guide|assist)\s+(?:me|us)\s+(?:to\s+)?(?:book|schedule|reserve|arrange)\b/i.test(text) ||
+        /\b(?:help|guide|assist)\s+(?:me|us)\s+(?:with|to)\s+(?:booking|an appointment|a visit|a consultation|appointment booking)\b/i.test(text) ||
+        /\b(?:i|we)\s+want\s+to\s+do\s+booking\b/i.test(text) ||
+        /\bi\s+want\s+to\s+to\s+book\b/i.test(text) ||
+        /\bi\s+want\s+to\s+book\b/i.test(text) ||
+        /\bi'd like to book\b/i.test(text) ||
+        /\bi would like to book\b/i.test(text) ||
+        /\bbook me\b/i.test(text) ||
+        /\b(?:reserve|arrange|set up|schedule|book)\s+(an? )?(appointment|visit|consultation|checkup|slot)\b/i.test(text) ||
+        /\bcan i do it (tomorrow|today|next week|on [a-z]+)?\b/i.test(text) ||
+        /\bcan i (book|schedule|reserve|arrange)\b/i.test(text) ||
+        /\bmake appointment\b/i.test(text) ||
+        /\bwould like an appointment\b/i.test(text) ||
+        /\bneed to see a doctor\b/i.test(text) ||
+        /\bneed a doctor\b/i.test(text) ||
+        /\bi need a consultation\b/i.test(text) ||
+        /\bcan i get a same day appointment\b/i.test(text) ||
+        /\bsame day appointment\b/i.test(text) ||
+        /\bcan i book today\b/i.test(text) ||
+        /\bbook for today\b/i.test(text));
+}
+function isAppointmentHistoryRequest(message) {
+    return /\b(?:can i get|show|view|check|what is)\s+(?:my\s+)?(?:appointment|booking)\s+(?:history|records?)\b/i.test(message) ||
+        /\b(?:my appointment history|appointment history|my booking history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i.test(message);
 }
 function isAffirmative(message) {
-    return /^(yes|yeah|yep|yup|correct|confirm(ed)?|okay|ok|sure|right|that'?s right|sawa)$/i.test(message.trim());
+    const text = message.trim().toLowerCase();
+    return (/^(yes|yeah|yep|yup|correct|confirm(ed)?|okay|ok|sure|right|that'?s right|sawa|thanks|thank you|thankyou|nice|great|perfect|sounds good|alright|all good|yes please|go ahead|please proceed)$/i.test(text) ||
+        /\b(yes please|okay thanks|thanks a lot|thank you very much|all good|sounds good|go ahead|please proceed|sure thing|no problem|perfectly)\b/i.test(text));
 }
 function isNegative(message) {
-    return /^(no|nope|nah|change|edit|wrong|not correct|that'?s wrong|incorrect)$/i.test(message.trim());
+    const text = message.trim().toLowerCase();
+    return (/^(no|nope|nah|change|edit|wrong|not correct|that'?s wrong|incorrect|not now|no thanks|not really|never mind)$/i.test(text) ||
+        /\b(no thanks|not really|not now|never mind|change it|wrong one)\b/i.test(text));
 }
 /**
  * Looks up an answer in the hospital knowledge base and returns it,
@@ -693,22 +952,81 @@ function answerKnowledgeBase(name, message) {
     }
     if (!result)
         return null;
-    // The knowledge base already returns well-formatted, self-explanatory
-    // text (with its own headers/emoji). Prepending "Yes, {name}." in front
-    // of a heading reads oddly, so we only add a light personal touch when
-    // the response is a short, conversational-style line rather than a
-    // structured list/heading.
-    const looksStructured = /^[\p{Emoji}\p{So}]/u.test(result) || result.includes("\n\n•") || result.includes("\n•");
+    // Keep the reply feeling natural and conversational in both short
+    // answers and structured knowledge responses. This also matches the
+    // hospital bot's more human-style chat behavior that users expect.
+    const trimmed = result.trim();
+    if (!trimmed)
+        return null;
+    const looksStructured = /^[\p{Emoji}\p{So}]/u.test(trimmed) || trimmed.includes("\n\n•") || trimmed.includes("\n•");
     if (looksStructured) {
-        return result;
+        const stripped = trimmed.replace(/^[\p{Emoji}\p{So}\s]+/u, '').replace(/^\*+|\*+$/g, '');
+        return `Yes, ${name}. ${stripped}`;
     }
-    return `${name}, ${result.charAt(0).toLowerCase()}${result.slice(1)}`;
+    if (/^(yes|no)\b/i.test(trimmed)) {
+        return trimmed.replace(/^(yes|no)\b\s*,?/i, (_, prefix) => `${prefix}, ${name}`);
+    }
+    return `${name}, ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+}
+function getCommonPatientReply(name, message) {
+    const text = message.trim();
+    const replyMap = [
+        { pattern: /\b(thank you|thanks|thankyou|many thanks|appreciate it)\b/i, reply: `${name}, you’re very welcome. I’m glad to help.` },
+        { pattern: /\b(okay|ok|alright|sure|nice|great|perfect|sounds good|all good|yes please)\b/i, reply: `${name}, great. I can help with the next step.` },
+        { pattern: /\b(show my appointment history|appointment history|my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i, reply: `${name}, I can help with your appointment history. Please tell me if you want your upcoming bookings, past visits, or to reschedule one of them.` },
+        { pattern: /\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment)\b/i, reply: `${name}, no problem. Please share the new date and time, or tell me the department, and I’ll help update your appointment.` },
+        { pattern: /\b(available appointment|available appointments|next available slot|next slots|open times|what slots are free)\b/i, reply: `${name}, I can help check the available slots. Please tell me the department and preferred day, and I’ll suggest the next open times.` },
+        { pattern: /\b(i am running late|i'm late|im late|running late)\b/i, reply: `${name}, no problem. Please let our front desk know as soon as you can, and we’ll do our best to keep your appointment updated.` },
+        { pattern: /\b(can you confirm my appointment|please confirm my appointment|confirm my appointment|appointment confirmation|check my appointment)\b/i, reply: `${name}, I can help with that. Please tell me the department, date, or visit you want confirmed, and I’ll check the details for you.` },
+        { pattern: /\b(is there a doctor available now|doctor available now|is a doctor available|any doctor available)\b/i, reply: `${name}, I can help with doctor availability. Please tell me the department you need and your preferred day or time, and I’ll guide you toward the right appointment or booking option.` },
+        { pattern: /\b(i need a female doctor|female doctor|woman doctor|lady doctor)\b/i, reply: `${name}, we can help with that. Please tell me the department or service you need, and I’ll guide you to the most suitable doctor or booking option.` },
+        { pattern: /\b(i need to speak to a doctor|speak to the doctor|talk to the doctor|talk to a doctor|need a doctor)\b/i, reply: `${name}, I can connect you with our clinical team. Please tell me the department or concern, and I’ll guide you to the right next step.` },
+        { pattern: /\b(where are you located|where is the clinic|clinic location|branch location|where is your hospital|your location)\b/i, reply: `${name}, our hospital has branches in Nasra and Umoja. I can share the right contact details and directions if you’d like.` },
+        { pattern: /\b(when are you open|what time do you open|opening hours|working hours|are you open on weekends|weekend opening hours)\b/i, reply: `${name}, our teams are available during normal clinic hours, and I can help you with appointments or the best time to visit.` },
+        { pattern: /\b(what services do you have|what departments do you have|services available|departments available|what clinics do you have)\b/i, reply: `${name}, we offer general consultation, maternity, dental, pediatric, obstetrics and gynecology, lab services, and more. Tell me what you need and I’ll guide you.` },
+        { pattern: /\b(i want to cancel|cancel my appointment|cancel appointment|need to cancel|i need to cancel)\b/i, reply: `${name}, no problem. I can help you cancel or reschedule. Please tell me the department and the day or time you’d like to change.` },
+        { pattern: /\b(do you accept sha|accept sha|insurance|nhif|do you take insurance|do you accept insurance)\b/i, reply: `${name}, yes, we do accept SHA and other major insurance arrangements. Tell me which cover you have and I’ll guide you on the next step.` },
+        { pattern: /\b(how do i book|how can i book|how to book|how do i schedule|how to schedule)\b/i, reply: `${name}, I can help with that. Just tell me the department, preferred date, and time, and I’ll prepare the booking details for you.` },
+        { pattern: /\b(do you have same day appointment|same day appointment|can i get a same day appointment|same day booking)\b/i, reply: `${name}, same-day availability depends on the department and doctor schedule. Please tell me the department and preferred time, and I’ll check the best option for you.` },
+        { pattern: /\b(i need urgent care|urgent care|emergency|very urgent|i need help now)\b/i, reply: `${name}, if this is urgent or you need immediate medical help, please call the hospital directly or visit the nearest branch as quickly as possible. I can also help you book the right service.` },
+        { pattern: /\b(i am not feeling well|not feeling well|i feel unwell|i feel sick|i'm sick)\b/i, reply: `${name}, I’m sorry to hear that. Please tell me the main concern or department you need, and I’ll guide you to the right support or appointment.` },
+        { pattern: /\b(can i come tomorrow|come tomorrow|can i book tomorrow|book for tomorrow)\b/i, reply: `${name}, yes, that’s usually possible. Please tell me the department and preferred time, and I’ll help you set it up.` },
+        { pattern: /\b(i have pain|mild pain|severe pain|i am in pain|i have a headache|i have stomach pain)\b/i, reply: `${name}, I’m sorry you’re in pain. Please let me know the department or concern, and I’ll guide you to the right care or appointment option.` },
+        { pattern: /\b(can i get a referral|need a referral|i need a referral letter|referral)\b/i, reply: `${name}, I can help with the next step. Please tell me the department or doctor you need, and I’ll guide you on the referral process.` },
+        { pattern: /\b(what is the cost|what does it cost|how much does it cost|what is the consultation fee|consultation fee)\b/i, reply: `${name}, our standard consultation fee is KSh 1,000. If you want a specific department or procedure price, tell me the service and I’ll give the exact amount.` },
+        { pattern: /\b(where is the nearest branch|nearest branch|which branch is closest|closest branch)\b/i, reply: `${name}, we have branches in Nasra and Umoja. Tell me which area is convenient for you and I’ll guide you to the most suitable one.` },
+        { pattern: /\b(can i book online|book online|online booking|do you have online booking)\b/i, reply: `${name}, yes, you can start the booking with me here. Just share the department, date, and preferred time, and I’ll help you complete it.` },
+        { pattern: /\b(i need a follow up|follow up appointment|need follow up|i want a follow up)\b/i, reply: `${name}, I can help you arrange a follow-up. Please tell me the department and the day or time that works best for you.` },
+        { pattern: /\b(please call me back|call me back|can you call me|call me)\b/i, reply: `${name}, of course. Please share the best time or number to reach you, and our team will get in touch as soon as possible.` },
+        { pattern: /\b(i am here|i'm here|arrived|here for appointment)\b/i, reply: `${name}, thank you for letting me know. Please check in with the reception desk or tell me the department and time of your appointment so I can help.` },
+        { pattern: /\b(what is the procedure|what does the procedure involve|procedure details|what happens in the procedure)\b/i, reply: `${name}, I’d be happy to explain the process. Please tell me the service or procedure name, and I’ll guide you with the right information.` },
+        { pattern: /\b(can you help me choose a doctor|help me choose a doctor|which doctor should i choose|doctor recommendation|recommended doctor)\b/i, reply: `${name}, I can help narrow it down. Please tell me the department, your concern, and whether you prefer a male or female doctor, and I’ll guide you.` },
+        { pattern: /\b(do you have a doctor for my child|pediatrician|child doctor|doctor for my baby|kids doctor)\b/i, reply: `${name}, yes, we can help with pediatric consultations and child health visits. Please tell me the concern or age, and I’ll guide you to the right department.` },
+        { pattern: /\b(i want to reschedule|reschedule my appointment|need to reschedule|change my appointment)\b/i, reply: `${name}, no problem. I can help you reschedule. Please share the new day and time, or tell me the department and I’ll help update it.` },
+        { pattern: /\b(are you open on weekends|weekend appointments|can i book on saturday|can i book on sunday)\b/i, reply: `${name}, weekend availability depends on the department and clinic schedule. Please tell me the preferred day and department, and I’ll guide you from there.` },
+        { pattern: /\b(maternity|pregnancy|antenatal|delivery|obstetrics|gynecology)\b/i, reply: `${name}, we can help with maternity and obstetrics services. Please tell me whether you’d like an appointment for antenatal care, delivery support, or a general consultation.` },
+        { pattern: /\b(do you have lab tests|lab tests|blood test|labs|laboratory services)\b/i, reply: `${name}, yes, we do offer laboratory services and diagnostic tests. I can help you identify the right department or service for your request.` },
+        { pattern: /\b(i am unable to come|can't make it|cannot come|i can’t make it|unable to attend)\b/i, reply: `${name}, I’m sorry to hear that. Please let me know if you’d like to reschedule or cancel, and I’ll help with the next step.` },
+        { pattern: /\b(what does sha cover|does sha cover this|sha cover|insurance coverage)\b/i, reply: `${name}, SHA coverage varies by service and facility policy. Please tell me the department or service you need, and I’ll guide you on the most relevant coverage details.` },
+        { pattern: /\b(can my family come|family appointment|book for my family|my husband|my wife|my child)\b/i, reply: `${name}, yes, we can help with family and dependent appointments. Please tell me the department and the number of patients, and I’ll guide you through the booking.` },
+        { pattern: /\b(i need an appointment for my mother|appointment for my father|visit for my parent|for my family member)\b/i, reply: `${name}, absolutely. Please share the department, the patient’s name if it’s different, and the preferred date or time, and I’ll help you arrange it.` },
+        { pattern: /\b(hey there|hi there|hello there|good morning|good afternoon|good evening)\b/i, reply: `${name}, hello. How can I help you today?` },
+        { pattern: /\b(i am here for consultation|for consultation|for check up|check up appointment|doctor visit)\b/i, reply: `${name}, I can help with that. Please tell me the department and your preferred time, and I’ll guide you through the booking.` },
+        { pattern: /\b(i need a doctor for my pregnancy|pregnancy checkup|prenatal care|antenatal appointment)\b/i, reply: `${name}, we can help with prenatal and maternity care. Please tell me whether this is an antenatal checkup or a general obstetrics visit, and I’ll guide you appropriately.` },
+        { pattern: /\b(dental|teeth|tooth pain|dentist)\b/i, reply: `${name}, we can help with dental consultations and appointments. Please tell me the issue or preferred day and time so I can guide you to the right booking.` },
+    ];
+    for (const entry of replyMap) {
+        if (entry.pattern.test(text)) {
+            return entry.reply;
+        }
+    }
+    return null;
 }
 function processTurn(state, message, isReturning) {
     const name = state.patientName;
     if (isHumanSupportRequest(message)) {
         return {
-            reply: `Of course, ${name}. I'll direct your request to our hospital staff — please hold on for assistance.`,
+            reply: `Of course, ${name}. I'll direct your request about a doctor or hospital staff member to our team — please hold on for assistance.`,
             state: { ...state, stage: "human_handoff" },
         };
     }
@@ -718,7 +1036,7 @@ function processTurn(state, message, isReturning) {
             state,
         };
     }
-    if (isGreeting(message) || isMenuCommand(message)) {
+    if ((isGreeting(message) || isMenuCommand(message)) && !isBookingIntent(message)) {
         return {
             reply: isReturning && isGreeting(message) ? `Welcome back, ${name}. ${MENU_PROMPT(name)}` : MENU_PROMPT(name),
             state: { ...state, stage: "menu" },
@@ -730,10 +1048,31 @@ function processTurn(state, message, isReturning) {
             state: { ...state, stage: "menu", appointment: {} },
         };
     }
+    if (isAppointmentHistoryRequest(message)) {
+        return {
+            reply: `${name}, I can look up your appointment history. In WhatsApp, I’ll show your recent records and their status. ` +
+                `You can then keep an appointment, reschedule it, book another one, or speak with staff.`,
+            state: { ...state, stage: "menu" },
+        };
+    }
+    // Medical symptom / advice questions are redirected to human clinical
+    // staff rather than answered here. Skipped while the patient is already
+    // mid-way through booking an appointment, so a stray word like "pain"
+    // in an appointment reason doesn't derail an in-progress booking.
+    if (state.stage !== "collecting_appointment" &&
+        state.stage !== "confirming_appointment" &&
+        !isBookingIntent(message) &&
+        isMedicalSymptomRequest(message)) {
+        return {
+            reply: formatMedicalAdviceRedirect(name, message),
+            state: { ...state, stage: "menu" },
+        };
+    }
     if (state.stage === "confirming_appointment") {
         if (isAffirmative(message)) {
+            const confirmedAppointment = state.appointment;
             return {
-                reply: `Thank you, ${name}. Your appointment request has been confirmed and sent to the hospital team for processing.`,
+                reply: renderAppointmentSuccess(name, confirmedAppointment),
                 state: { ...state, stage: "menu", appointment: {} },
             };
         }
@@ -749,7 +1088,11 @@ function processTurn(state, message, isReturning) {
     const parsed = parseAppointmentRequest(message);
     const inAppointmentFlow = state.stage === "collecting_appointment" ||
         state.stage === "confirming_appointment" ||
-        isBookingIntent(message);
+        isBookingIntent(message) ||
+        /\b(can|could|would) (i|we) (do|book|schedule|reserve)\b/i.test(message) ||
+        /\b(?:help|guide|assist)\s+(?:me|us)\s+(?:with|to)\s+(?:booking|book|schedule|reserve|arrange)\b/i.test(message) ||
+        /\b(?:i|we)\s+(?:want|need|would\s+like)\s+(?:to\s+)?(?:do|book|schedule|reserve|arrange|set up)\b/i.test(message) ||
+        /\b(?:i want|i need|can i|could i|would i|can we|could we)\s+(?:to\s+)?(?:book|schedule|reserve|change|cancel)\b/i.test(message);
     if (inAppointmentFlow) {
         const appointment = {
             ...state.appointment,
@@ -772,9 +1115,64 @@ function processTurn(state, message, isReturning) {
     if (answer) {
         return { reply: answer, state: { ...state, stage: "menu" } };
     }
+    const commonReply = getCommonPatientReply(name, message);
+    if (commonReply) {
+        return {
+            reply: commonReply,
+            state: { ...state, stage: "menu" },
+        };
+    }
+    if (/\b(cost|price|fee|charges|how much|consultation fee|pricing|what does it cost|how much is it|what is the cost|what is the price)\b/i.test(message)) {
+        return {
+            reply: `${name}, the standard consultation fee is KSh 1,000. If you want a specific department or procedure price, tell me the service and I’ll give the exact amount.`,
+            state,
+        };
+    }
+    if (/\b(tomorrow|today|next week|next monday|next tuesday|next wednesday|next thursday|next friday|next saturday|next sunday|later this week|this week|next month|weekend|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(message)) {
+        return {
+            reply: `${name}, I can help with that. Please share the department and the time you prefer, and I’ll build the appointment details for you.`,
+            state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+        };
+    }
+    if (/\b(open|opening|hours|working hours|when are you open|what time do you open|clinic hours|operating hours|available|availability|are you open|is the clinic open)\b/i.test(message)) {
+        return {
+            reply: `${name}, our hospital teams are available for appointments and support during normal clinic hours, and I can help you book a consultation. If you want, tell me the department and preferred day or time and I’ll help schedule it.`,
+            state: { ...state, stage: "menu" },
+        };
+    }
+    if (/\b(insurance|sha|nhif|coverage|cover|medical cover|accept insurance|do you accept sha|do you accept insurance)\b/i.test(message)) {
+        return {
+            reply: `${name}, we do accept SHA and other major insurance partners. Tell me which cover you have, and I can guide you on the next step or help you book the appointment.`,
+            state: { ...state, stage: "menu" },
+        };
+    }
+    if (/\b(change.*time|different time|can.*time.*change|need.*another time|reschedule.*appointment|change.*appointment|move.*appointment|another day|different day)\b/i.test(message)) {
+        return {
+            reply: `${name}, no problem. I can help you change the appointment time or date. Please share the new day and time, or tell me the department and I’ll help update it.`,
+            state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+        };
+    }
+    if (isAppointmentHistoryRequest(message)) {
+        return {
+            reply: `${name}, I can look up your appointment history. Please tell me whether you want your upcoming bookings, recent visits, or a reschedule for one of them.`,
+            state: { ...state, stage: "menu" },
+        };
+    }
+    if (/\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment)\b/i.test(message)) {
+        return {
+            reply: `${name}, I can help reschedule it. Please share the new day and time, or tell me the department and I’ll guide you to the next available appointment.`,
+            state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+        };
+    }
+    if (/\b(available appointment|available appointments|next available slot|open slots|available slots|next available appointment)\b/i.test(message)) {
+        return {
+            reply: `${name}, I can suggest the next available appointment slots. Please give me the department and preferred day, and I’ll recommend the earliest open times.`,
+            state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
+        };
+    }
     return {
         reply: `I'm sorry, ${name}, I don't have that information on hand. ` +
-            `Would you like me to connect you with our hospital staff, or ask about something else — our services, prices, locations, or insurance?`,
+            `I can connect you with our hospital staff or a doctor, or we can look at services, prices, locations, or insurance instead.`,
         state,
     };
 }
@@ -788,16 +1186,24 @@ function generateBotReply(input) {
      * When no patientId is supplied, patientName is used to seed a
      * one-off turn so existing unit tests and simple integrations work
      * without session storage. No conversation memory persists here.
+     *
+     * IMPORTANT: production/WhatsApp integrations must always pass a
+     * stable `patientId` for every message from the same conversation.
+     * Without it, each call starts from a blank slate (stage "menu",
+     * appointment {}), so a multi-step booking (department → date → time
+     * → confirm) can never actually complete — every reply after the
+     * first will look like a brand-new request instead of a continuation.
      */
     if (!input.patientId) {
-        if (!input.patientName) {
+        const extracted = extractPatientName(message);
+        const resolvedName = extracted || input.patientName;
+        if (!resolvedName) {
             if (!message)
                 return NAME_PROMPT;
-            const extracted = extractPatientName(message);
-            return extracted ? MENU_PROMPT(extracted) : NAME_PROMPT;
+            return NAME_PROMPT;
         }
         const state = {
-            patientName: input.patientName,
+            patientName: resolvedName,
             stage: "menu",
             appointment: {},
         };
@@ -824,17 +1230,20 @@ function generateBotReply(input) {
         sessions.set(patientId, session);
     }
     session.lastInteraction = now;
+    const extractedName = extractPatientName(message);
     if (session.stage === "awaiting_name") {
-        const extracted = extractPatientName(message);
-        if (!extracted) {
+        if (!extractedName) {
             return NAME_PROMPT;
         }
-        session.patientName = extracted;
+        session.patientName = extractedName;
         session.stage = "menu";
-        return MENU_PROMPT(extracted);
+        return MENU_PROMPT(extractedName);
+    }
+    if (extractedName) {
+        session.patientName = extractedName;
     }
     const turnState = {
-        patientName: session.patientName || "there",
+        patientName: session.patientName || extractedName || "there",
         stage: session.stage,
         appointment: session.appointment,
     };
