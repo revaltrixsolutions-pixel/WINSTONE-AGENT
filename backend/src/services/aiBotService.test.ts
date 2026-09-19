@@ -219,6 +219,36 @@ test('shows the booking steps for a short booking request', () => {
   assert.match(reply, /time/i);
 });
 
+test('recognizes common booking commands and synonyms', () => {
+  const bookingPhrases = [
+    'can I book appointment',
+    'make appointment',
+    'do appointment',
+    'book an appointment',
+    'schedule an appointment',
+    'reserve an appointment',
+    'set up an appointment',
+    'arrange an appointment',
+    'I need an appointment',
+    'I want to book a visit',
+    'help me book',
+    'guide me to book',
+    'can I schedule a consultation',
+  ];
+
+  for (const message of bookingPhrases) {
+    const reply = generateBotReply({
+      patientName: 'Revaltrix Solutions',
+      message,
+      isReturning: false,
+      lastInteractionHours: 0,
+    });
+
+    assert.match(reply, /appointment|consultation/i, `Expected booking response for: ${message}`);
+    assert.match(reply, /date|time/i, `Expected date or time step for: ${message}`);
+  }
+});
+
 test('recognizes requests to get appointment history', () => {
   const reply = generateBotReply({
     patientName: 'Revaltrix Solutions',

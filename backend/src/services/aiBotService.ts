@@ -1065,6 +1065,7 @@ function isBookingIntent(message: string): boolean {
     /\b(?:i|we)\s+(?:want|need|would\s+like|would\s+love|hope to)\s+(?:to\s+)?(?:book|schedule|reserve|arrange|set up|do)\b/i.test(text) ||
     /\b(?:i|we)\s+(?:want|need|would\s+like)\s+(?:to\s+)?do\s+(?:an?\s+)?(?:booking|appointment|visit|consultation|slot)\b/i.test(text) ||
     /\b(?:help|guide|assist|show)\s+(?:me|us)\s+(?:how\s+to\s+)?(?:book|schedule|reserve|arrange)\b/i.test(text) ||
+    /\b(?:help|guide|assist)\s+(?:me|us)\s+(?:to\s+)?(?:book|schedule|reserve|arrange)\b/i.test(text) ||
     /\b(?:help|guide|assist)\s+(?:me|us)\s+(?:with|to)\s+(?:booking|an appointment|a visit|a consultation|appointment booking)\b/i.test(text) ||
     /\b(?:i|we)\s+want\s+to\s+do\s+booking\b/i.test(text) ||
     /\bi\s+want\s+to\s+to\s+book\b/i.test(text) ||
@@ -1240,7 +1241,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     };
   }
 
-  if (isGreeting(message) || isMenuCommand(message)) {
+  if ((isGreeting(message) || isMenuCommand(message)) && !isBookingIntent(message)) {
     return {
       reply: isReturning && isGreeting(message) ? `Welcome back, ${name}. ${MENU_PROMPT(name)}` : MENU_PROMPT(name),
       state: { ...state, stage: "menu" },
