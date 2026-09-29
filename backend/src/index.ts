@@ -23,7 +23,7 @@ dotenv.config();
 const app = express();
 
 const PORT = Number(process.env.PORT || 5000);
-const APP_NAME = 'Phadam Medical Automation Engine';
+const APP_NAME = 'Winston Medical Centre';
 const CRON_TIMEZONE = 'Africa/Nairobi';
 
 /* =========================================================
@@ -355,7 +355,7 @@ async function dispatchAppointmentReminders(): Promise<void> {
             : '1 hour before';
 
       const reminderMessage = [
-        '🏥 *Phadam Hospital Appointment Reminder*',
+        '🏥 *Winston Medical Centre Appointment Reminder*',
         '',
         `This is a reminder that your appointment is ${reminderLabel}.`,
         `Doctor: ${appointment.doctorName}`,

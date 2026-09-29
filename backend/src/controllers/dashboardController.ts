@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { getHospitalPhoneNumber, setHospitalPhoneNumber } from '../lib/hospitalSettings';
+import { getServicePrice } from '../services/aiBotService';
 import { sendWhatsAppMessage } from '../services/whatsappService';
 
 function parseSlotTime(value: unknown): Date | null {
@@ -79,9 +80,9 @@ export async function updateAppointmentStatus(req: Request, res: Response): Prom
 
   if (status === 'CONFIRMED' && appointment.patient.phoneNumber) {
     const confirmation = [
-      '🏥 *Phadam Hospital Appointment Confirmed*',
+      '🏥 *Winston Medical Centre Appointment Confirmed*',
       '',
-      `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. Your appointment is confirmed.`,
+      `Hello ${appointment.patient.fullName || 'Patient'}, this is Winston Medical Centre. Your appointment is confirmed.`,
       '',
       `Service: ${appointment.specialty}`,
       `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
@@ -99,7 +100,7 @@ export async function updateAppointmentStatus(req: Request, res: Response): Prom
 
   if (status === 'CANCELLED' && appointment.patient.phoneNumber) {
     const cancellation = [
-      'Hello ' + (appointment.patient.fullName || 'Patient') + ', this is Phadam Hospital. We are following up on your appointment.',
+      'Hello ' + (appointment.patient.fullName || 'Patient') + ', this is Winston Medical Centre. We are following up on your appointment.',
       '',
       'Your appointment has been cancelled.',
       `Service: ${appointment.specialty}`,
@@ -127,6 +128,7 @@ export async function createPatientWithAppointment(req: Request, res: Response):
     ? req.body.doctorName.trim()
     : 'To be assigned';
   const slotTime = parseSlotTime(req.body?.slotTime);
+  const listedFee = getServicePrice(specialty);
 
   if (!fullName || phoneNumber.length < 7 || !specialty || !slotTime) {
     return res.status(400).json({
@@ -146,8 +148,8 @@ export async function createPatientWithAppointment(req: Request, res: Response):
       patientId: patient.id,
       doctorName,
       specialty,
-      servicePrice: typeof req.body?.servicePrice === 'string' ? req.body.servicePrice : 'KSh 0',
-      consultationFee: typeof req.body?.consultationFee === 'string' ? req.body.consultationFee : 'KSh 1,000',
+      servicePrice: typeof req.body?.servicePrice === 'string' ? req.body.servicePrice : listedFee ?? 'To be confirmed',
+      consultationFee: typeof req.body?.consultationFee === 'string' ? req.body.consultationFee : listedFee ?? 'To be confirmed',
       slotTime,
       status: 'CONFIRMED',
     },
@@ -215,7 +217,7 @@ export async function triggerAppointmentFollowUp(req: Request, res: Response): P
 
   if (appointment.patient.phoneNumber) {
     const message = [
-      `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. We are following up on your appointment.`,
+      `Hello ${appointment.patient.fullName || 'Patient'}, this is Winston Medical Centre. We are following up on your appointment.`,
       '',
       `Appointment reference: ${appointment.id.slice(0, 8)}`,
       `Service: ${appointment.specialty}`,

@@ -8,6 +8,7 @@ export interface HospitalLocation {
 export interface SurgicalPrice {
   procedure: string;
   price: string;
+  keywords?: string[];
 }
 
 export interface HospitalLeader {
@@ -21,16 +22,26 @@ export interface HospitalKnowledge {
   legalName: string;
   motto: string;
   founded: string;
+  registrationNumber: string;
+  beds: number;
+  emails: string[];
+  postalAddress: string;
+  history: string;
   description: string;
   mission: string;
+  vision: string;
   scope: string;
   values: string[];
+  objectives: string[];
+  goals: string[];
+  corporateResponsibility: string[];
   locations: HospitalLocation[];
   services: string[];
   specialistClinics: string[];
   departments: Record<string, string>;
   insuranceAccepted: string[];
   surgicalPrices: SurgicalPrice[];
+  bookingFees: Record<string, string>;
   leadership: HospitalLeader[];
   bookingNotes: string[];
   unknownTopics: string[];
@@ -39,260 +50,172 @@ export interface HospitalKnowledge {
 }
 
 export const hospitalKnowledge: HospitalKnowledge = {
-  name: 'Phadam Hospital',
-  legalName: 'The Phadam Hospital',
-  motto: 'Your Health, Our Pride',
-  founded: 'December 2016',
-
-  consultationFee: 'KSh 1,000',
-
-  description:
-    'Phadam Hospital is a modern healthcare facility providing affordable, patient-centered medical services for adults and children in Nairobi and its environs. The hospital combines qualified healthcare professionals, modern medical technology, advanced infrastructure, and compassionate nursing care.',
-
-  mission:
-    'To improve the health of the community we serve through extraordinary healthcare, quality services, compassionate treatment, and care that goes beyond expectations.',
-
-  scope:
-    'Phadam Hospital is committed to delivering safe, accessible, and consistently high-quality healthcare through skilled doctors, nurses, specialists, modern facilities, patient-centered care, ethical practice, continuous learning, and improved clinical outcomes.',
-
+  name: 'Winston Medical Centre',
+  legalName: 'Winston Medical Centre',
+  motto: 'Affordable, accessible and quality healthcare',
+  founded: '2016',
+  registrationNumber: 'CPR 017141',
+  beds: 2,
+  emails: ['winstonmedicalcentre01@gmail.com', 'tohmex@gmail.com'],
+  postalAddress: 'P.O. Box 1022-00606, Nairobi',
+  history: 'Winston Medical Centre opened in 2016 to provide quality, affordable healthcare to the surrounding community. It is a registered private hospital administered in accordance with the Medical Practitioners and Dentists Board; management approval was granted in 2016.',
+  consultationFee: 'KSh 500',
+  description: 'Winston Medical Centre is a registered private hospital in Tassia Estate, Eastlands, Nairobi. It has two beds and provides general outpatient care, inpatient care in General Medicine, Minor Surgery and Gynecology, and an Urgent Care Centre incorporating a Local Injuries Unit and Medical Assessment Unit.',
+  mission: 'Provide affordable, accessible and quality healthcare services.',
+  vision: 'To be among the leading providers of accessible, quality and innovative healthcare services in the country.',
+  scope: 'The centre is dedicated to welcoming, accessible, safe, affordable and respectful healthcare. Patients, families, community representatives and leaders are active partners in its operations and improvement work.',
   values: [
-    'Respect each person’s dignity.',
-    'Act with integrity in all responsibilities.',
-    'Serve with compassion that embraces each individual’s concerns and hopes.',
-    'Commit to excellence through high standards of performance.',
-    'Promote innovation in healthcare delivery.',
-    'Work together through teamwork.',
+    'Professionalism',
+    'Equality',
+    'Integrity',
+    'Committed service',
+    'The client’s health is our priority',
+    'Moral and ethical uprightness',
+    'Professional excellence through exceptional standards',
+    'Client satisfaction',
   ],
-
+  objectives: ['Make available a well-equipped and efficient healthcare facility that provides a high standard of patient care.'],
+  goals: [
+    'Improve quality care at the most appropriate cost.',
+    'Offer exemplary, state-of-the-art medical practice.',
+    'Maintain a strong social responsibility agenda.',
+    'Provide corporate clients with a total medical solution.',
+    'Adopt appropriate new therapies as they become available.',
+    'Improve chronic-disease care transitions and coordination across primary, hospital and post-hospital care.',
+    'Promote evidence-based medicine through clinical guidelines, outcome monitoring and continuous improvement.',
+    'Pursue National Hospital Insurance Fund outpatient facility accreditation.',
+  ],
+  corporateResponsibility: [
+    'Subsidized services for people in need in the local area.',
+    'Subsidized healthcare for orphans in partnership with WAYAAP (Women and Youth Against AIDS and Poverty).',
+    'Free medical checkups and medication in Tassia slum every three months.',
+  ],
   locations: [
     {
-      branch: 'Phadam Hospital Nasra',
-      address: 'Moi Drive, Nasra, Embakasi East, Nairobi',
-      landmark:
-        'Along Kayole Spine Road, off Kangundo Road, near Mama Lucy Kibaki Hospital',
-      phoneNumbers: ['0704 899856'],
-    },
-    {
-      branch: 'Phadam Hospital Umoja',
-      address: 'Umoja Innercore, along Moi Drive, Nairobi',
-      landmark: 'Next to Unity Primary School',
-      phoneNumbers: ['0718 589020', '0114 298041'],
+      branch: 'Winston Medical Centre',
+      address: 'Tassia Estate, Eastlands, Nairobi',
+      landmark: 'Standard Drive Estate, along Nyayo Gate B Road, 400 metres from Fedha Stage. Direction: Fedha Stage.',
+      phoneNumbers: ['0726 244040', '0708 130100'],
     },
   ],
-
   services: [
-    'Doctors consultation',
-    'Antenatal clinic',
-    'Postnatal clinic',
-    'Maternity services',
-    'Well-baby clinic',
-    'Pediatric outpatient clinic',
-    'Immunization',
-    'Family planning',
-    'Pharmacy',
-    'Laboratory',
-    'Radiology, including X-ray and ultrasound',
-    'Inpatient services',
-    'Endoscopy',
-    'Colonoscopy',
-    'High Dependency Unit',
-    'Intensive Care Unit',
-    'Newborn Unit',
-    'Theatre services for minor and major surgeries',
-    'Ambulance services',
-    'Emergency services',
-    'Physiotherapy',
-    'Dermatology clinic',
-    'Obstetrics and gynecology clinic',
-    'Orthopedic clinic',
-    'Ear, Nose and Throat clinic',
-    'Dental clinic',
-    'Optical clinic',
-    'Psychology and counselling',
-    'Nutrition clinic',
-    'Surgical outpatient clinic',
-    'Gynecology clinic',
-    'Urology clinic',
-  ],
-
-  specialistClinics: [
-    'Dermatology',
-    'Obstetrics and Gynecology',
-    'Orthopedics',
-    'Ear, Nose and Throat',
-    'Dental',
-    'Optical',
-    'Psychology and Counselling',
-    'Nutrition',
-    'Surgical Outpatient',
+    'General Outpatient Care',
+    'General Medicine',
+    'Minor Surgery',
     'Gynecology',
-    'Urology',
+    'Urgent Care Centre',
+    'Local Injuries Unit',
+    'Medical Assessment Unit',
+    'Pharmacy',
+    'Laboratory Services',
+    'Antenatal Clinic',
+    'Well Baby Clinic',
+    'Ultrasound Services',
+    'Counseling',
+    'Maternal & Child Healthcare Clinic',
+    'Physiotherapy',
+    'ECG/ECHO',
+    'Pediatric Clinic',
+    'Circumcision',
+    'Family Planning Services',
   ],
-
+  specialistClinics: ['Gynecologist', 'Paediatrician', 'Dermatologist', 'Nutritionist'],
   departments: {
-    Pharmacy:
-      'The Pharmacy Department provides pharmaceutical care, safe and timely dispensing of medicines, medication guidance, and education about proper use and possible side effects.',
-
-    Laboratory:
-      'The Laboratory Unit operates 24/7 and provides routine and specialized tests using modern equipment. The unit maintains quality through continuous external quality assessments.',
-
-    Maternity:
-      'The Maternity Department provides antenatal, delivery, and postnatal care. Services include pregnancy monitoring, investigations, antenatal profiling, health education, counselling, and postnatal support.',
-
-    'Newborn Unit':
-      'The Newborn Unit provides specialized care for preterm, low-birth-weight, and critically ill babies. It has incubators, ventilators, and monitoring systems and is supported by neonatal nurses and pediatricians.',
-
-    Pediatrics:
-      'The Pediatric Unit provides care for children from infancy to adolescence, including treatment of acute and chronic illnesses, monitoring, timely intervention, and family support.',
-
-    'ICU and HDU':
-      'The ICU and HDU provide specialized care for critically ill medical, surgical, obstetric, and cancer patients using advanced monitoring equipment and dedicated critical-care teams.',
-
-    Theatre:
-      'Phadam Hospital has two fully equipped operating theatres with modern technology, including a high-definition laparoscopic tower and C-arm machine. The theatres support minor and complex procedures and provide preoperative and postoperative care.',
-
-    Emergency:
-      'The Ambulance and Emergency Unit provides 24/7 ambulance and emergency services for adults and children. The unit handles urgent medical and surgical emergencies with trained clinicians and paramedics.',
-
-    Orthopedics:
-      'The Orthopedic Unit provides specialist orthopedic surgery, including total hip replacement, total knee replacement, spine surgery, and rehabilitation supported by physiotherapy.',
-
-    Gynecology:
-      'The Gynecology Unit provides routine check-ups, reproductive health services, fertility assessment, management of gynecological conditions, and minor surgical procedures.',
-
-    ENT:
-      'The ENT Unit provides diagnosis and treatment for ear, nose, and throat conditions in children and adults, including hearing assessments, allergy management, sinus care, throat care, and minor procedures.',
-
-    Urology:
-      'The Urology Unit provides care for urinary tract and male reproductive health conditions, including kidney stones, urinary infections, prostate disorders, and other urological conditions.',
+    'General Outpatient Care': 'General outpatient consultations and care are available. The listed general consultation fee is KSh 500; investigations, medicines and other services are priced separately.',
+    'General Medicine': 'General Medicine is one of the hospital’s inpatient specialties. The centre has two beds; real-time bed availability is not provided here.',
+    'Minor Surgery': 'Minor Surgery is an inpatient specialty. Specific procedure prices are not included in the supplied price list and should be confirmed with the hospital.',
+    Gynecology: 'Gynecology is an inpatient specialty and a listed clinic service. The listed gynecologist fee is KSh 1,500.',
+    'Urgent Care Centre': 'The Urgent Care Centre incorporates a Local Injuries Unit and a Medical Assessment Unit.',
+    'Local Injuries Unit': 'The Local Injuries Unit is part of the Urgent Care Centre.',
+    'Medical Assessment Unit': 'The Medical Assessment Unit is part of the Urgent Care Centre.',
+    Pharmacy: 'Pharmacy services are available. Individual medicine prices were not supplied.',
+    'Laboratory Services': 'Laboratory services are available, and the supplied price list includes individual test prices. Ask about a specific test or request the full price list.',
+    'Antenatal Clinic': 'Antenatal care is available. An antenatal visit is listed at KSh 300; the ANC profile is listed separately at KSh 2,500.',
+    'Well Baby Clinic': 'A Well Baby Clinic is available. The listed fee is KSh 200.',
+    'Ultrasound Services': 'Ultrasound services are available. The listed price is KSh 2,000.',
+    Counseling: 'Counseling is available. The listed fee is KSh 500.',
+    'Maternal & Child Healthcare Clinic': 'Maternal and Child Healthcare services are available at the centre.',
+    Physiotherapy: 'Physiotherapy is available. The listed fee is KSh 1,500.',
+    'ECG/ECHO': 'ECG and ECHO services are available. A price was not included in the supplied list.',
+    'Pediatric Clinic': 'A Pediatric Clinic is available. The listed paediatrician fee is KSh 1,500; a Well Baby Clinic is also available.',
+    Circumcision: 'Circumcision is available. The listed price is KSh 1,000.',
+    'Family Planning Services': 'Family planning services are available. A price was not included in the supplied list.',
   },
-
-  insuranceAccepted: [
-    'SHA',
-    'AON Minet',
-    'KenGen',
-    'Pacific Insurance Brokers',
-    'Sanlam',
-    'MUA',
-    'Madison',
-    'MTN',
-    'Pioneer',
-    'Sedgwick',
-    'Laser Insurance Brokers',
-    'Kenbright',
-    'Kenyan Alliance',
-    'Insurance for All (IFA – Afya Poa)',
-    'M-TIBA',
-    'Liaison Insurance',
-    'GA',
-    'First Assurance',
-    'CIC General',
-    'MTIBA Jubilee',
-    'KEBS',
-    'UAP',
-    'Britam',
-    'AAR',
-  ],
-
+  insuranceAccepted: [],
   surgicalPrices: [
-    { procedure: 'Feeding gastrostomy tube insertion/Jejunostomy', price: 'KSh 80,000' },
-    { procedure: 'Adenoidectomy', price: 'KSh 65,000' },
-    { procedure: 'Adenotonsillectomy', price: 'KSh 70,000' },
-    { procedure: 'Tonsillectomy', price: 'KSh 50,000' },
-    { procedure: 'Removal of foreign body from ear or nose under GA', price: 'KSh 40,000' },
-    { procedure: 'Release of tongue tie in theatre', price: 'KSh 25,000' },
-    { procedure: 'Appendicectomy', price: 'KSh 60,000' },
-    { procedure: 'Herniotomy', price: 'KSh 50,000' },
-    { procedure: 'Orchidopexy', price: 'KSh 50,000' },
-    { procedure: 'Herniorrhaphy', price: 'KSh 50,000' },
-    { procedure: 'Cholecystectomy', price: 'KSh 80,000' },
-    { procedure: 'Exploratory laparotomy', price: 'KSh 60,000' },
-    { procedure: 'Gastrojejunostomy', price: 'KSh 120,000' },
-    { procedure: 'Haemorrhoidectomy', price: 'KSh 40,000' },
-    { procedure: 'Lateral sphincterotomy', price: 'KSh 40,000' },
-    { procedure: 'Repair of hiatus hernia', price: 'KSh 150,000' },
-    { procedure: 'Repair of epigastric hernia', price: 'KSh 50,000' },
-    { procedure: 'Repair of strangulated hernia', price: 'KSh 80,000' },
-    { procedure: 'Repair of umbilical hernia with mesh', price: 'KSh 40,000' },
-    { procedure: 'Tendon repair', price: 'KSh 120,000' },
-    { procedure: 'Thyroidectomy', price: 'KSh 120,000' },
-    { procedure: 'Colonoscopy', price: 'KSh 20,000' },
-    { procedure: 'Oesophago-Gastro-Duodenoscopy (OGD)', price: 'KSh 12,000' },
-    { procedure: 'Excision of lipoma/wide excision', price: 'KSh 30,000' },
-    { procedure: 'Circumcision under GA', price: 'KSh 25,000' },
-    { procedure: 'Surgical debridement/escharectomy/toileting', price: 'KSh 30,000' },
-    { procedure: 'Laparoscopic Nissen’s fundoplication', price: 'KSh 250,000' },
-    { procedure: 'Laparotomy: endometriosis surgery', price: 'KSh 120,000' },
-    { procedure: 'Total abdominal hysterectomy', price: 'KSh 80,000' },
-    { procedure: 'Myomectomy', price: 'KSh 80,000' },
-    { procedure: 'Laparotomy for pelvic abscess', price: 'KSh 120,000' },
-    { procedure: 'Laparotomy for ruptured ectopic pregnancy', price: 'KSh 120,000' },
-    { procedure: 'Ovarian cystectomy', price: 'KSh 80,000' },
-    { procedure: 'Tuboplasty', price: 'KSh 80,000' },
-    { procedure: 'Repair of rectovaginal fistula', price: 'KSh 80,000' },
-    { procedure: 'Bilateral tubal ligation', price: 'KSh 25,000' },
-    { procedure: 'Cervical cerclage/insertion of MacDonald stitch', price: 'KSh 30,000' },
-    { procedure: 'Dilatation and curettage', price: 'KSh 25,000' },
-    { procedure: 'Bilateral tubal ligation done with caesarean section', price: 'KSh 15,000' },
-    { procedure: 'Marsupialisation of Bartholin’s cyst/abscess', price: 'KSh 25,000' },
-    { procedure: 'Retrieval of lost/fragmented IUCD', price: 'KSh 20,000' },
-    { procedure: 'Below/above-knee amputation', price: 'KSh 110,000' },
-    { procedure: 'Open reduction and internal fixation', price: 'KSh 130,000' },
-    { procedure: 'Closed manipulation of dislocations/fractures', price: 'KSh 15,000' },
-    { procedure: 'Excision of ingrown toenail under GA', price: 'KSh 25,000' },
-    { procedure: 'Rotation flaps', price: 'KSh 100,000' },
-    { procedure: 'Repair of bladder', price: 'KSh 80,000' },
-    { procedure: 'Repair of ruptured urethra', price: 'KSh 120,000' },
-    { procedure: 'Transurethral resection of bladder tumour (TURBT)', price: 'KSh 220,000' },
-    { procedure: 'Transurethral resection of prostate (TURP)', price: 'KSh 190,000' },
-    { procedure: 'Skin grafting below 10% TBSA', price: 'KSh 40,000' },
-    { procedure: 'Skin grafting above 10% TBSA', price: 'KSh 80,000' },
-    { procedure: 'Reduction mammoplasty', price: 'KSh 150,000' },
-    { procedure: 'Cleft lip repair', price: 'KSh 50,000' },
-    { procedure: 'Cleft palate repair', price: 'KSh 80,000' },
-    { procedure: 'Cleft lip and palate repair', price: 'KSh 100,000' },
-    { procedure: 'ACL/PCL surgery', price: 'KSh 250,000' },
-    { procedure: 'Removal of hardware: wires', price: 'KSh 20,000' },
-    { procedure: 'Removal of hardware: plates and nails', price: 'KSh 80,000' },
-    { procedure: 'Caesarean section', price: 'KSh 45,000–75,000' },
-    { procedure: 'Normal delivery/SVD', price: 'KSh 13,000–20,000' },
+    { procedure: 'Counseling', price: 'KSh 500', keywords: ['counselling', 'therapy', 'counselor', 'counsellor'] },
+    { procedure: 'Ultrasound', price: 'KSh 2,000', keywords: ['scan', 'sonography', 'pregnancy scan'] },
+    { procedure: 'ANC profile', price: 'KSh 2,500', keywords: ['antenatal profile', 'antenatal test profile', 'pregnancy profile'] },
+    { procedure: 'Antenatal visit', price: 'KSh 300', keywords: ['antenatal clinic visit', 'prenatal visit', 'anc visit'] },
+    { procedure: 'Well Baby Clinic', price: 'KSh 200', keywords: ['well-baby clinic', 'baby clinic', 'infant clinic', 'child wellness'] },
+    { procedure: 'BP check', price: 'KSh 50', keywords: ['blood pressure', 'blood pressure check', 'bp checkup'] },
+    { procedure: 'Physiotherapy', price: 'KSh 1,500', keywords: ['physio', 'physical therapy', 'rehabilitation'] },
+    { procedure: 'Nebulisation', price: 'KSh 1,000', keywords: ['nebulization', 'nebuliser', 'nebulizer'] },
+    { procedure: 'Circumcision', price: 'KSh 1,000', keywords: ['male circumcision'] },
+    { procedure: 'Gynecologist', price: 'KSh 1,500', keywords: ['gynecology', 'gynaecology', 'gynaecologist', 'gynecologist consultation', 'gynaecologist consultation', 'women’s health doctor', 'ob-gyn', 'obgyn'] },
+    { procedure: 'Paediatrician', price: 'KSh 1,500', keywords: ['pediatrician', 'paediatrician consultation', 'pediatrician consultation', 'children’s doctor', 'child specialist'] },
+    { procedure: 'Dermatologist', price: 'KSh 3,000', keywords: ['dermatology', 'skin specialist', 'skin doctor'] },
+    { procedure: 'Nutritionist', price: 'KSh 1,000', keywords: ['nutrition', 'dietitian', 'dietician', 'nutrition consultation'] },
+    { procedure: 'Rota virus test', price: 'KSh 1,000', keywords: ['rotavirus', 'rota virus'] },
+    { procedure: 'BS for MPs', price: 'KSh 200', keywords: ['blood smear for malaria', 'malaria parasite test', 'mp test'] },
+    { procedure: 'Urinalysis', price: 'KSh 300', keywords: ['urine test', 'urine analysis'] },
+    { procedure: 'VDRL', price: 'KSh 500', keywords: ['vdrl test'] },
+    { procedure: 'Widal test', price: 'KSh 300', keywords: ['typhoid test'] },
+    { procedure: 'S.A.T', price: 'KSh 600', keywords: ['sat test'] },
+    { procedure: 'Pregnancy test', price: 'KSh 200', keywords: ['pregnancy test', 'pregnancy testing'] },
+    { procedure: 'HIV test', price: 'KSh 250', keywords: ['hiv screening', 'hiv test'] },
+    { procedure: 'FHG', price: 'KSh 1,000', keywords: ['fhg test'] },
+    { procedure: 'H. pylori test', price: 'KSh 600', keywords: ['h pylori', 'helicobacter pylori'] },
+    { procedure: 'RBS', price: 'KSh 200', keywords: ['random blood sugar', 'blood sugar test'] },
+    { procedure: 'Stool for O/C', price: 'KSh 300', keywords: ['stool test', 'stool ova and cysts', 'ova and cysts'] },
+    { procedure: 'R factor', price: 'KSh 500', keywords: ['r factor test'] },
+    { procedure: 'Brucellosis test', price: 'KSh 500', keywords: ['brucella test'] },
+    { procedure: 'ESR', price: 'KSh 300', keywords: ['erythrocyte sedimentation rate'] },
+    { procedure: 'G. staining', price: 'KSh 500', keywords: ['gram staining', 'gram stain', 'g staining'] },
+    { procedure: 'CBC', price: 'KSh 1,000', keywords: ['complete blood count', 'full blood count', 'fbc'] },
+    { procedure: 'Blood grouping', price: 'KSh 300', keywords: ['blood group', 'blood type'] },
+    { procedure: 'Hepatitis A test', price: 'KSh 1,000', keywords: ['hepatitis a'] },
+    { procedure: 'Hepatitis B test', price: 'KSh 1,000', keywords: ['hepatitis b'] },
+    { procedure: 'Hepatitis C test', price: 'KSh 1,000', keywords: ['hepatitis c'] },
+    { procedure: 'PSA', price: 'KSh 1,000', keywords: ['prostate-specific antigen', 'prostate test'] },
   ],
-
+  bookingFees: {
+    'General Consultation': 'KSh 500',
+    'General Outpatient Care': 'KSh 500',
+    'General Medicine': 'KSh 500',
+    'Counseling': 'KSh 500',
+    'Obstetrics and Gynecology': 'KSh 1,500',
+    'Antenatal Clinic': 'KSh 300',
+    'Well Baby Clinic': 'KSh 200',
+    'Ultrasound Services': 'KSh 2,000',
+    Physiotherapy: 'KSh 1,500',
+    Gynecology: 'KSh 1,500',
+    Gynecologist: 'KSh 1,500',
+    Paediatrician: 'KSh 1,500',
+    'Pediatric Clinic': 'KSh 1,500',
+    Dermatologist: 'KSh 3,000',
+    Nutritionist: 'KSh 1,000',
+    Circumcision: 'KSh 1,000',
+  },
   leadership: [
     {
-      role: 'Chief Executive Officer',
-      name: 'Dr. Augustine Mwiti Mitugo',
-      message:
-        'Phadam Hospital is committed to combining medical expertise, modern technology, patient safety, innovation, and compassionate service to make quality healthcare accessible and affordable.',
-    },
-    {
-      role: 'Senior Hospital Administrator',
-      name: 'Mrs. Veralyne Atinda',
-      message:
-        'Phadam Hospital is committed to compassionate, patient-centered care grounded in excellence, integrity, innovation, modern technology, and accessible healthcare partnerships.',
+      role: 'Director',
+      name: 'Jesse Ouma Obengo',
+      message: 'Winston Medical Centre is committed to providing affordable, accessible and quality healthcare services.',
     },
   ],
-
   bookingNotes: [
-    'Prices should be confirmed with the hospital before treatment or admission.',
-    'Final procedure charges may depend on the surgeon, anesthesia, medicines, investigations, implants, admission duration, and emergency status.',
-    'Standard outpatient consultation fee is KSh 1,000. This covers a routine doctor visit only — tests, procedures, medication, and admission are charged separately.',
-    'Insurance members should confirm coverage and preauthorization requirements before a procedure.',
-    'For emergencies, contact the nearest Phadam Hospital branch directly or use emergency services.',
-    'Doctor names, individual consultation schedules, and exact clinic hours were not provided in the supplied hospital information and should not be invented.',
+    'To request an appointment, share the service or clinic, preferred date and preferred time.',
+    'Appointment availability and clinician schedules must be confirmed with the hospital.',
+    'Listed prices should be confirmed with the hospital; tests, medication, procedures and admission may be charged separately.',
+    'For urgent care, contact Winston Medical Centre directly on 0726 244040 or 0708 130100.',
   ],
-
-  // Explicit registry of things patients commonly ask that this knowledge
-  // base deliberately does NOT answer with specifics, because that detail
-  // was never supplied. Kept centralized so every "unknown" response is
-  // worded consistently instead of being improvised in multiple places.
   unknownTopics: [
-    'exact opening/visiting hours for each branch',
-    'named doctors, specialists, or their individual schedules',
-    'online or app-based appointment booking links',
-    'itemized non-surgical service fees (e.g. individual lab test prices, pharmacy item prices) beyond the standard consultation fee',
-    'bed/ward availability in real time',
-    'which specific branch offers which specialist clinic',
+    'exact opening and clinic hours',
+    'named doctors and clinician schedules',
+    'live appointment slots and real-time bed availability',
+    'insurance providers and accepted cover',
+    'unlisted service, medication and procedure prices',
   ],
 };
 
@@ -300,7 +223,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
 // (e.g. you don't "consult" the pharmacy — you fill a prescription there).
 // These are excluded from the consultation-fee line in department/service
 // responses so we don't imply a fee structure that doesn't make sense.
-const NON_CONSULTATION_DEPARTMENTS = new Set(['Pharmacy', 'Laboratory']);
+const NON_CONSULTATION_DEPARTMENTS = new Set(['Pharmacy', 'Laboratory Services']);
 
 // ---------------------------------------------------------------------------
 // Text normalization & query understanding
@@ -324,6 +247,7 @@ const STOP_WORDS = new Set([
   'get',
   'have',
   'how',
+  'much',
   'i',
   'in',
   'is',
@@ -364,6 +288,16 @@ const STOP_WORDS = new Set([
   'offering',
   'facility',
   'facilities',
+  'price',
+  'prices',
+  'cost',
+  'costs',
+  'fee',
+  'fees',
+  'charge',
+  'charges',
+  'test',
+  'tests',
   'list',
   'all',
   'full',
@@ -388,6 +322,20 @@ function normalizeText(value: string): string {
  * rewrites query text for matching purposes — it never adds new facts.
  */
 const QUERY_SYNONYMS: Array<[RegExp, string]> = [
+  // Winston service names and common patient wording
+  [/\b(general|doctor|medical) (check[ -]?up|consultation|consult)\b/g, 'general consultation'],
+  [/\b(outpatient|out patient|walk[ -]?in clinic)\b/g, 'general outpatient care'],
+  [/\b(prenatal|pregnancy check[ -]?up|maternity clinic)\b/g, 'antenatal clinic'],
+  [/\b(well-baby|well baby|baby wellness|infant clinic)\b/g, 'well baby clinic'],
+  [/\b(paediatrics|pediatrics|children clinic|child clinic|kids clinic)\b/g, 'pediatric clinic'],
+  [/\b(gynaecology|gynaecologist|gynecologist|ob[ -]?gyn|obstetrics)\b/g, 'gynecology'],
+  [/\b(counsell?ing|counselor|counsellor)\b/g, 'counseling'],
+  [/\b(mch|maternal and child health|mother and child clinic)\b/g, 'maternal child healthcare clinic'],
+  [/\b(ecg|echo|electrocardiogram|echocardiogram)\b/g, 'ecg echo'],
+  [/\b(birth control|contraception|contraceptives)\b/g, 'family planning'],
+  [/\b(minor injury|injuries|accident injury)\b/g, 'local injuries unit'],
+  [/\b(urgent|emergency) care\b/g, 'urgent care centre'],
+  [/\b(medical assessment|acute assessment)\b/g, 'medical assessment unit'],
   // Delivery / obstetrics
   [/\bc[\s-]?section(s)?\b/g, 'caesarean section'],
   [/\bcesarean(s)?\b/g, 'caesarean'],
@@ -483,9 +431,12 @@ function formatBranch(location: HospitalLocation): string {
 function formatLocations(branchFilter?: HospitalLocation[]): string {
   const branches = branchFilter && branchFilter.length ? branchFilter : hospitalKnowledge.locations;
   return [
-    '📍 *Phadam Hospital Locations*',
+    `📍 *${hospitalKnowledge.name} Location*`,
     '',
     ...branches.map(formatBranch),
+    '',
+    `Email: ${hospitalKnowledge.emails.join(', ')}`,
+    `Postal address: ${hospitalKnowledge.postalAddress}`,
   ].join('\n\n');
 }
 
@@ -495,12 +446,21 @@ function formatServices(): string {
     '',
     ...hospitalKnowledge.services.map((service) => `• ${service}`),
     '',
-    `Standard outpatient consultation fee: *${hospitalKnowledge.consultationFee}*.`,
-    'Ask about any specific service (e.g. "do you have physiotherapy?"), reply "price list" for our full surgical procedure price list, or "book appointment" to schedule a visit.',
+    `General consultation: *${hospitalKnowledge.consultationFee}*. Fees for other services vary.`,
+    'Ask about a service or test for its listed fee, reply "price list" for the supplied price list, or "book appointment" to request a visit.',
   ].join('\n');
 }
 
 function formatInsuranceList(): string {
+  if (!hospitalKnowledge.insuranceAccepted.length) {
+    return [
+      '🛡️ *Insurance and Medical Cover*',
+      '',
+      'I don’t have a confirmed list of accepted insurance providers or plans. Please contact Winston Medical Centre to check your specific cover.',
+      ...hospitalKnowledge.locations.map((location) => location.phoneNumbers.join(', ')),
+    ].join('\n');
+  }
+
   return [
     '🛡️ *Insurance and Medical Cover Partners*',
     '',
@@ -518,7 +478,7 @@ function formatInsuranceConfirmation(matches: string[]): string {
   return [
     '🛡️ *Insurance Confirmation*',
     '',
-    `Yes — Phadam Hospital works with: ${matches.join(', ')}. Our branches are located in Nairobi, including ${branchList}.`,
+    `Yes — ${hospitalKnowledge.name} works with: ${matches.join(', ')}. Our location is ${branchList}.`,
     '',
     'Please confirm your specific plan\'s eligibility and any preauthorization requirements directly with the hospital before your visit.',
   ].join('\n');
@@ -532,33 +492,33 @@ function formatAllDepartments(): string {
       ([department, description]) => `• *${department}*: ${description}`,
     ),
     '',
-    `Standard outpatient consultation fee: *${hospitalKnowledge.consultationFee}* (applies to clinical departments; Pharmacy and Laboratory are charged per item/test instead).`,
+    'Fees vary by service. Ask about a specific clinic, service or laboratory test for its listed price.',
   ].join('\n');
 }
 
 function formatDepartment(department: string, description: string): string {
   const lines = [`🏥 *${department} Department*`, '', description];
 
-  if (department === 'Emergency') {
+  if (department === 'Urgent Care Centre' || department === 'Local Injuries Unit') {
     lines.push(
       '',
-      '*Reach us directly for emergencies:*',
+      '*Contact Winston Medical Centre:*',
       ...hospitalKnowledge.locations.map(
         (location) => `• ${location.branch}: ${location.phoneNumbers.join(', ')}`,
       ),
     );
   }
 
-  if (!NON_CONSULTATION_DEPARTMENTS.has(department)) {
+  if (!NON_CONSULTATION_DEPARTMENTS.has(department) && !hospitalKnowledge.bookingFees[department]) {
     lines.push(
       '',
-      `💵 Standard consultation fee: *${hospitalKnowledge.consultationFee}*. Surgical or theatre procedures in this department are priced separately — ask me for a specific procedure name for its price.`,
+      'Please ask for a specific service or test to see whether its price is listed.',
     );
   }
 
   lines.push(
     '',
-    'Please contact the hospital branch for current availability, appointments, and clinician schedules, or reply "book appointment" to schedule with me now.',
+    'Please contact the hospital to confirm current availability and clinician schedules, or reply "book appointment" to send an appointment request.',
   );
 
   return lines.join('\n');
@@ -580,8 +540,7 @@ function formatSpecialistClinics(): string {
     '',
     ...hospitalKnowledge.specialistClinics.map((clinic) => `• ${clinic}`),
     '',
-    `Standard outpatient consultation fee: *${hospitalKnowledge.consultationFee}*.`,
-    'Doctor names and individual schedules were not provided. Please contact the hospital branch for current clinic availability.',
+    'Fees vary by clinic. Doctor names, schedules and live availability were not provided; please contact the hospital to confirm.',
   ].join('\n');
 }
 
@@ -605,15 +564,27 @@ function formatAbout(): string {
     `_${hospitalKnowledge.motto}_`,
     '',
     `*Founded:* ${hospitalKnowledge.founded}`,
+    `*Registration:* ${hospitalKnowledge.registrationNumber}`,
+    `*Beds:* ${hospitalKnowledge.beds}`,
+    '',
+    `*History:* ${hospitalKnowledge.history}`,
     '',
     hospitalKnowledge.description,
     '',
     `*Mission:* ${hospitalKnowledge.mission}`,
     '',
+    `*Vision:* ${hospitalKnowledge.vision}`,
+    '',
     `*Scope:* ${hospitalKnowledge.scope}`,
     '',
     '*Core Values:*',
     ...hospitalKnowledge.values.map((value) => `• ${value}`),
+    '',
+    '*Goals:*',
+    ...hospitalKnowledge.goals.map((goal) => `• ${goal}`),
+    '',
+    '*Community Responsibility:*',
+    ...hospitalKnowledge.corporateResponsibility.map((item) => `• ${item}`),
   ].join('\n');
 }
 
@@ -632,22 +603,22 @@ function formatUnknown(topicHint?: string): string {
 }
 
 /**
- * Full surgical/theatre procedure price list, for patients who explicitly
+ * Full service and laboratory price list, for patients who explicitly
  * ask for "the price list" / "all prices" rather than a specific
  * procedure. Complements `formatPrices`, which narrows to a specific
  * procedure when one is named.
  */
 function formatFullPriceList(): string {
   return [
-    '💰 *Full Procedure Price List*',
+    '💰 *Winston Medical Centre Price List*',
     '',
-    `Standard outpatient consultation fee: *${hospitalKnowledge.consultationFee}* (applies hospital-wide for a routine doctor visit).`,
+    `General consultation: *${hospitalKnowledge.consultationFee}*.`,
     '',
-    '*Surgical / theatre procedure prices:*',
+    '*Listed service and laboratory prices:*',
     ...hospitalKnowledge.surgicalPrices.map((item) => `• ${item.procedure}: *${item.price}*`),
     '',
     'Prices should be confirmed with the hospital before booking.',
-    'Final procedure charges may depend on the surgeon, anesthesia, medicines, investigations, implants, admission duration, and emergency status.',
+    'Prices should be confirmed with the hospital. Unlisted services, medicines and procedures may have separate charges.',
   ].join('\n');
 }
 
@@ -664,7 +635,7 @@ function findMatchingProcedures(expandedQuery: string): SurgicalPrice[] {
 
   return hospitalKnowledge.surgicalPrices
     .map((item) => {
-      const procedureText = normalizeText(item.procedure);
+      const procedureText = normalizeText([item.procedure, ...(item.keywords ?? [])].join(' '));
       const score = searchTerms.reduce(
         (total, term) => total + (procedureText.includes(term) ? 1 : 0),
         0,
@@ -681,19 +652,19 @@ function formatPrices(expandedQuery: string): string {
 
   if (!matches.length) {
     return [
-      '💰 *Procedure Prices*',
+      '💰 *Service and Laboratory Prices*',
       '',
-      `Standard outpatient consultation fee: *${hospitalKnowledge.consultationFee}*.`,
+      `General consultation: *${hospitalKnowledge.consultationFee}*.`,
       '',
-      'For a surgical/theatre procedure price, please send the procedure name, or reply "price list" to see every procedure price at once.',
+      'Send a service or laboratory test name for its listed price, or reply "price list" to see all supplied prices.',
       '',
       'Examples:',
-      '• Caesarean section price',
-      '• Colonoscopy cost',
-      '• Appendicectomy price',
-      '• Tonsillectomy fee',
+      '• Ultrasound price',
+      '• Antenatal visit fee',
+      '• CBC test cost',
+      '• Physiotherapy fee',
       '',
-      'Note: only surgical/theatre procedure prices are itemized here. Individual lab test and pharmacy item prices were not supplied — please confirm those directly with the hospital.',
+      'Only supplied prices are listed here. Contact the hospital for unlisted tests, medicines, services or procedures.',
       '',
       'Prices should be confirmed with the hospital before booking.',
     ].join('\n');
@@ -703,15 +674,15 @@ function formatPrices(expandedQuery: string): string {
   const hasMoreMatches = matches.length > MAX_PROCEDURE_RESULTS;
 
   return [
-    '💰 *Matching Procedure Prices*',
+    '💰 *Matching Service and Test Prices*',
     '',
     ...displayedMatches.map((item) => `• ${item.procedure}: *${item.price}*`),
     hasMoreMatches
-      ? `\nI found ${matches.length} related procedures. Please send a more specific procedure name for a narrower result, or reply "price list" to see all of them.`
+      ? `\nI found ${matches.length} related prices. Please send a more specific service or test name, or reply "price list" to see all supplied prices.`
       : '',
     '',
     'Prices should be confirmed with the hospital before booking.',
-    'Final procedure charges may depend on the surgeon, anesthesia, medicines, investigations, implants, admission duration, and emergency status.',
+    'Please confirm the final price with the hospital. Unlisted related services or materials may be charged separately.',
   ]
     .filter(Boolean)
     .join('\n');
@@ -836,8 +807,8 @@ function formatServiceConfirmation(matches: string[]): string {
     '',
     ...matches.map((service) => `• ${service}`),
     '',
-    `Standard outpatient consultation fee: *${hospitalKnowledge.consultationFee}*. Specific procedure prices are available on request — just tell me the procedure name, or reply "price list" for all of them.`,
-    'Please contact the hospital branch to check current availability and book, or reply "book appointment" to schedule with me now.',
+    'Listed fees vary by service. Tell me the clinic or test, or reply "price list" to see the supplied prices.',
+    'Please contact the hospital to confirm availability, or reply "book appointment" to send an appointment request.',
   ].join('\n');
 }
 
@@ -877,6 +848,10 @@ export function searchKnowledgeBase(query: string): string | null {
 
   const expandedQuery = expandQuerySynonyms(normalizedQuery);
 
+  if (includesAny(expandedQuery, ['how many beds', 'bed count', 'number of beds', 'registration number', 'hospital registration'])) {
+    return formatAbout();
+  }
+
   // 1. Hours / availability questions we genuinely cannot answer.
   if (
     includesAny(expandedQuery, [
@@ -911,8 +886,13 @@ export function searchKnowledgeBase(query: string): string | null {
       'number',
       'directions',
       'how to reach',
-    ]) ||
-    includesAny(normalizedQuery, ['nasra', 'umoja'])
+      'email',
+      'mail address',
+      'postal address',
+      'post office box',
+      'tassia',
+      'fedha',
+    ])
   ) {
     const namedBranches = findNamedBranches(expandedQuery);
     return formatLocations(namedBranches.length ? namedBranches : undefined);
@@ -1078,13 +1058,21 @@ export function searchKnowledgeBase(query: string): string | null {
   if (
     includesAny(expandedQuery, [
       'mission',
+      'vision',
       'value',
       'values',
       'motto',
       'about',
       'founded',
       'history',
-      'phadam',
+      'registration',
+      'registered',
+      'beds',
+      'objective',
+      'objectives',
+      'goals',
+      'community responsibility',
+      'winston',
       'hospital information',
       'hospital details',
     ])
@@ -1103,11 +1091,11 @@ export function getHospitalSummary(): string {
     hospitalKnowledge.description,
     '',
     'You can ask me about:',
-    '• Locations and contacts (e.g. "Nasra branch contact")',
+    '• Location and contacts (e.g. "Fedha Stage directions", "phone number", or "email")',
     '• Services and departments (e.g. "do you have physiotherapy?")',
-    '• Insurance partners (e.g. "do you accept Britam?")',
-    '• Surgical procedure prices (e.g. "cost of a caesarean section") or "price list" for all of them',
-    '• Consultation fees',
+    '• Insurance and medical cover information',
+    '• Service and laboratory prices (e.g. "ultrasound cost" or "CBC price") or "price list"',
+    '• General consultation and clinic fees',
     '• Specialist clinics',
     '• Booking an appointment',
     '• Mission, values, and hospital leadership',

@@ -13,6 +13,7 @@ import {
   getServicePrice,
   CONVERSATION_MEMORY_MINUTES,
 } from './aiBotService';
+import { searchKnowledgeBase } from '../knowledge/hospitalData';
 
 test('welcome message asks for patient name', () => {
   const reply = generateBotReply({
@@ -26,17 +27,41 @@ test('welcome message asks for patient name', () => {
   assert.match(reply, /what is your name/i);
 });
 
-test('known hospital query answers with SHA and location', () => {
+test('answers Winston location and contact questions with supplied details', () => {
   const reply = generateBotReply({
+    patientName: 'Mary',
+    message: 'where is Winston Medical Centre and how can I contact it?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /Winston Medical Centre/i);
+  assert.match(reply, /Fedha Stage/i);
+  assert.match(reply, /0726 244040/i);
+});
+
+test('answers Winston price, contact, capacity, and insurance questions from supplied facts', () => {
+  const cbcReply = searchKnowledgeBase('What does a full blood count cost?') ?? '';
+  assert.match(cbcReply, /CBC: \*KSh 1,000\*/i);
+
+  const counselingReply = searchKnowledgeBase('Do you offer counselling?') ?? '';
+  assert.match(counselingReply, /Counseling/i);
+  assert.match(counselingReply, /KSh 500/i);
+
+  const emailReply = searchKnowledgeBase('What is your email address?') ?? '';
+  assert.match(emailReply, /winstonmedicalcentre01@gmail.com/i);
+
+  const capacityReply = searchKnowledgeBase('How many beds do you have?') ?? '';
+  assert.match(capacityReply, /Beds:\* 2/i);
+
+  const insuranceReply = generateBotReply({
     patientName: 'Mary',
     message: 'do you accept SHA?',
     isReturning: false,
     lastInteractionHours: 0,
   });
-
-  assert.match(reply, /Yes, Mary/i);
-  assert.match(reply, /SHA/i);
-  assert.match(reply, /located/i);
+  assert.match(insuranceReply, /confirmed list of accepted insurance/i);
+  assert.doesNotMatch(insuranceReply, /^Yes,/i);
 });
 
 test('unknown content asks to speak to a doctor', () => {
@@ -142,7 +167,7 @@ test('answers common price and rebooking questions naturally', () => {
     isReturning: false,
     lastInteractionHours: 0,
   });
-  assert.match(priceReply, /KSh 1,000/i);
+  assert.match(priceReply, /KSh 1,500/i);
 
   const rescheduleReply = generateBotReply({
     patientName: 'Mary',
@@ -334,7 +359,7 @@ test('normalizes afternoon booking times to 12-hour display format', () => {
   const booking = parseAppointmentRequest('book maternity today at 3pm');
 
   assert.equal(booking.time, '03:00 PM');
-  assert.equal(booking.department, 'Maternity');
+  assert.equal(booking.department, 'Antenatal Clinic');
 });
 
 test('understands a misspelled new appointment request', () => {
@@ -413,13 +438,31 @@ test('conversation memory expires after three minutes', () => {
 test('parses booking details from patient request', () => {
   const booking = parseAppointmentRequest('I want to book a visit tomorrow at 9am in maternity');
   assert.equal(booking.ready, true);
-  assert.equal(booking.department, 'Maternity');
+  assert.equal(booking.department, 'Antenatal Clinic');
   assert.equal(booking.time, '09:00 AM');
+});
+
+test('maps supported appointment aliases to Winston clinics and rejects unsupported services', () => {
+  const maternityBooking = parseAppointmentRequest('book maternity tomorrow at 9am');
+  assert.equal(maternityBooking.department, 'Antenatal Clinic');
+
+  const familyPlanningBooking = parseAppointmentRequest('book birth control tomorrow at 9am');
+  assert.equal(familyPlanningBooking.department, 'Family Planning Services');
+
+  const ultrasoundBooking = parseAppointmentRequest('ultrasound appointment tomorrow at 9am');
+  assert.equal(ultrasoundBooking.department, 'Ultrasound Services');
+
+  const unsupportedDelivery = parseAppointmentRequest('book a delivery tomorrow at 9am');
+  assert.equal(unsupportedDelivery.department, undefined);
+
+  const unsupportedBooking = parseAppointmentRequest('book a dental appointment tomorrow at 9am');
+  assert.equal(unsupportedBooking.department, undefined);
+  assert.equal(unsupportedBooking.ready, false);
 });
 
 test('parses interactive menu time values like 09 00 am', () => {
   const booking = parseAppointmentRequest('tomorrow 09 00 am in maternity');
-  assert.equal(booking.department, 'Maternity');
+  assert.equal(booking.department, 'Antenatal Clinic');
   assert.equal(booking.time, '09:00 AM');
   assert.equal(booking.ready, true);
 });
@@ -432,9 +475,9 @@ test('does not confuse appointments with ENT', () => {
 
 test('recognizes common gynecology typos and returns the exact consultation fee', () => {
   const booking = parseAppointmentRequest('Obstetrics and Gynecolog appointment today at 11:00 AM');
-  assert.equal(booking.department, 'Obstetrics and Gynecology');
+  assert.equal(booking.department, 'Gynecology');
   assert.equal(booking.time, '11:00 AM');
-  assert.equal(getServicePrice(booking.department), 'KSh 1,000');
+  assert.equal(getServicePrice(booking.department), 'KSh 1,500');
 });
 
 test('asks for missing booking details', () => {
@@ -453,7 +496,7 @@ test('keeps consultation pricing wording exact and human-friendly', () => {
     date: 'today',
   });
 
-  assert.match(prompt, /KSh 1,000/i);
-  assert.doesNotMatch(prompt, /KSh 1,000 \+ KSh 1,000 consultation/i);
+  assert.match(prompt, /KSh 1,500/i);
+  assert.doesNotMatch(prompt, /KSh 1,500 \+ KSh 1,500/i);
   assert.match(prompt, /what time/i);
 });

@@ -84,13 +84,13 @@ export const StaffDashboard: React.FC = () => {
     if (Notification.permission === 'granted') {
       const body = `${newChatCount} new hospital update${newChatCount > 1 ? 's are' : ' is'} waiting in the queue.`;
       void navigator.serviceWorker?.ready.then((registration) => {
-        void registration.showNotification('Phadam Hospital update', {
+        void registration.showNotification('Winston Medical Centre update', {
           body,
           tag: 'phadam-hospital-admin-update',
           icon: '/pwa-192.png',
         });
       }).catch(() => {
-        new Notification('Phadam Hospital update', { body, tag: 'phadam-hospital-admin-update' });
+        new Notification('Winston Medical Centre update', { body, tag: 'phadam-hospital-admin-update' });
       });
     }
   }, []);
@@ -551,7 +551,7 @@ export const StaffDashboard: React.FC = () => {
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="rounded-3xl border border-white/10 bg-white/5 px-8 py-6 text-center shadow-2xl">
           <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-fuchsia-500 border-t-transparent" />
-          <p className="text-lg font-black">Loading Phadam WhatsApp</p>
+          <p className="text-lg font-black">Loading Winston Medical Centre</p>
         </div>
       </div>
     );
@@ -565,7 +565,7 @@ export const StaffDashboard: React.FC = () => {
             <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-fuchsia-500 via-violet-500 to-cyan-400 text-3xl font-black shadow-lg">
               P
             </div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-violet-300">Phadam WhatsApp</p>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-violet-300">Winston Medical Centre</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight">You are not logged in.</h1>
             <p className="mt-2 text-sm text-slate-300">Please log in to access the hospital dashboard.</p>
           </div>
@@ -577,7 +577,7 @@ export const StaffDashboard: React.FC = () => {
               value={loginForm.email}
               onChange={(event) => setLoginForm((prev) => ({ ...prev, email: event.target.value }))}
               className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none ring-0 placeholder:text-slate-500 focus:border-violet-400"
-              placeholder="name@phadam.com"
+              placeholder="name@example.com"
             />
           </label>
 
@@ -647,7 +647,7 @@ export const StaffDashboard: React.FC = () => {
 
           <div>
             <h1 className="text-base font-black tracking-tight">
-              Phadam Portal
+              Winston Medical Centre
             </h1>
             <p className="text-[11px] font-medium text-slate-400">
               {currentUser.name}
@@ -1011,7 +1011,7 @@ export const StaffDashboard: React.FC = () => {
                           value={adminForm.email}
                           onChange={(event) => setAdminForm((prev) => ({ ...prev, email: event.target.value }))}
                           className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-violet-400"
-                          placeholder="user@phadam.com"
+                          placeholder="user@example.com"
                         />
                       </label>
 

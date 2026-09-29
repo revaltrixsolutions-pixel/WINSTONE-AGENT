@@ -317,22 +317,7 @@ async function getAvailableAppointmentOptionsReply(
 ): Promise<string | null> {
   if (!isAvailableAppointmentsRequest(message)) return null;
 
-  const nextDates = [
-    new Date(Date.now() + 24 * 60 * 60 * 1000),
-    new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-    new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-  ];
-
-  const slots = ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM'];
-
-  const options = nextDates
-    .map((date, index) => {
-      const label = index === 0 ? 'Tomorrow' : index === 1 ? 'Day after tomorrow' : 'Three days later';
-      return `${label}: ${slots.join(', ')}`;
-    })
-    .join('\n');
-
-  return `${patientName}, the next available slots are:\n\n${options}\n\nPlease tell me the department and the day and time you prefer, and I’ll help book or reschedule your appointment.`;
+  return `${patientName}, I can't check live appointment availability or clinician schedules here. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to confirm. You can also send your preferred service, date, and time as an appointment request; the hospital team will confirm it.`;
 }
 
 async function handleAppointmentReschedule(
@@ -373,11 +358,11 @@ async function handleAppointmentReschedule(
       slotTime: updatedDate,
       servicePrice: getServicePrice(updatedDepartment) ?? existingAppointment.servicePrice,
       consultationFee: getServicePrice(updatedDepartment) ?? existingAppointment.consultationFee,
-      status: 'RESCHEDULED',
+      status: 'PENDING',
     },
   });
 
-  return `${patientName}, your appointment has been rescheduled successfully.\n\nDepartment: ${updatedAppointment.specialty}\nDate: ${formatKenyaDateTime(updatedAppointment.slotTime)}\nStatus: ${updatedAppointment.status}\nReference: ${updatedAppointment.id.slice(0, 8)}\n\nThe updated booking is now visible to the admin team.`;
+  return `${patientName}, your reschedule request has been sent to the Winston Medical Centre team. Availability is not confirmed yet.\n\nService: ${updatedAppointment.specialty}\nPreferred date and time: ${formatKenyaDateTime(updatedAppointment.slotTime)}\nStatus: ${updatedAppointment.status}\nReference: ${updatedAppointment.id.slice(0, 8)}\n\nThe team will contact you to confirm the updated appointment.`;
 }
 
 async function handleAppointmentCancellation(
@@ -405,6 +390,17 @@ async function handleAppointmentCancellation(
   });
 
   return `${patientName}, your appointment has been cancelled successfully.\n\nDepartment: ${cancelledAppointment.specialty}\nDate: ${formatKenyaDateTime(cancelledAppointment.slotTime)}\nReference: ${cancelledAppointment.id.slice(0, 8)}\n\nYou can book a new appointment whenever you are ready.`;
+}
+
+function getKenyaTimeParts(date = new Date()): { date: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Nairobi',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return { date: `${values.year}-${values.month}-${values.day}` };
 }
 
 function parseAppointmentDate(dateText: string, timeText: string): Date {
@@ -457,42 +453,6 @@ function parseAppointmentDate(dateText: string, timeText: string): Date {
   }
 
   return new Date(Date.UTC(year, month - 1, day, hour - 3, parsedMinute));
-}
-
-const APPOINTMENT_TIME_SLOTS = ['09:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '05:00 PM'];
-
-function getKenyaTimeParts(date = new Date()): { date: string; minutes: number } {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Nairobi',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return {
-    date: `${values.year}-${values.month}-${values.day}`,
-    minutes: Number(values.hour) * 60 + Number(values.minute),
-  };
-}
-
-function getAvailableTimeSlots(dateText?: string): string[] {
-  if (!dateText || !dateText.toLowerCase().includes('today')) {
-    return APPOINTMENT_TIME_SLOTS;
-  }
-
-  const current = getKenyaTimeParts();
-  return APPOINTMENT_TIME_SLOTS.filter((slot) => {
-    const match = slot.match(/^(\d{2}):(\d{2})\s+(AM|PM)$/);
-    if (!match) return false;
-    let hour = Number(match[1]);
-    const minute = Number(match[2]);
-    if (match[3] === 'PM' && hour < 12) hour += 12;
-    if (match[3] === 'AM' && hour === 12) hour = 0;
-    return hour * 60 + minute > current.minutes;
-  });
 }
 
 function buildAppointmentInteractive(
@@ -558,39 +518,7 @@ function buildAppointmentInteractive(
   }
 
   if (!appointmentState.time) {
-    const availableTimeSlots = getAvailableTimeSlots(appointmentState.date);
-
-    if (availableTimeSlots.length === 0) {
-      return {
-        type: 'list',
-        body: { text: `${prompt} There are no remaining appointment times today. Please choose another date.` },
-        action: {
-          button: 'Choose another date',
-          sections: [{
-            title: 'Appointment date',
-            rows: [
-              { id: 'date_tomorrow', title: 'Tomorrow' },
-              { id: 'date_next_week', title: 'Next week' },
-            ],
-          }],
-        },
-      };
-    }
-
-    return {
-      type: 'list',
-      body: { text: prompt },
-      action: {
-        button: 'Choose a time',
-          sections: [{
-          title: 'Available times',
-          rows: availableTimeSlots.map((time) => ({
-            id: `time_${time.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-            title: time,
-          })),
-        }],
-      },
-    };
+    return undefined;
   }
 
   return undefined;
@@ -600,7 +528,7 @@ function buildPatientMenu(): WhatsAppInteractivePayload {
   return {
     type: 'list',
     body: {
-      text: 'Welcome to Phadam Hospital. Choose an option below:\n\n1️⃣ Book an Appointment\n2️⃣ View My Appointments\n3️⃣ Reschedule Appointment\n4️⃣ Cancel Appointment\n5️⃣ Talk to a Doctor/Clinic',
+      text: 'Welcome to Winston Medical Centre. Choose an option below:\n\n1️⃣ Book an Appointment\n2️⃣ View My Appointments\n3️⃣ Reschedule Appointment\n4️⃣ Cancel Appointment\n5️⃣ Talk to a Doctor/Clinic',
     },
     action: {
       button: 'Open hospital menu',
@@ -621,7 +549,7 @@ function buildPatientMenu(): WhatsAppInteractivePayload {
 function buildKnowledgeMenu(): WhatsAppInteractivePayload {
   return {
     type: 'list',
-    body: { text: 'Choose a topic and I will show the exact Phadam Hospital information.' },
+    body: { text: 'Choose a topic for information about Winston Medical Centre.' },
     action: {
       button: 'Choose a topic',
       sections: [{
@@ -632,8 +560,8 @@ function buildKnowledgeMenu(): WhatsAppInteractivePayload {
           { id: 'menu_specialists', title: 'Specialist clinics', description: 'Specialist care options' },
           { id: 'menu_locations', title: 'Locations', description: 'Branches and contacts' },
           { id: 'menu_prices', title: 'Prices', description: 'Procedures and fees' },
-          { id: 'menu_insurance', title: 'SHA and insurance', description: 'Accepted medical covers' },
-          { id: 'menu_about', title: 'About Phadam', description: 'Mission, values and leadership' },
+          { id: 'menu_insurance', title: 'Insurance', description: 'Check plan eligibility' },
+          { id: 'menu_about', title: 'About Winston', description: 'Mission, values and leadership' },
           { id: 'menu_human', title: 'Speak to staff', description: 'Request human help' },
         ],
       }],
@@ -1014,14 +942,23 @@ async function sendBotReply(
           patientId: patient.id,
           doctorName: 'To be assigned',
           specialty: department,
-          servicePrice: getServicePrice(department) ?? undefined,
-          consultationFee: 'KSh 1,000',
+          servicePrice: getServicePrice(department) ?? 'To be confirmed',
+          consultationFee: getServicePrice(department) ?? 'To be confirmed',
           slotTime,
-          status: 'CONFIRMED',
+          status: 'PENDING',
         },
       });
 
-      const confirmationText = `Thank you, ${patientName}. Your appointment has been booked for ${date} at ${time} in the ${department} department. Your appointment reference is ${appointment.id.slice(0, 8)}.`;
+      const listedFee = getServicePrice(department);
+      const confirmationText = [
+        `Winston Medical Centre received your appointment request, ${patientName}.`,
+        `Service: ${department}`,
+        `Preferred date: ${date}`,
+        `Preferred time: ${time}`,
+        listedFee ? `Listed fee: ${listedFee}` : '',
+        `Reference: ${appointment.id.slice(0, 8)}`,
+        'Our team will contact you to confirm availability. For help, call 0726 244040 or 0708 130100.',
+      ].filter(Boolean).join('\n');
 
       await sendWhatsAppMessage({
         recipientPhone: patient.phoneNumber,

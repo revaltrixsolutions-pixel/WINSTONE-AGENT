@@ -68,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div>
             <h1 className="text-lg font-black">
-              Phadam Hospital
+              Winston Medical Centre
             </h1>
 
             <p className="text-xs text-slate-400">
