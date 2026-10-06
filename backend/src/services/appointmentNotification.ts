@@ -1,7 +1,7 @@
 import type { Appointment } from '../generated/prisma/client';
 import { sendWhatsAppMessage, type SentWhatsAppMessage } from './whatsappService';
 
-const HOSPITAL_WHATSAPP_NUMBER = '254708130100';
+export const APPOINTMENT_MANAGER_WHATSAPP_NUMBER = '254726244040';
 const DEFAULT_APPOINTMENT_TEMPLATE = 'appointment_notification';
 const DEFAULT_TEMPLATE_LANGUAGE = 'en';
 
@@ -11,7 +11,7 @@ const DEFAULT_TEMPLATE_LANGUAGE = 'en';
  */
 type AppointmentNotificationDetails = Pick<
   Appointment,
-  'id' | 'doctorName' | 'specialty' | 'slotTime' | 'status' | 'consultationFee'
+  'id' | 'doctorName' | 'specialty' | 'slotTime' | 'status'
 > & {
   patient?: {
     fullName?: string | null;
@@ -30,18 +30,18 @@ export function sendAppointmentNotification(
     timeStyle: 'short',
   }).format(appointment.slotTime);
   const details = [
-    `Reference: ${appointment.id}`,
+    'Hello, I would like to enquire about this appointment:',
     `Patient: ${appointment.patient?.fullName || appointment.patientName || 'Not provided'}`,
     `Patient phone: ${appointment.patient?.phoneNumber || appointment.patientPhone || 'Not provided'}`,
     `Service: ${appointment.specialty}`,
     `Doctor: ${appointment.doctorName}`,
     `Date and time: ${appointmentDate}`,
-    `Listed fee: ${appointment.consultationFee}`,
     `Status: ${appointment.status}`,
+    `Reference: ${appointment.id}`,
   ].join('\n');
 
   return sendWhatsAppMessage({
-    recipientPhone: HOSPITAL_WHATSAPP_NUMBER,
+    recipientPhone: APPOINTMENT_MANAGER_WHATSAPP_NUMBER,
     template: {
       name: process.env.WHATSAPP_APPOINTMENT_TEMPLATE?.trim() || DEFAULT_APPOINTMENT_TEMPLATE,
       languageCode: process.env.WHATSAPP_APPOINTMENT_TEMPLATE_LANGUAGE?.trim() || DEFAULT_TEMPLATE_LANGUAGE,

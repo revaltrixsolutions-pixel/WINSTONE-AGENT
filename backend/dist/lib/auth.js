@@ -18,7 +18,7 @@ const node_crypto_1 = __importDefault(require("node:crypto"));
 const prisma_1 = require("./prisma");
 const AUTH_SECRET = process.env.AUTH_SECRET?.trim() || node_crypto_1.default
     .createHash('sha256')
-    .update(`${process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || ''}:${process.env.SUPER_ADMIN_PASSWORD || ''}:${process.env.DATABASE_URL || 'phadam'}`)
+    .update(`${process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || ''}:${process.env.SUPER_ADMIN_PASSWORD || ''}:${process.env.DATABASE_URL || 'winstone-agent'}`)
     .digest('hex');
 function getSuperAdminConfig() {
     const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();

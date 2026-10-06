@@ -19,7 +19,7 @@ test('hashes and verifies provider passwords', () => {
 test('creates and validates signed auth tokens', () => {
   const token = createUserToken({
     id: 'user-123',
-    email: 'superadmin@phadam.com',
+    email: 'superadmin@winston.example',
     role: 'SUPER_ADMIN',
     name: 'Super Admin',
     isActive: true,

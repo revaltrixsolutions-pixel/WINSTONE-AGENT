@@ -79,7 +79,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
   skinAnalysisNote: 'We do not offer skin analysis. Our dermatologists use clinical and physical examination to assess skin conditions; AI-dependent skin analysis, often relied on by cosmetic outlets, can be misleading and may lead to misdiagnosis.',
   treatmentPricingNote: 'Treatment costs depend on the treatment plan recommended by the doctor after examining you. Please visit and see a doctor before asking for a treatment cost.',
   dermatologyInsuranceNote: 'We do not accept SHA for dermatology services. Dermatology services are cash-only. For other services, please call 0726 244040 or 0708 130100 to confirm cover.',
-  skinLesionAssessmentNote: 'We assess and manage skin tags, keloids, warts, and ingrown nails. A doctor must examine the condition first and decide on the appropriate treatment plan. Please visit us for a clinical evaluation.',
+  skinLesionAssessmentNote: 'Yes, we assess and manage skin tags, keloids, warts, and ingrown nails, but a doctor must examine the condition and decide on the appropriate treatment plan. Please visit us for a clinical evaluation first.',
   darkSpotsNote: 'Dark spots can have many causes, including post-inflammatory changes, sunburn, medicines, skin infections, acne, trauma, hormonal factors, or genetic conditions. The appropriate treatment depends on the cause and whether the pigmentation is superficial or deeper. Please see our dermatologist for an assessment and suitable treatment plan.',
   acneKeloidalisNuchaeNote: 'Acne keloidalis nuchae is associated with inflammation of hair follicles. Possible contributing factors include close shaving, friction or irritation from collars, caps or helmets, ingrown hairs, genetics, and bacterial colonisation, including Propionibacterium. A dermatologist can assess your individual condition and advise on care.',
   skinImageNote: 'You may share a photo, but please call the doctor directly first for guidance on 0708 130100 or 0726 244040. A photo cannot replace a clinical examination.',
@@ -1008,6 +1008,18 @@ export function searchKnowledgeBase(query: string): string | null {
       return `Virtual or online consultation costs ${hospitalKnowledge.virtualConsultationFee}. ${hospitalKnowledge.virtualConsultationNote}`;
     }
     return hospitalKnowledge.virtualConsultationNote;
+  }
+
+  const matchingProcedures = findMatchingProcedures(expandedQuery);
+  if (
+    matchingProcedures.some((procedure) => procedure.procedure.toLowerCase() === 'microneedling')
+  ) {
+    const microneedling = matchingProcedures.find(
+      (procedure) => procedure.procedure.toLowerCase() === 'microneedling',
+    );
+    if (microneedling) {
+      return `Yes, we do microneedling at a cost of ${microneedling.price}.`;
+    }
   }
 
   if (includesAny(expandedQuery, ['not in nairobi', 'outside nairobi', 'away from nairobi', 'not based in nairobi'])) {

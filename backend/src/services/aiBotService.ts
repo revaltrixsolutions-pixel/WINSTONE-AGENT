@@ -1205,7 +1205,8 @@ function answerKnowledgeBase(name: string, message: string): string | null {
   }
 
   if (/^(yes|no)\b/i.test(trimmed)) {
-    return trimmed.replace(/^(yes|no)\b\s*,?/i, (_, prefix) => `${prefix}, ${name}`);
+    const [, answer, explanation = ''] = trimmed.match(/^(yes|no)\b\s*,?\s*(.*)$/i) ?? [];
+    return explanation ? `${answer}, ${name}, ${explanation}` : `${answer}, ${name}.`;
   }
 
   return `${name}, ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;

@@ -15,7 +15,7 @@ const auth_1 = require("./auth");
 (0, node_test_1.default)('creates and validates signed auth tokens', () => {
     const token = (0, auth_1.createUserToken)({
         id: 'user-123',
-        email: 'superadmin@phadam.com',
+        email: 'superadmin@winston.example',
         role: 'SUPER_ADMIN',
         name: 'Super Admin',
         isActive: true,

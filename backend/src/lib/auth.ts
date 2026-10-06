@@ -18,7 +18,7 @@ type TokenPayload = PublicUser & { iat: number };
 const AUTH_SECRET = process.env.AUTH_SECRET?.trim() || crypto
   .createHash('sha256')
   .update(
-    `${process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || ''}:${process.env.SUPER_ADMIN_PASSWORD || ''}:${process.env.DATABASE_URL || 'phadam'}`,
+    `${process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || ''}:${process.env.SUPER_ADMIN_PASSWORD || ''}:${process.env.DATABASE_URL || 'winstone-agent'}`,
   )
   .digest('hex');
 

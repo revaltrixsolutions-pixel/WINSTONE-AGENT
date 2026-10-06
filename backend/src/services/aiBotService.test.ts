@@ -121,11 +121,11 @@ test('answers each supplied FAQ wording through the bot reply flow', () => {
     },
     {
       message: 'Do you do micro needling?',
-      expected: [/KSh 22,000 per session/i],
+      expected: [/Yes, Mary, we do microneedling/i, /KSh 22,000 per session/i],
     },
     {
       message: 'Do you remove skin tags,keloids, warts, ingrown nails?',
-      expected: [/skin tags, keloids, warts, and ingrown nails/i, /doctor must examine/i, /clinical evaluation/i],
+      expected: [/Yes, Mary, we assess and manage skin tags, keloids, warts, and ingrown nails/i, /doctor must examine/i, /appropriate treatment plan/i, /clinical evaluation first/i],
     },
     {
       message: 'What causes dark spots?',
@@ -196,7 +196,7 @@ test('answers dermatology, treatment-cost, and virtual-consultation questions sa
 
 test('answers dermatology procedure, condition, image, and insurance questions', () => {
   const microneedlingReply = searchKnowledgeBase('Do you do micro needling?') ?? '';
-  assert.match(microneedlingReply, /Microneedling: \*KSh 22,000 per session\*/i);
+  assert.match(microneedlingReply, /^Yes, we do microneedling at a cost of KSh 22,000 per session\.$/i);
 
   const lesionReply = searchKnowledgeBase('Do you remove skin tags, keloids, warts, and ingrown nails?') ?? '';
   assert.match(lesionReply, /skin tags, keloids, warts, and ingrown nails/i);
@@ -544,6 +544,10 @@ test('shows the booking steps for a short booking request', () => {
 test('recognizes common booking commands and synonyms', () => {
   const bookingPhrases = [
     'can I book appointment',
+    'how can I book appointment',
+    'can I book an appointment',
+    'help me book appointment',
+    'I would like to enquire about booking an appointment',
     'make appointment',
     'do appointment',
     'book an appointment',
@@ -569,6 +573,45 @@ test('recognizes common booking commands and synonyms', () => {
     assert.match(reply, /appointment|consultation/i, `Expected booking response for: ${message}`);
     assert.match(reply, /date|time/i, `Expected date or time step for: ${message}`);
   }
+});
+
+test('continues a multi-turn appointment request from booking intent to confirmation', () => {
+  const patientId = 'natural-language-booking-flow';
+  const welcome = generateBotReply({
+    patientId,
+    message: 'my name is Mary',
+  });
+  assert.match(welcome, /How can I help you today/i);
+
+  const bookingPrompt = generateBotReply({
+    patientId,
+    message: 'how can I book appointment?',
+  });
+  assert.match(bookingPrompt, /department or clinic/i);
+  assert.match(bookingPrompt, /preferred date/i);
+  assert.match(bookingPrompt, /preferred time/i);
+
+  const departmentPrompt = generateBotReply({
+    patientId,
+    message: 'Gynecology',
+  });
+  assert.match(departmentPrompt, /KSh 1,500/i);
+  assert.match(departmentPrompt, /date and time/i);
+
+  const datePrompt = generateBotReply({
+    patientId,
+    message: 'tomorrow',
+  });
+  assert.match(datePrompt, /what time/i);
+
+  const confirmation = generateBotReply({
+    patientId,
+    message: '10 am',
+  });
+  assert.match(confirmation, /Department: Gynecology/i);
+  assert.match(confirmation, /Date:/i);
+  assert.match(confirmation, /Time: 10:00 AM/i);
+  assert.match(confirmation, /Reply \*Yes\* to submit/i);
 });
 
 test('understands the complete appointment phrase set', () => {

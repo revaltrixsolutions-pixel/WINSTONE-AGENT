@@ -33,8 +33,7 @@ test('sends appointment details to the hospital WhatsApp template', async () => 
       doctorName: 'Dr Example',
       specialty: 'Dermatology',
       slotTime: new Date('2026-10-07T08:30:00.000Z'),
-      status: 'PENDING',
-      consultationFee: 'KSh 1,000',
+      status: 'CONFIRMED',
       patient: {
         fullName: 'Mary Patient',
         phoneNumber: '254712345678',
@@ -42,7 +41,7 @@ test('sends appointment details to the hospital WhatsApp template', async () => 
     });
 
     assert.equal(result.messageId, 'wamid.appointment');
-    assert.equal(requestBody?.to, '254708130100');
+    assert.equal(requestBody?.to, '254726244040');
     assert.deepEqual(requestBody?.template, {
       name: 'clinic_appointment_alert',
       language: { code: 'en_US' },
@@ -51,14 +50,14 @@ test('sends appointment details to the hospital WhatsApp template', async () => 
         parameters: [{
           type: 'text',
           text: [
-            'Reference: appointment-reference',
+            'Hello, I would like to enquire about this appointment:',
             'Patient: Mary Patient',
             'Patient phone: 254712345678',
             'Service: Dermatology',
             'Doctor: Dr Example',
             'Date and time: 7 Oct 2026, 11:30',
-            'Listed fee: KSh 1,000',
-            'Status: PENDING',
+            'Status: CONFIRMED',
+            'Reference: appointment-reference',
           ].join('\n'),
         }],
       }],

@@ -1,7 +1,10 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { getHospitalPhoneNumber, setHospitalPhoneNumber } from '../lib/hospitalSettings';
-import { sendAppointmentNotification } from '../services/appointmentNotification';
+import {
+  APPOINTMENT_MANAGER_WHATSAPP_NUMBER,
+  sendAppointmentNotification,
+} from '../services/appointmentNotification';
 import { getServicePrice } from '../services/aiBotService';
 import { sendWhatsAppMessage } from '../services/whatsappService';
 
@@ -166,7 +169,7 @@ export async function createPatientWithAppointment(req: Request, res: Response):
     notification = { sent: false, error: errorMessage };
     console.error('[Appointment WhatsApp Notification Failed]', {
       appointmentId: appointment.id,
-      recipientPhone: '254708130100',
+      recipientPhone: APPOINTMENT_MANAGER_WHATSAPP_NUMBER,
       error: errorMessage,
     });
   }

@@ -21,7 +21,10 @@ import {
   type WhatsAppInteractiveMessage as WhatsAppInteractivePayload,
   WhatsAppApiError,
 } from '../services/whatsappService';
-import { sendAppointmentNotification } from '../services/appointmentNotification';
+import {
+  APPOINTMENT_MANAGER_WHATSAPP_NUMBER,
+  sendAppointmentNotification,
+} from '../services/appointmentNotification';
 
 /* ==========================================================================
    WHATSAPP WEBHOOK TYPES
@@ -966,7 +969,7 @@ async function sendBotReply(
       } catch (error) {
         console.error('[WhatsApp Appointment Notification Failed]', {
           appointmentId: appointment.id,
-          recipientPhone: '254708130100',
+          recipientPhone: APPOINTMENT_MANAGER_WHATSAPP_NUMBER,
           error: error instanceof Error ? error.message : error,
         });
       }
