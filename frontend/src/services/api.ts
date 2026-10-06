@@ -580,7 +580,12 @@ export async function createPatientWithAppointment(input: {
   slotTime: string;
   servicePrice?: string;
   consultationFee?: string;
-}): Promise<{ success: boolean; appointment?: Appointment; error?: string }> {
+}): Promise<{
+  success: boolean;
+  appointment?: Appointment;
+  error?: string;
+  notification?: { sent: boolean; simulated?: boolean; error?: string };
+}> {
   return request('/api/dashboard/patients-with-appointment', {
     method: 'POST',
     body: JSON.stringify(input),

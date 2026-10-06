@@ -40,6 +40,215 @@ test('answers Winston location and contact questions with supplied details', () 
   assert.match(reply, /0726 244040/i);
 });
 
+test('answers the supplied location, fee, hours, and appointment questions', () => {
+  const locationReply = searchKnowledgeBase('Do you have a branch in Nairobi?') ?? '';
+  assert.match(locationReply, /one branch/i);
+  assert.match(locationReply, /Standard Drive, Fedha, Embakasi, Nairobi/i);
+
+  const consultationReply = searchKnowledgeBase('What is your consultation fee?') ?? '';
+  assert.match(consultationReply, /KSh 1,000/i);
+  assert.doesNotMatch(consultationReply, /KSh 500/i);
+
+  const hoursReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'What time are you open?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(hoursReply, /Monday to Saturday/i);
+  assert.match(hoursReply, /8:00 AM to 5:00 PM/i);
+  assert.match(hoursReply, /appointments can also be booked on Sundays and public holidays/i);
+
+  const sundayReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'Can I book an appointment on Sunday?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(sundayReply, /call 0726 244040 or 0708 130100/i);
+});
+
+test('answers each supplied FAQ wording through the bot reply flow', () => {
+  const questions: Array<{ message: string; expected: RegExp[] }> = [
+    {
+      message: 'Where are located?',
+      expected: [/Standard Drive/i, /Fedha/i, /Embakasi/i, /Nairobi/i],
+    },
+    {
+      message: 'Do you have branch in Mombasa?',
+      expected: [/one branch/i, /Nairobi/i, /Standard Drive/i],
+    },
+    {
+      message: 'What is the consultation fee?',
+      expected: [/KSh 1,000/i],
+    },
+    {
+      message: 'What time are you open?',
+      expected: [/Monday to Saturday/i, /8:00 AM to 5:00 PM/i, /Sundays and public holidays/i, /0726 244040/i, /0708 130100/i],
+    },
+    {
+      message: 'Do you treat this condition, dark spots, ance, keloids, vitiligo, hair loss etc?',
+      expected: [/dermatologist handles all skin conditions/i, /clinical and physical examination/i, /before making a diagnosis/i],
+    },
+    {
+      message: 'How much do you charge?',
+      expected: [/treatment plan/i, /doctor after examining you/i],
+    },
+    {
+      message: 'Can you offer online consultation?',
+      expected: [/virtual consultations are available/i, /call 0726 244040 or 0708 130100/i],
+    },
+    {
+      message: 'Am not in Nairobi how can you help?',
+      expected: [/outside Nairobi/i, /virtual consultation/i, /visit us at a convenient time/i],
+    },
+    {
+      message: 'How do you charge for virtual or online consultation?',
+      expected: [/KSh 1,000/i, /virtual consultations are available/i],
+    },
+    {
+      message: 'Do you do skin analysis?',
+      expected: [/do not offer skin analysis/i, /clinical and physical examination/i, /misdiagnosis/i, /cosmetic outlets/i],
+    },
+    {
+      message: 'What is you contact address or phone number?',
+      expected: [/Standard Drive/i, /0726 244040/i, /0708 130100/i, /winstonmedicalcentre01@gmail.com/i],
+    },
+    {
+      message: 'Do you do micro needling?',
+      expected: [/KSh 22,000 per session/i],
+    },
+    {
+      message: 'Do you remove skin tags,keloids, warts, ingrown nails?',
+      expected: [/skin tags, keloids, warts, and ingrown nails/i, /doctor must examine/i, /clinical evaluation/i],
+    },
+    {
+      message: 'What causes dark spots?',
+      expected: [/post-inflammatory changes/i, /sunburn/i, /acne/i, /superficial or deeper/i, /see our dermatologist/i],
+    },
+    {
+      message: 'Hello?',
+      expected: [/Hello too/i, /Welcome/i, /How can I help you today/i, /enquiry/i],
+    },
+    {
+      message: 'Do you use SHA?',
+      expected: [/do not accept SHA for dermatology services/i, /cash-only/i],
+    },
+    {
+      message: 'Which insurance do you accept?',
+      expected: [/GA Insurance/i, /Kenyan Alliance/i, /MTIBA/i, /onboarded soon/i],
+    },
+    {
+      message: 'Can I share picture of my skin condition?',
+      expected: [/may share a photo/i, /call the doctor directly first/i, /0708 130100/i, /0726 244040/i],
+    },
+    {
+      message: 'What causes Acne Keloidalis Nuchae?',
+      expected: [/inflammation of hair follicles/i, /close shaving/i, /collars, caps or helmets/i, /ingrown hairs/i, /Propionibacterium/i],
+    },
+  ];
+
+  for (const { message, expected } of questions) {
+    const reply = generateBotReply({
+      patientName: 'Mary',
+      message,
+      isReturning: false,
+      lastInteractionHours: 0,
+    });
+    for (const pattern of expected) {
+      assert.match(reply, pattern, `Expected response to "${message}" to match ${pattern}`);
+    }
+  }
+});
+
+test('answers dermatology, treatment-cost, and virtual-consultation questions safely', () => {
+  const dermatologyReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'Do you treat rash, acne, keloids, vitiligo, and hair loss?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(dermatologyReply, /dermatologist handles all skin conditions/i);
+  assert.match(dermatologyReply, /clinical and physical examination/i);
+
+  const treatmentReply = searchKnowledgeBase('How much do you charge?') ?? '';
+  assert.match(treatmentReply, /treatment plan/i);
+  assert.match(treatmentReply, /after examining you/i);
+
+  const onlineReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'How much is an online consultation?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(onlineReply, /KSh 1,000/i);
+  assert.match(onlineReply, /call 0726 244040 or 0708 130100/i);
+
+  const skinAnalysisReply = searchKnowledgeBase('Do you do skin analysis?') ?? '';
+  assert.match(skinAnalysisReply, /do not offer skin analysis/i);
+  assert.match(skinAnalysisReply, /misdiagnosis/i);
+});
+
+test('answers dermatology procedure, condition, image, and insurance questions', () => {
+  const microneedlingReply = searchKnowledgeBase('Do you do micro needling?') ?? '';
+  assert.match(microneedlingReply, /Microneedling: \*KSh 22,000 per session\*/i);
+
+  const lesionReply = searchKnowledgeBase('Do you remove skin tags, keloids, warts, and ingrown nails?') ?? '';
+  assert.match(lesionReply, /skin tags, keloids, warts, and ingrown nails/i);
+  assert.match(lesionReply, /doctor must examine/i);
+
+  const darkSpotsReply = searchKnowledgeBase('What causes dark spots?') ?? '';
+  assert.match(darkSpotsReply, /post-inflammatory changes/i);
+  assert.match(darkSpotsReply, /superficial or deeper/i);
+  assert.match(darkSpotsReply, /see our dermatologist/i);
+
+  const acneKeloidalisReply = searchKnowledgeBase('What causes Acne Keloidalis Nuchae?') ?? '';
+  assert.match(acneKeloidalisReply, /close shaving/i);
+  assert.match(acneKeloidalisReply, /friction or irritation/i);
+  assert.match(acneKeloidalisReply, /bacterial colonisation/i);
+
+  const acneKeloidalisBotReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'What causes Acne Keloidalis Nuchae?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(acneKeloidalisBotReply, /close shaving/i);
+
+  const imageReply = searchKnowledgeBase('Can I share a picture of my skin condition?') ?? '';
+  assert.match(imageReply, /may share a photo/i);
+  assert.match(imageReply, /0708 130100 or 0726 244040/i);
+
+  const imageBotReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'Can I share a picture of my skin condition?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(imageBotReply, /may share a photo/i);
+
+  const insuranceReply = searchKnowledgeBase('Which insurance do you accept?') ?? '';
+  assert.match(insuranceReply, /GA Insurance/i);
+  assert.match(insuranceReply, /Kenyan Alliance/i);
+  assert.match(insuranceReply, /MTIBA \(under GA Insurance\)/i);
+
+  const shaReply = searchKnowledgeBase('Do you use SHA?') ?? '';
+  assert.match(shaReply, /do not accept SHA for dermatology services/i);
+  assert.match(shaReply, /cash-only/i);
+});
+
+test('answers a standalone hello with a short greeting', () => {
+  const reply = generateBotReply({
+    patientName: 'Mary',
+    message: 'Hello?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /Hello too, Mary!/i);
+  assert.match(reply, /Do you have any enquiry/i);
+});
+
 test('answers Winston price, contact, capacity, and insurance questions from supplied facts', () => {
   const cbcReply = searchKnowledgeBase('What does a full blood count cost?') ?? '';
   assert.match(cbcReply, /CBC: \*KSh 1,000\*/i);
@@ -60,7 +269,8 @@ test('answers Winston price, contact, capacity, and insurance questions from sup
     isReturning: false,
     lastInteractionHours: 0,
   });
-  assert.match(insuranceReply, /confirmed list of accepted insurance/i);
+  assert.match(insuranceReply, /do not accept SHA for dermatology services/i);
+  assert.match(insuranceReply, /cash-only/i);
   assert.doesNotMatch(insuranceReply, /^Yes,/i);
 });
 

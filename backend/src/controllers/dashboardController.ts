@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { getHospitalPhoneNumber, setHospitalPhoneNumber } from '../lib/hospitalSettings';
+import { sendAppointmentNotification } from '../services/appointmentNotification';
 import { getServicePrice } from '../services/aiBotService';
 import { sendWhatsAppMessage } from '../services/whatsappService';
 
@@ -156,7 +157,21 @@ export async function createPatientWithAppointment(req: Request, res: Response):
     include: { patient: true },
   });
 
-  return res.status(201).json({ success: true, patient, appointment });
+  let notification: { sent: boolean; simulated?: boolean; error?: string } = { sent: false };
+  try {
+    const result = await sendAppointmentNotification(appointment);
+    notification = { sent: !result.simulated, simulated: result.simulated };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    notification = { sent: false, error: errorMessage };
+    console.error('[Appointment WhatsApp Notification Failed]', {
+      appointmentId: appointment.id,
+      recipientPhone: '254708130100',
+      error: errorMessage,
+    });
+  }
+
+  return res.status(201).json({ success: true, patient, appointment, notification });
 }
 
 export async function createAppointmentFollowUp(req: Request, res: Response): Promise<Response> {

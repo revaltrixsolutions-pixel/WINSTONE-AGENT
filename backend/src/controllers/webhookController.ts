@@ -21,6 +21,7 @@ import {
   type WhatsAppInteractiveMessage as WhatsAppInteractivePayload,
   WhatsAppApiError,
 } from '../services/whatsappService';
+import { sendAppointmentNotification } from '../services/appointmentNotification';
 
 /* ==========================================================================
    WHATSAPP WEBHOOK TYPES
@@ -948,6 +949,27 @@ async function sendBotReply(
           status: 'PENDING',
         },
       });
+
+      try {
+        const notification = await sendAppointmentNotification({
+          ...appointment,
+          patient: {
+            fullName: patientName,
+            phoneNumber: patient.phoneNumber,
+          },
+        });
+        console.info('[WhatsApp Appointment Notification Accepted]', {
+          appointmentId: appointment.id,
+          messageId: notification.messageId,
+          simulated: notification.simulated,
+        });
+      } catch (error) {
+        console.error('[WhatsApp Appointment Notification Failed]', {
+          appointmentId: appointment.id,
+          recipientPhone: '254708130100',
+          error: error instanceof Error ? error.message : error,
+        });
+      }
 
       const listedFee = getServicePrice(department);
       const confirmationText = [

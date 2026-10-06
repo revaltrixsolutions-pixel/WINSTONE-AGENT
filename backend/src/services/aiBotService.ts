@@ -1206,10 +1206,10 @@ function getCommonPatientReply(name: string, message: string): string | null {
     { pattern: /\b(i need a female doctor|female doctor|woman doctor|lady doctor)\b/i, reply: `${name}, we can help with that. Please tell me the department or service you need, and I’ll guide you to the most suitable doctor or booking option.` },
     { pattern: /\b(i need to speak to a doctor|speak to the doctor|talk to the doctor|talk to a doctor|need a doctor)\b/i, reply: `${name}, I can connect you with our clinical team. Please tell me the department or concern, and I’ll guide you to the right next step.` },
     { pattern: /\b(where are you located|where is the clinic|clinic location|branch location|where is your hospital|your location)\b/i, reply: `${name}, Winston Medical Centre is at Standard Drive Estate, along Nyayo Gate B Road, about 400 metres from Fedha Stage in Tassia Estate, Nairobi. Call 0726 244040 or 0708 130100.` },
-    { pattern: /\b(when are you open|what time do you open|opening hours|working hours|are you open on weekends|weekend opening hours)\b/i, reply: `${name}, I don't have confirmed opening hours. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to check before visiting.` },
+    { pattern: /\b(when are you open|what time do you open|opening hours|working hours|are you open on weekends|weekend opening hours)\b/i, reply: `${name}, we are open daily, Monday to Saturday from 8:00 AM to 5:00 PM. Sunday and public-holiday appointments can be arranged by calling 0726 244040 or 0708 130100.` },
     { pattern: /\b(what services do you have|what departments do you have|services available|departments available|what clinics do you have)\b/i, reply: `${name}, Winston Medical Centre offers General Outpatient Care, General Medicine, Minor Surgery, Gynecology, urgent care, pharmacy, laboratory, antenatal and well-baby clinics, ultrasound, counseling, maternal and child healthcare, physiotherapy, ECG/ECHO, pediatric care, circumcision, and family planning.` },
     { pattern: /\b(i want to cancel|cancel my appointment|cancel appointment|need to cancel|i need to cancel)\b/i, reply: `${name}, no problem. I can help you cancel or reschedule. Please tell me the department and the day or time you’d like to change.` },
-    { pattern: /\b(do you accept sha|accept sha|insurance|nhif|do you take insurance|do you accept insurance)\b/i, reply: `${name}, I don't have a confirmed list of accepted insurance providers or plans. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to confirm your cover.` },
+    { pattern: /\b(do you accept sha|accept sha|insurance|nhif|do you take insurance|do you accept insurance)\b/i, reply: `${name}, our accepted insurance partners include GA Insurance, Kenyan Alliance, and MTIBA under GA Insurance. Dermatology services are cash-only and do not accept SHA. Please call 0726 244040 or 0708 130100 to confirm cover for your service.` },
     { pattern: /\b(how do i book|how can i book|how to book|how do i schedule|how to schedule)\b/i, reply: `${name}, I can help with that. Just tell me the department, preferred date, and time, and I’ll prepare the booking details for you.` },
     { pattern: /\b(do you have same day appointment|same day appointment|can i get a same day appointment|same day booking)\b/i, reply: `${name}, I can't verify same-day availability here. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to confirm.` },
     { pattern: /\b(i need urgent care|urgent care|emergency|very urgent|i need help now)\b/i, reply: `${name}, Winston Medical Centre has an Urgent Care Centre with a Local Injuries Unit and Medical Assessment Unit. For urgent help, call 0726 244040 or 0708 130100.` },
@@ -1217,7 +1217,7 @@ function getCommonPatientReply(name: string, message: string): string | null {
     { pattern: /\b(can i come tomorrow|come tomorrow|can i book tomorrow|book for tomorrow)\b/i, reply: `${name}, I can submit an appointment request for tomorrow, but the hospital team must confirm availability. Which clinic or service and what time would you prefer?` },
     { pattern: /\b(i have pain|mild pain|severe pain|i am in pain|i have a headache|i have stomach pain)\b/i, reply: `${name}, I’m sorry you’re in pain. Please let me know the department or concern, and I’ll guide you to the right care or appointment option.` },
     { pattern: /\b(can i get a referral|need a referral|i need a referral letter|referral)\b/i, reply: `${name}, I can help with the next step. Please tell me the department or doctor you need, and I’ll guide you on the referral process.` },
-    { pattern: /\b(what is the cost|what does it cost|how much does it cost|what is the consultation fee|consultation fee)\b/i, reply: `${name}, a general consultation is KSh 500. Fees vary by service; tell me the clinic or test for its listed price, or say "price list" for all supplied prices.` },
+    { pattern: /\b(what is the cost|what does it cost|how much does it cost|what is the consultation fee|consultation fee)\b/i, reply: `${name}, a general consultation is ${hospitalKnowledge.consultationFee}. Fees vary by service; tell me the clinic or test for its listed price, or say "price list" for all supplied prices.` },
     { pattern: /\b(where is the nearest branch|nearest branch|which branch is closest|closest branch)\b/i, reply: `${name}, Winston Medical Centre is at Standard Drive Estate, along Nyayo Gate B Road, about 400 metres from Fedha Stage in Tassia Estate, Nairobi.` },
     { pattern: /\b(can i book online|book online|online booking|do you have online booking)\b/i, reply: `${name}, yes, you can start the booking with me here. Just share the department, date, and preferred time, and I’ll help you complete it.` },
     { pattern: /\b(i need a follow up|follow up appointment|need follow up|i want a follow up)\b/i, reply: `${name}, I can help you arrange a follow-up. Please tell me the department and the day or time that works best for you.` },
@@ -1227,11 +1227,11 @@ function getCommonPatientReply(name: string, message: string): string | null {
     { pattern: /\b(can you help me choose a doctor|help me choose a doctor|which doctor should i choose|doctor recommendation|recommended doctor)\b/i, reply: `${name}, I can help narrow it down. Please tell me the department, your concern, and whether you prefer a male or female doctor, and I’ll guide you.` },
     { pattern: /\b(do you have a doctor for my child|pediatrician|paediatrician|child doctor|doctor for my baby|kids doctor)\b/i, reply: `${name}, Winston Medical Centre has a Pediatric Clinic and Well Baby Clinic. The listed paediatrician fee is KSh 1,500; please contact the hospital to confirm clinic availability.` },
     { pattern: /\b(i want to reschedule|reschedule my appointment|need to reschedule|change my appointment)\b/i, reply: `${name}, no problem. I can help you reschedule. Please share the new day and time, or tell me the department and I’ll help update it.` },
-    { pattern: /\b(are you open on weekends|weekend appointments|can i book on saturday|can i book on sunday)\b/i, reply: `${name}, I don't have confirmed weekend hours or clinic schedules. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to check.` },
+    { pattern: /\b(are you open on weekends|weekend appointments|can i book on saturday|can i book on sunday)\b/i, reply: `${name}, we are open Monday to Saturday, 8:00 AM to 5:00 PM. Sunday and public-holiday appointments can be arranged by calling 0726 244040 or 0708 130100.` },
     { pattern: /\b(maternity|pregnancy|antenatal|delivery|obstetrics|gynecology)\b/i, reply: `${name}, Winston Medical Centre offers an Antenatal Clinic, Maternal & Child Healthcare Clinic, and Gynecology. Which service would you like to ask about or request an appointment for?` },
     { pattern: /\b(do you have lab tests|lab tests|blood test|labs|laboratory services)\b/i, reply: `${name}, yes, we do offer laboratory services and diagnostic tests. I can help you identify the right department or service for your request.` },
     { pattern: /\b(i am unable to come|can't make it|cannot come|i can’t make it|unable to attend)\b/i, reply: `${name}, I’m sorry to hear that. Please let me know if you’d like to reschedule or cancel, and I’ll help with the next step.` },
-    { pattern: /\b(what does sha cover|does sha cover this|sha cover|insurance coverage)\b/i, reply: `${name}, I don't have confirmed information about accepted plans or coverage. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to verify your specific plan.` },
+    { pattern: /\b(what does sha cover|does sha cover this|sha cover|insurance coverage)\b/i, reply: `${name}, we do not accept SHA for dermatology services, which are cash-only. For cover for another service, please call 0726 244040 or 0708 130100 to check.` },
     { pattern: /\b(can my family come|family appointment|book for my family|my husband|my wife|my child)\b/i, reply: `${name}, yes, we can help with family and dependent appointments. Please tell me the department and the number of patients, and I’ll guide you through the booking.` },
     { pattern: /\b(i need an appointment for my mother|appointment for my father|visit for my parent|for my family member)\b/i, reply: `${name}, absolutely. Please share the department, the patient’s name if it’s different, and the preferred date or time, and I’ll help you arrange it.` },
     { pattern: /\b(hey there|hi there|hello there|good morning|good afternoon|good evening)\b/i, reply: `${name}, hello. How can I help you today?` },
@@ -1284,6 +1284,13 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
   }
 
   if ((isGreeting(message) || isMenuCommand(message)) && !isBookingIntent(message)) {
+    if (/^hello[?!.\s]*$/i.test(message.trim())) {
+      return {
+        reply: `Hello too, ${name}! Welcome. How can I help you today? Do you have any enquiry?`,
+        state: { ...state, stage: "menu" },
+      };
+    }
+
     return {
       reply: isReturning && isGreeting(message) ? `Welcome back, ${name}. ${MENU_PROMPT(name)}` : MENU_PROMPT(name),
       state: { ...state, stage: "menu" },
@@ -1295,6 +1302,26 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
       reply: `No problem, ${name}. I've cleared that request. ${MENU_PROMPT(name)}`,
       state: { ...state, stage: "menu", appointment: {} },
     };
+  }
+
+  if (
+    /\b(sunday|public holidays?)\b/i.test(message) &&
+    /\b(appointment|book|open|visit|available)\b/i.test(message)
+  ) {
+    const answer = answerKnowledgeBase(name, message);
+    if (answer) {
+      return { reply: answer, state: { ...state, stage: "menu" } };
+    }
+  }
+
+  if (
+    /\b(?:online|virtual)\s+(?:consultation|consult)\b|\b(?:consultation|consult)\s+(?:online|virtual)\b/i.test(message) &&
+    !/\b(book|schedule|appointment)\b/i.test(message)
+  ) {
+    const answer = answerKnowledgeBase(name, message);
+    if (answer) {
+      return { reply: answer, state: { ...state, stage: "menu" } };
+    }
   }
 
   if (isAppointmentHistoryRequest(message)) {
@@ -1314,6 +1341,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     state.stage !== "collecting_appointment" &&
     state.stage !== "confirming_appointment" &&
     !isBookingIntent(message) &&
+    !/\b(?:do you|can you|does your dermatologist)\s+(?:treat|handle)\b|\bskin analysis\b/i.test(message) &&
     isMedicalSymptomRequest(message)
   ) {
     return {
@@ -1390,7 +1418,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
   if (/\b(cost|price|fee|charges|how much|consultation fee|pricing|what does it cost|how much is it|what is the cost|what is the price)\b/i.test(message)) {
     return {
       reply:
-        `${name}, a general consultation is KSh 500. Fees vary by service; tell me the clinic or test for its listed price, or say "price list" for supplied prices.`,
+        `${name}, a general consultation is ${hospitalKnowledge.consultationFee}. Fees vary by service; tell me the clinic or test for its listed price, or say "price list" for supplied prices.`,
       state,
     };
   }
@@ -1406,7 +1434,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
   if (/\b(open|opening|hours|working hours|when are you open|what time do you open|clinic hours|operating hours|available|availability|are you open|is the clinic open)\b/i.test(message)) {
     return {
       reply:
-        `${name}, I don't have confirmed opening hours. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to check before visiting.`,
+        `${name}, we are open daily, Monday to Saturday from 8:00 AM to 5:00 PM. Sunday and public-holiday appointments can be arranged by calling 0726 244040 or 0708 130100.`,
       state: { ...state, stage: "menu" },
     };
   }
@@ -1414,7 +1442,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
   if (/\b(insurance|sha|nhif|coverage|cover|medical cover|accept insurance|do you accept sha|do you accept insurance)\b/i.test(message)) {
     return {
       reply:
-        `${name}, I don't have a confirmed list of accepted insurance providers or plans. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to verify your cover.`,
+        `${name}, our accepted insurance partners include GA Insurance, Kenyan Alliance, and MTIBA under GA Insurance. Dermatology services are cash-only and do not accept SHA. Please call 0726 244040 or 0708 130100 to confirm cover for your service.`,
       state: { ...state, stage: "menu" },
     };
   }

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { AdminReminder, Appointment } from '../services/api';
+import { getAppointmentWhatsAppLink } from '../services/appointmentWhatsApp';
 import {
   createAppointmentFollowUp,
   createPatientWithAppointment,
@@ -154,7 +155,15 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
       });
       if (!response.success) throw new Error(response.error || 'Unable to add patient.');
       setForm({ fullName: '', phoneNumber: '', specialty: services[0], doctorName: '', slotTime: '' });
-      setMessage('Patient and appointment added. The reminder queue is active.');
+      if (response.notification?.sent) {
+        setMessage('Patient and appointment added. Appointment details were sent to the hospital WhatsApp.');
+      } else if (response.notification?.simulated) {
+        setMessage('Patient and appointment added. WhatsApp is in simulation mode, so the appointment details were not actually sent.');
+      } else if (response.notification?.error) {
+        setMessage(`Patient and appointment added, but the WhatsApp notification failed: ${response.notification.error}`);
+      } else {
+        setMessage('Patient and appointment added. The reminder queue is active.');
+      }
       await onChanged();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to add patient.');
@@ -278,6 +287,7 @@ export const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div><p className="font-black text-slate-900">{appointment.patientName || 'Patient'} <span className="font-normal text-slate-500">· {appointment.patientPhone || 'No phone'}</span></p><p className="mt-1 text-sm font-bold text-cyan-800">{appointment.specialty}</p><p className="text-xs text-slate-500">{formatNairobiDateTime(appointment.slotTime)} · {appointment.status}</p></div>
                     <div className="flex flex-wrap gap-2">
+                      <a href={getAppointmentWhatsAppLink(appointment)} target="_blank" rel="noreferrer" className="rounded-xl bg-green-600 px-3 py-2 text-xs font-black text-white hover:bg-green-700">WhatsApp</a>
                       <button type="button" onClick={() => makeCall(appointment)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Call</button>
                       <button type="button" onClick={() => setSelectedAppointmentId(isSelected ? null : appointment.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">{isSelected ? 'Close' : 'Add follow-up'}</button>
                     </div>

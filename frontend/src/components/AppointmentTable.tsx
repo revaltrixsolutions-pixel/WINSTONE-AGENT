@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useState,
 } from 'react';
+import { getAppointmentWhatsAppLink } from '../services/appointmentWhatsApp';
 
 export type Appointment = {
   id: string;
@@ -466,10 +467,20 @@ const AppointmentRow: React.FC<AppointmentRowProps> = ({
       </td>
 
       <td className="px-5 py-4">
-        {onStatusChange ? <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={getAppointmentWhatsAppLink(appointment)}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl bg-green-600 px-3 py-2 text-xs font-black text-white hover:bg-green-700"
+          >
+            WhatsApp
+          </a>
+          {onStatusChange && <>
           <button type="button" disabled={appointment.status.toUpperCase() === 'CONFIRMED'} onClick={() => void onStatusChange(appointment.id, 'CONFIRMED')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Confirm</button>
           <button type="button" disabled={appointment.status.toUpperCase() === 'CANCELLED'} onClick={() => void onStatusChange(appointment.id, 'CANCELLED')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40">Cancel</button>
-        </div> : <span className="text-xs text-slate-400">No action</span>}
+          </>}
+        </div>
       </td>
     </tr>
   );
@@ -537,6 +548,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
         />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
+        <a href={getAppointmentWhatsAppLink(appointment)} target="_blank" rel="noreferrer" className="rounded-xl bg-green-600 px-3 py-2 text-xs font-black text-white hover:bg-green-700">WhatsApp</a>
         <button type="button" disabled={!onStatusChange || appointment.status.toUpperCase() === 'CONFIRMED'} onClick={() => onStatusChange?.(appointment.id, 'CONFIRMED')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Confirm</button>
         <button type="button" disabled={!onStatusChange || appointment.status.toUpperCase() === 'CANCELLED'} onClick={() => onStatusChange?.(appointment.id, 'CANCELLED')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40">Cancel</button>
       </div>

@@ -4,6 +4,13 @@ export interface SendMessageOptions {
   recipientPhone: string;
   messageText?: string;
   interactive?: WhatsAppInteractiveMessage;
+  template?: WhatsAppTemplateMessage;
+}
+
+export interface WhatsAppTemplateMessage {
+  name: string;
+  languageCode: string;
+  bodyParameters: string[];
 }
 
 export type WhatsAppInteractiveMessage =
@@ -170,6 +177,7 @@ export async function sendWhatsAppMessage({
   recipientPhone,
   messageText,
   interactive,
+  template,
 }: SendMessageOptions): Promise<SentWhatsAppMessage> {
   if (!recipientPhone?.trim()) {
     throw new Error(
@@ -177,9 +185,21 @@ export async function sendWhatsAppMessage({
     );
   }
 
-  if (!messageText?.trim() && !interactive) {
+  if (!messageText?.trim() && !interactive && !template) {
     throw new Error(
-      '[WhatsApp API Error]: messageText is required.',
+      '[WhatsApp API Error]: messageText, interactive, or template content is required.',
+    );
+  }
+
+  if ([interactive, template].filter(Boolean).length > 1 || (messageText?.trim() && (interactive || template))) {
+    throw new Error(
+      '[WhatsApp API Error]: Provide exactly one WhatsApp message content type.',
+    );
+  }
+
+  if (template && (!template.name.trim() || !template.languageCode.trim())) {
+    throw new Error(
+      '[WhatsApp API Error]: A template name and language code are required.',
     );
   }
 
@@ -197,7 +217,7 @@ export async function sendWhatsAppMessage({
     console.warn('[WhatsApp SIMULATION: message not sent]', {
       recipientPhone: cleanPhone,
       messageId,
-      messageLength: messageText?.length || interactive?.body.text.length || 0,
+      messageLength: messageText?.length || interactive?.body.text.length || template?.bodyParameters.join('\n').length || 0,
     });
 
     return {
@@ -228,7 +248,24 @@ export async function sendWhatsAppMessage({
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to: cleanPhone,
-        ...(interactive
+        ...(template
+          ? {
+              type: 'template',
+              template: {
+                name: template.name,
+                language: { code: template.languageCode },
+                components: template.bodyParameters.length
+                  ? [{
+                      type: 'body',
+                      parameters: template.bodyParameters.map((text) => ({
+                        type: 'text',
+                        text,
+                      })),
+                    }]
+                  : [],
+              },
+            }
+          : interactive
           ? {
               type: 'interactive',
               interactive,

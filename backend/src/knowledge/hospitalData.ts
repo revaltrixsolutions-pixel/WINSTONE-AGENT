@@ -45,8 +45,19 @@ export interface HospitalKnowledge {
   leadership: HospitalLeader[];
   bookingNotes: string[];
   unknownTopics: string[];
-  
   consultationFee: string;
+  openingHours: string;
+  holidayAppointmentNote: string;
+  virtualConsultationFee: string;
+  virtualConsultationNote: string;
+  dermatologyCareNote: string;
+  skinAnalysisNote: string;
+  treatmentPricingNote: string;
+  dermatologyInsuranceNote: string;
+  skinLesionAssessmentNote: string;
+  darkSpotsNote: string;
+  acneKeloidalisNuchaeNote: string;
+  skinImageNote: string;
 }
 
 export const hospitalKnowledge: HospitalKnowledge = {
@@ -56,11 +67,23 @@ export const hospitalKnowledge: HospitalKnowledge = {
   founded: '2016',
   registrationNumber: 'CPR 017141',
   beds: 2,
-  emails: ['winstonmedicalcentre01@gmail.com', 'tohmex@gmail.com'],
+  emails: ['winstonmedicalcentre01@gmail.com'],
   postalAddress: 'P.O. Box 1022-00606, Nairobi',
   history: 'Winston Medical Centre opened in 2016 to provide quality, affordable healthcare to the surrounding community. It is a registered private hospital administered in accordance with the Medical Practitioners and Dentists Board; management approval was granted in 2016.',
-  consultationFee: 'KSh 500',
-  description: 'Winston Medical Centre is a registered private hospital in Tassia Estate, Eastlands, Nairobi. It has two beds and provides general outpatient care, inpatient care in General Medicine, Minor Surgery and Gynecology, and an Urgent Care Centre incorporating a Local Injuries Unit and Medical Assessment Unit.',
+  consultationFee: 'KSh 1,000',
+  openingHours: 'Monday to Saturday, 8:00 AM to 5:00 PM',
+  holidayAppointmentNote: 'Appointments can also be booked on Sundays and public holidays. Please call 0726 244040 or 0708 130100 directly to arrange one at a convenient time.',
+  virtualConsultationFee: 'KSh 1,000',
+  virtualConsultationNote: 'Virtual consultations are available. Please call 0726 244040 or 0708 130100 for guidance and arrangements.',
+  dermatologyCareNote: 'Our dermatologist handles all skin conditions. A dermatologist must first perform a clinical and physical examination before making a diagnosis or recommending treatment.',
+  skinAnalysisNote: 'We do not offer skin analysis. Our dermatologists use clinical and physical examination to assess skin conditions; AI-dependent skin analysis, often relied on by cosmetic outlets, can be misleading and may lead to misdiagnosis.',
+  treatmentPricingNote: 'Treatment costs depend on the treatment plan recommended by the doctor after examining you. Please visit and see a doctor before asking for a treatment cost.',
+  dermatologyInsuranceNote: 'We do not accept SHA for dermatology services. Dermatology services are cash-only. For other services, please call 0726 244040 or 0708 130100 to confirm cover.',
+  skinLesionAssessmentNote: 'We assess and manage skin tags, keloids, warts, and ingrown nails. A doctor must examine the condition first and decide on the appropriate treatment plan. Please visit us for a clinical evaluation.',
+  darkSpotsNote: 'Dark spots can have many causes, including post-inflammatory changes, sunburn, medicines, skin infections, acne, trauma, hormonal factors, or genetic conditions. The appropriate treatment depends on the cause and whether the pigmentation is superficial or deeper. Please see our dermatologist for an assessment and suitable treatment plan.',
+  acneKeloidalisNuchaeNote: 'Acne keloidalis nuchae is associated with inflammation of hair follicles. Possible contributing factors include close shaving, friction or irritation from collars, caps or helmets, ingrown hairs, genetics, and bacterial colonisation, including Propionibacterium. A dermatologist can assess your individual condition and advise on care.',
+  skinImageNote: 'You may share a photo, but please call the doctor directly first for guidance on 0708 130100 or 0726 244040. A photo cannot replace a clinical examination.',
+  description: 'Winston Medical Centre is located at Standard Drive, Fedha, Embakasi, Nairobi. It has two beds and provides general outpatient care, inpatient care in General Medicine, Minor Surgery and Gynecology, and an Urgent Care Centre incorporating a Local Injuries Unit and Medical Assessment Unit.',
   mission: 'Provide affordable, accessible and quality healthcare services.',
   vision: 'To be among the leading providers of accessible, quality and innovative healthcare services in the country.',
   scope: 'The centre is dedicated to welcoming, accessible, safe, affordable and respectful healthcare. Patients, families, community representatives and leaders are active partners in its operations and improvement work.',
@@ -93,7 +116,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
   locations: [
     {
       branch: 'Winston Medical Centre',
-      address: 'Tassia Estate, Eastlands, Nairobi',
+      address: 'Standard Drive, Fedha, Embakasi, Nairobi',
       landmark: 'Standard Drive Estate, along Nyayo Gate B Road, 400 metres from Fedha Stage. Direction: Fedha Stage.',
       phoneNumbers: ['0726 244040', '0708 130100'],
     },
@@ -121,7 +144,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
   ],
   specialistClinics: ['Gynecologist', 'Paediatrician', 'Dermatologist', 'Nutritionist'],
   departments: {
-    'General Outpatient Care': 'General outpatient consultations and care are available. The listed general consultation fee is KSh 500; investigations, medicines and other services are priced separately.',
+    'General Outpatient Care': 'General outpatient consultations and care are available. The listed general consultation fee is KSh 1,000; investigations, medicines and other services are priced separately.',
     'General Medicine': 'General Medicine is one of the hospital’s inpatient specialties. The centre has two beds; real-time bed availability is not provided here.',
     'Minor Surgery': 'Minor Surgery is an inpatient specialty. Specific procedure prices are not included in the supplied price list and should be confirmed with the hospital.',
     Gynecology: 'Gynecology is an inpatient specialty and a listed clinic service. The listed gynecologist fee is KSh 1,500.',
@@ -141,8 +164,9 @@ export const hospitalKnowledge: HospitalKnowledge = {
     Circumcision: 'Circumcision is available. The listed price is KSh 1,000.',
     'Family Planning Services': 'Family planning services are available. A price was not included in the supplied list.',
   },
-  insuranceAccepted: [],
+  insuranceAccepted: ['GA Insurance', 'Kenyan Alliance', 'MTIBA (under GA Insurance)'],
   surgicalPrices: [
+    { procedure: 'Microneedling', price: 'KSh 22,000 per session', keywords: ['micro needling', 'micro-needling', 'microneedle', 'microneedling session'] },
     { procedure: 'Counseling', price: 'KSh 500', keywords: ['counselling', 'therapy', 'counselor', 'counsellor'] },
     { procedure: 'Ultrasound', price: 'KSh 2,000', keywords: ['scan', 'sonography', 'pregnancy scan'] },
     { procedure: 'ANC profile', price: 'KSh 2,500', keywords: ['antenatal profile', 'antenatal test profile', 'pregnancy profile'] },
@@ -180,9 +204,9 @@ export const hospitalKnowledge: HospitalKnowledge = {
     { procedure: 'PSA', price: 'KSh 1,000', keywords: ['prostate-specific antigen', 'prostate test'] },
   ],
   bookingFees: {
-    'General Consultation': 'KSh 500',
-    'General Outpatient Care': 'KSh 500',
-    'General Medicine': 'KSh 500',
+    'General Consultation': 'KSh 1,000',
+    'General Outpatient Care': 'KSh 1,000',
+    'General Medicine': 'KSh 1,000',
     'Counseling': 'KSh 500',
     'Obstetrics and Gynecology': 'KSh 1,500',
     'Antenatal Clinic': 'KSh 300',
@@ -211,10 +235,8 @@ export const hospitalKnowledge: HospitalKnowledge = {
     'For urgent care, contact Winston Medical Centre directly on 0726 244040 or 0708 130100.',
   ],
   unknownTopics: [
-    'exact opening and clinic hours',
     'named doctors and clinician schedules',
     'live appointment slots and real-time bed availability',
-    'insurance providers and accepted cover',
     'unlisted service, medication and procedure prices',
   ],
 };
@@ -433,11 +455,21 @@ function formatLocations(branchFilter?: HospitalLocation[]): string {
   return [
     `📍 *${hospitalKnowledge.name} Location*`,
     '',
+    `We have ${hospitalKnowledge.locations.length === 1 ? 'one branch' : `${hospitalKnowledge.locations.length} branches`}, in Nairobi.`,
     ...branches.map(formatBranch),
     '',
     `Email: ${hospitalKnowledge.emails.join(', ')}`,
     `Postal address: ${hospitalKnowledge.postalAddress}`,
   ].join('\n\n');
+}
+
+function formatOpeningHours(): string {
+  return [
+    '🕒 *Opening Hours*',
+    '',
+    `Our regular opening hours are ${hospitalKnowledge.openingHours}.`,
+    hospitalKnowledge.holidayAppointmentNote,
+  ].join('\n');
 }
 
 function formatServices(): string {
@@ -466,6 +498,7 @@ function formatInsuranceList(): string {
     '',
     ...hospitalKnowledge.insuranceAccepted.map((provider) => `• ${provider}`),
     '',
+    'Some additional major insurance providers are expected to be onboarded soon.',
     'Please confirm eligibility and preauthorization requirements with the hospital before treatment.',
   ].join('\n');
 }
@@ -846,29 +879,126 @@ export function searchKnowledgeBase(query: string): string | null {
     return null;
   }
 
+  if (includesAny(normalizedQuery, ['skin analysis', 'analyze my skin', 'analyse my skin'])) {
+    return hospitalKnowledge.skinAnalysisNote;
+  }
+
+  if (includesAny(normalizedQuery, ['share a picture', 'share picture', 'send a picture', 'send picture', 'skin photo', 'photo of my skin', 'picture of my skin'])) {
+    return hospitalKnowledge.skinImageNote;
+  }
+
   const expandedQuery = expandQuerySynonyms(normalizedQuery);
+
+  if (includesAny(normalizedQuery, ['acne keloidalis nuchae', 'acne keloidalis'])) {
+    return hospitalKnowledge.acneKeloidalisNuchaeNote;
+  }
+
+  if (
+    /\b(do you treat|treat this condition|handles?|manage)\b/i.test(normalizedQuery) &&
+    includesAny(expandQuerySynonyms(normalizedQuery), [
+      'dark spot',
+      'acne',
+      'keloid',
+      'vitiligo',
+      'hair loss',
+      'skin condition',
+    ])
+  ) {
+    return hospitalKnowledge.dermatologyCareNote;
+  }
+
+  if (includesAny(expandedQuery, ['dark spot', 'dark spots', 'hyperpigmentation'])) {
+    return hospitalKnowledge.darkSpotsNote;
+  }
+
+  if (
+    includesAny(expandedQuery, ['skin tag', 'skin tags', 'wart', 'warts', 'ingrown nail', 'ingrown nails']) &&
+    includesAny(expandedQuery, ['remove', 'removal', 'treat', 'treatment', 'handle', 'do you', 'can you'])
+  ) {
+    return hospitalKnowledge.skinLesionAssessmentNote;
+  }
 
   if (includesAny(expandedQuery, ['how many beds', 'bed count', 'number of beds', 'registration number', 'hospital registration'])) {
     return formatAbout();
   }
 
-  // 1. Hours / availability questions we genuinely cannot answer.
+  if (includesAny(expandedQuery, ['sha', 'social health authority'])) {
+    return hospitalKnowledge.dermatologyInsuranceNote;
+  }
+
   if (
+    includesAny(expandedQuery, [
+      'online consultation',
+      'virtual consultation',
+      'online consult',
+      'virtual consult',
+    ])
+  ) {
+    if (includesAny(expandedQuery, ['price', 'cost', 'fee', 'charge', 'how much', 'ksh', 'kes'])) {
+      return `Virtual or online consultation costs ${hospitalKnowledge.virtualConsultationFee}. ${hospitalKnowledge.virtualConsultationNote}`;
+    }
+    return hospitalKnowledge.virtualConsultationNote;
+  }
+
+  if (includesAny(expandedQuery, ['not in nairobi', 'outside nairobi', 'away from nairobi', 'not based in nairobi'])) {
+    return `If you are outside Nairobi, we can arrange a virtual consultation, or you can visit us at a convenient time. ${hospitalKnowledge.virtualConsultationNote}`;
+  }
+
+  if (
+    includesAny(expandedQuery, [
+      'dermatolog',
+      'skin condition',
+      'skin problem',
+      'dark spot',
+      'acne',
+      'keloid',
+      'vitiligo',
+      'hair loss',
+      'rash',
+    ]) &&
+    includesAny(expandedQuery, ['treat', 'handle', 'condition', 'doctor', 'clinic', 'skin', 'dermatolog'])
+  ) {
+    return hospitalKnowledge.dermatologyCareNote;
+  }
+
+  if (
+    includesAny(expandedQuery, [
+      'how much do you charge',
+      'how much is treatment',
+      'treatment cost',
+      'cost of treatment',
+      'price of treatment',
+    ]) &&
+    !findMatchingProcedures(expandedQuery).length
+  ) {
+    return hospitalKnowledge.treatmentPricingNote;
+  }
+
+  // 1. Confirmed hours and availability questions.
+  if (
+    (includesAny(expandedQuery, ['sunday', 'public holiday']) &&
+      includesAny(expandedQuery, ['appointment', 'book', 'open', 'visit', 'available'])) ||
     includesAny(expandedQuery, [
       'opening hour',
       'opening hours',
       'operating hour',
       'operating hours',
-      'visiting hour',
-      'visiting hours',
       'what time do you open',
       'what time do you close',
+      'what time are you open',
+      'when are you open',
+      'working hours',
+      'clinic hours',
+      'are you open',
       'bed availability',
       'bed available',
       'ward availability',
     ])
   ) {
-    return formatUnknown('operating/visiting hours or real-time bed availability');
+    if (includesAny(expandedQuery, ['bed availability', 'bed available', 'ward availability'])) {
+      return formatUnknown('real-time bed availability');
+    }
+    return formatOpeningHours();
   }
 
   // 2. Locations / branch / contact.
