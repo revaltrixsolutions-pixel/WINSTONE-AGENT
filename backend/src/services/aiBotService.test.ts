@@ -23,8 +23,67 @@ test('welcome message asks for patient name', () => {
     lastInteractionHours: 0,
   });
 
-  assert.match(reply, /welcome/i);
-  assert.match(reply, /what is your name/i);
+  assert.equal(reply, 'Hello too \nWelcome, how can I help you today?\nDo you have any enquiry you want to make?');
+});
+
+test('returns every supplied clinic FAQ answer exactly as provided', () => {
+  const cases = [
+    {
+      message: 'Do you do micro needling?',
+      answer: 'Yes we do micro needling at a cost of KSH.22,000/= per session',
+    },
+    {
+      message: 'Do you remove skin tags,keloids, warts, ingrown nails?',
+      answer: 'Yes we handle this condition but after doctor has reviewed it and and decides on treatment plan.\nVisit us for clinical evaluation first .',
+    },
+    {
+      message: 'What causes dark spots.?',
+      answer: 'Dark spots has so many causes and treatment depends with the causative agent and wether it is superficial or deep dark spot.\nThe causes ranges from post inflammatory reaction, sunburn, drugs, skin infections,ance, and trauma, hormonal and some genetical conditions.\nWe recommend you visit and see our dermatologist for guidance on the appropriate treatment plan for your dark spots.',
+    },
+    {
+      message: 'Hello?',
+      answer: 'Hello too \nWelcome, how can I help you today?\nDo you have any enquiry you want to make?',
+    },
+    {
+      message: 'Do you use SHA.?',
+      answer: "No we don't accept SHA for dermatology services.\nWe only use Cash.",
+    },
+    {
+      message: 'Which insurance do you accept?',
+      answer: 'At the moment we do accept GA INSURANCE, KENYAN ALLIANCE,MTIBA under GA INSURANCE.\nsome major insurance companies will be onboarded soon.',
+    },
+    {
+      message: 'Can I share picture of my skin condition?',
+      answer: 'Yes you can but we recommend you call the doctor directly on his number first.\n0708130100/0726244040',
+    },
+    {
+      message: 'What causes Acne Keloidalis Nuchae?',
+      answer: 'This is mostly caused by inflammation of hair follicles after clear shaving, irritation by certain types of shirt collar or plastic caps and helmets,genetics resulting in ingrown hair within the hair follicles and colonization by propionibacterium..',
+    },
+  ];
+
+  for (const { message, answer } of cases) {
+    assert.equal(
+      generateBotReply({
+        patientName: 'Mary',
+        message,
+        isReturning: false,
+        lastInteractionHours: 0,
+      }),
+      answer,
+      `Expected verbatim FAQ answer for "${message}"`,
+    );
+  }
+});
+
+test('uses the exact call-the-doctor fallback for questions outside the supplied FAQs', () => {
+  const expected = 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.';
+  for (const message of ['What is the weather in Nairobi?', 'What causes persistent dizziness?']) {
+    assert.equal(
+      generateBotReply({ patientName: 'Mary', message }),
+      expected,
+    );
+  }
 });
 
 test('answers Winston location and contact questions with supplied details', () => {
@@ -121,15 +180,15 @@ test('answers each supplied FAQ wording through the bot reply flow', () => {
     },
     {
       message: 'Do you do micro needling?',
-      expected: [/Yes, Mary, we do microneedling/i, /KSh 22,000 per session/i],
+      expected: [/Yes we do micro needling/i, /KSH\.22,000\/= per session/i],
     },
     {
       message: 'Do you remove skin tags,keloids, warts, ingrown nails?',
-      expected: [/Yes, Mary, we assess and manage skin tags, keloids, warts, and ingrown nails/i, /doctor must examine/i, /appropriate treatment plan/i, /clinical evaluation first/i],
+      expected: [/Yes we handle this condition/i, /doctor has reviewed/i, /decides on treatment plan/i, /clinical evaluation first/i],
     },
     {
       message: 'What causes dark spots?',
-      expected: [/post-inflammatory changes/i, /sunburn/i, /acne/i, /superficial or deeper/i, /see our dermatologist/i],
+      expected: [/post inflammatory reaction/i, /sunburn/i, /ance/i, /superficial or deep dark spot/i, /see our dermatologist/i],
     },
     {
       message: 'Hello?',
@@ -137,7 +196,7 @@ test('answers each supplied FAQ wording through the bot reply flow', () => {
     },
     {
       message: 'Do you use SHA?',
-      expected: [/do not accept SHA for dermatology services/i, /cash-only/i],
+      expected: [/No we don't accept SHA for dermatology services/i, /We only use Cash/i],
     },
     {
       message: 'Which insurance do you accept?',
@@ -145,11 +204,11 @@ test('answers each supplied FAQ wording through the bot reply flow', () => {
     },
     {
       message: 'Can I share picture of my skin condition?',
-      expected: [/may share a photo/i, /call the doctor directly first/i, /0708 130100/i, /0726 244040/i],
+      expected: [/Yes you can/i, /call the doctor directly/i, /0708130100\/0726244040/i],
     },
     {
       message: 'What causes Acne Keloidalis Nuchae?',
-      expected: [/inflammation of hair follicles/i, /close shaving/i, /collars, caps or helmets/i, /ingrown hairs/i, /Propionibacterium/i],
+      expected: [/inflammation of hair follicles/i, /clear shaving/i, /shirt collar or plastic caps and helmets/i, /ingrown hair within the hair follicles/i, /propionibacterium/i],
     },
   ];
 
@@ -218,7 +277,10 @@ test('answers dermatology procedure, condition, image, and insurance questions',
     isReturning: false,
     lastInteractionHours: 0,
   });
-  assert.match(acneKeloidalisBotReply, /close shaving/i);
+  assert.equal(
+    acneKeloidalisBotReply,
+    'This is mostly caused by inflammation of hair follicles after clear shaving, irritation by certain types of shirt collar or plastic caps and helmets,genetics resulting in ingrown hair within the hair follicles and colonization by propionibacterium..',
+  );
 
   const imageReply = searchKnowledgeBase('Can I share a picture of my skin condition?') ?? '';
   assert.match(imageReply, /may share a photo/i);
@@ -230,7 +292,10 @@ test('answers dermatology procedure, condition, image, and insurance questions',
     isReturning: false,
     lastInteractionHours: 0,
   });
-  assert.match(imageBotReply, /may share a photo/i);
+  assert.equal(
+    imageBotReply,
+    'Yes you can but we recommend you call the doctor directly on his number first.\n0708130100/0726244040',
+  );
 
   const insuranceReply = searchKnowledgeBase('Which insurance do you accept?') ?? '';
   assert.match(insuranceReply, /GA Insurance/i);
@@ -250,8 +315,7 @@ test('answers a standalone hello with a short greeting', () => {
     lastInteractionHours: 0,
   });
 
-  assert.match(reply, /Hello too, Mary!/i);
-  assert.match(reply, /Do you have any enquiry/i);
+  assert.equal(reply, 'Hello too \nWelcome, how can I help you today?\nDo you have any enquiry you want to make?');
 });
 
 test('answers Winston price, contact, capacity, and insurance questions from supplied facts', () => {
@@ -274,8 +338,8 @@ test('answers Winston price, contact, capacity, and insurance questions from sup
     isReturning: false,
     lastInteractionHours: 0,
   });
-  assert.match(insuranceReply, /do not accept SHA for dermatology services/i);
-  assert.match(insuranceReply, /cash-only/i);
+  assert.match(insuranceReply, /No we don't accept SHA for dermatology services/i);
+  assert.match(insuranceReply, /We only use Cash/i);
   assert.doesNotMatch(insuranceReply, /^Yes,/i);
 });
 
@@ -287,7 +351,7 @@ test('unknown content asks to speak to a doctor', () => {
     lastInteractionHours: 0,
   });
 
-  assert.match(reply, /doctor/i);
+  assert.equal(reply, 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.');
 });
 
 test('guides unknown questions with suggested topics and staff contacts', () => {
@@ -298,12 +362,7 @@ test('guides unknown questions with suggested topics and staff contacts', () => 
     lastInteractionHours: 0,
   });
 
-  assert.match(reply, /Did you mean/i);
-  assert.match(reply, /clinic and specialist services/i);
-  assert.match(reply, /Tell me which topic you mean/i);
-  assert.match(reply, /0726 244040/i);
-  assert.match(reply, /0708 130100/i);
-  assert.doesNotMatch(reply, /I don.t have that information/i);
+  assert.equal(reply, 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.');
 });
 
 test('routes unrecognized medical questions to staff with direct contacts', () => {
@@ -314,10 +373,7 @@ test('routes unrecognized medical questions to staff with direct contacts', () =
     lastInteractionHours: 0,
   });
 
-  assert.match(reply, /medical questions need assessment by a clinician/i);
-  assert.match(reply, /0726 244040/i);
-  assert.match(reply, /0708 130100/i);
-  assert.doesNotMatch(reply, /Did you mean/i);
+  assert.equal(reply, 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.');
 
   const unsupportedConditionReply = generateBotReply({
     patientName: 'Mary',
@@ -325,8 +381,7 @@ test('routes unrecognized medical questions to staff with direct contacts', () =
     isReturning: false,
     lastInteractionHours: 0,
   });
-  assert.match(unsupportedConditionReply, /medical questions need assessment by a clinician/i);
-  assert.match(unsupportedConditionReply, /0726 244040/i);
+  assert.equal(unsupportedConditionReply, 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.');
 });
 
 test('stale conversation triggers follow-up welcome', () => {
@@ -379,7 +434,7 @@ test('named greetings provide Kenya time and next actions', () => {
   assert.match(reply, /appointment|service|staff/i);
 });
 
-test('starts every conversation by asking for the patient name', () => {
+test('starts a booking conversation by requesting all required booking details', () => {
   const reply = generateBotReply({
     patientName: null,
     message: 'book appointment tomorrow at 9am in maternity',
@@ -387,8 +442,22 @@ test('starts every conversation by asking for the patient name', () => {
     lastInteractionHours: 0,
   });
 
-  assert.match(reply, /what is your name/i);
-  assert.doesNotMatch(reply, /tomorrow at 9am/i);
+  assert.match(reply, /full name/i);
+  assert.match(reply, /phone number/i);
+  assert.match(reply, /preferred date and time/i);
+  assert.match(reply, /reason for the visit/i);
+});
+
+test('asks for every required booking detail when a WhatsApp session has no name yet', () => {
+  const reply = generateBotReply({
+    patientId: 'booking-before-name-captured',
+    message: 'help me book appointment today please',
+  });
+
+  assert.match(reply, /full name/i);
+  assert.match(reply, /phone number/i);
+  assert.match(reply, /preferred date and time/i);
+  assert.match(reply, /reason for the visit/i);
 });
 
 test('understands affirmative replies like okay and thanks in appointment flow', () => {
@@ -548,6 +617,8 @@ test('recognizes common booking commands and synonyms', () => {
     'can I book an appointment',
     'help me book appointment',
     'I would like to enquire about booking an appointment',
+    'i want to book',
+    'book for me',
     'make appointment',
     'do appointment',
     'book an appointment',
@@ -557,6 +628,13 @@ test('recognizes common booking commands and synonyms', () => {
     'arrange an appointment',
     'I need an appointment',
     'I want to book a visit',
+    'can i come in',
+    'when can i visit',
+    'i need to see the doctor',
+    'appointment please',
+    'how do i reserve a slot',
+    'can i get a consultation',
+    'help me book appointment today please',
     'help me book',
     'guide me to book',
     'can I schedule a consultation',
@@ -572,6 +650,9 @@ test('recognizes common booking commands and synonyms', () => {
 
     assert.match(reply, /appointment|consultation/i, `Expected booking response for: ${message}`);
     assert.match(reply, /date|time/i, `Expected date or time step for: ${message}`);
+    assert.match(reply, /full name/i, `Expected a name request for: ${message}`);
+    assert.match(reply, /phone number/i, `Expected a phone request for: ${message}`);
+    assert.match(reply, /reason for the visit/i, `Expected a visit reason request for: ${message}`);
   }
 });
 
@@ -588,8 +669,10 @@ test('continues a multi-turn appointment request from booking intent to confirma
     message: 'how can I book appointment?',
   });
   assert.match(bookingPrompt, /department or clinic/i);
-  assert.match(bookingPrompt, /preferred date/i);
-  assert.match(bookingPrompt, /preferred time/i);
+  assert.match(bookingPrompt, /preferred date and time/i);
+  assert.match(bookingPrompt, /full name/i);
+  assert.match(bookingPrompt, /phone number/i);
+  assert.match(bookingPrompt, /reason for the visit/i);
 
   const departmentPrompt = generateBotReply({
     patientId,
@@ -603,6 +686,9 @@ test('continues a multi-turn appointment request from booking intent to confirma
     message: 'tomorrow',
   });
   assert.match(datePrompt, /what time/i);
+  assert.match(datePrompt, /full name/i);
+  assert.match(datePrompt, /phone number/i);
+  assert.match(datePrompt, /reason for the visit/i);
 
   const confirmation = generateBotReply({
     patientId,

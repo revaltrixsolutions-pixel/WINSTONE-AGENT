@@ -376,9 +376,7 @@ function formatMedicalAdviceRedirect(name: string, message: string): string {
   }
 
   return (
-    `${name}, medical questions need assessment by a clinician. I can’t diagnose or recommend treatment over chat. Please speak directly with our staff for guidance.\n\n` +
-    `📞 *Talk to Our Team*\n${contactLines}\n\n` +
-    `You can also reply "book appointment" and I'll help you request a consultation.`
+    'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.'
   );
 }
 
@@ -872,6 +870,8 @@ export function generateAppointmentCollectionPrompt(
   patientName: string,
   appointment: Partial<AppointmentRequestData>,
 ): string {
+  const intakeDetails =
+    `Please include your full name, phone number, preferred date and time, and reason for the visit (department or clinic and what you need help with).`;
   const missing: string[] = [];
 
   if (!appointment.department) missing.push("department");
@@ -881,20 +881,21 @@ export function generateAppointmentCollectionPrompt(
   const priceLine = departmentPriceLine(appointment.department);
 
   if (missing.length === 0) {
-    return `${priceLine}Thank you, ${patientName}. Please confirm your appointment details.`;
+    return `${priceLine}Thank you, ${patientName}. Please confirm your appointment details.\n\n${intakeDetails}`;
   }
 
   if (missing.length === 1) {
     if (missing[0] === "department") {
       return (
         `Thank you, ${patientName}. I have your preferred date and time. ` +
-        `Which department or clinic would you like to see?`
+        `Which department or clinic would you like to see?\n\n${intakeDetails}`
       );
     }
 
     return (
       `${priceLine}Now, what ${missing[0]} would you like for your ${appointment.department} appointment?` +
-      departmentHint(appointment.department)
+      departmentHint(appointment.department) +
+      `\n\n${intakeDetails}`
     );
   }
 
@@ -902,20 +903,21 @@ export function generateAppointmentCollectionPrompt(
     if (missing.includes("department")) {
       const other = missing.find((item) => item !== "department") as string;
       return (
-        `Thank you, ${patientName}. Please share your preferred ${other}, and let me know which department or clinic you'd like to see.`
+        `Thank you, ${patientName}. Please share your preferred ${other}, and let me know which department or clinic you'd like to see for your appointment.\n\n${intakeDetails}`
       );
     }
 
-    return `${priceLine}Please share the ${missing[0]} and ${missing[1]} for your appointment (e.g. "tomorrow at 10am").`;
+    return `${priceLine}Please share the ${missing[0]} and ${missing[1]} for your appointment (e.g. "tomorrow at 10am").\n\n${intakeDetails}`;
   }
 
   return (
-    `Sure, ${patientName}. I can help you book an appointment. ` +
-    `Please send these three details:\n` +
-    `1. Department or clinic\n` +
-    `2. Preferred date\n` +
-    `3. Preferred time\n\n` +
-    `For example: "Physiotherapy appointment on Friday at 2pm". ` +
+    `Sure, I can help you book an appointment. ` +
+    `Please provide:\n` +
+    `1. Your full name\n` +
+    `2. Your phone number\n` +
+    `3. Your preferred date and time\n` +
+    `4. Your reason for the visit (department or clinic, and what you need help with)\n\n` +
+    `For example: "Mary Wanjiku, 0712345678, Dermatology on Friday at 2pm, acne consultation". ` +
     `I’ll guide you through the booking step by step and share any listed fee for the service you choose.`
   );
 }
@@ -1091,6 +1093,57 @@ function isGreeting(message: string): boolean {
   ) || /\b(hi there|hello there|good morning|good afternoon|good evening)\b/i.test(text);
 }
 
+function getExactClinicFaqAnswer(message: string): string | null {
+  const normalized = message
+    .toLowerCase()
+    .replace(/[?!.]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (/^hello$/.test(normalized)) {
+    return 'Hello too \nWelcome, how can I help you today?\nDo you have any enquiry you want to make?';
+  }
+
+  if (/\bmicro[\s-]?needling\b|\bmicroneedling\b/.test(normalized)) {
+    return 'Yes we do micro needling at a cost of KSH.22,000/= per session';
+  }
+
+  if (
+    /\bskin tags?\b/.test(normalized) &&
+    /\bkeloids?\b/.test(normalized) &&
+    /\bwarts?\b/.test(normalized) &&
+    /\bingrown nails?\b/.test(normalized)
+  ) {
+    return 'Yes we handle this condition but after doctor has reviewed it and and decides on treatment plan.\nVisit us for clinical evaluation first .';
+  }
+
+  if (/\bdark spots?\b/.test(normalized) && /\bcauses?\b/.test(normalized)) {
+    return 'Dark spots has so many causes and treatment depends with the causative agent and wether it is superficial or deep dark spot.\nThe causes ranges from post inflammatory reaction, sunburn, drugs, skin infections,ance, and trauma, hormonal and some genetical conditions.\nWe recommend you visit and see our dermatologist for guidance on the appropriate treatment plan for your dark spots.';
+  }
+
+  if (/\bsha\b/.test(normalized)) {
+    return "No we don't accept SHA for dermatology services.\nWe only use Cash.";
+  }
+
+  if (/\binsurance\b/.test(normalized)) {
+    return 'At the moment we do accept GA INSURANCE, KENYAN ALLIANCE,MTIBA under GA INSURANCE.\nsome major insurance companies will be onboarded soon.';
+  }
+
+  if (
+    /\b(?:share|send)\b/.test(normalized) &&
+    /\b(?:picture|photo|image)\b/.test(normalized) &&
+    /\bskin\b/.test(normalized)
+  ) {
+    return 'Yes you can but we recommend you call the doctor directly on his number first.\n0708130100/0726244040';
+  }
+
+  if (/\bacne keloidalis(?: nuchae)?\b/.test(normalized)) {
+    return 'This is mostly caused by inflammation of hair follicles after clear shaving, irritation by certain types of shirt collar or plastic caps and helmets,genetics resulting in ingrown hair within the hair follicles and colonization by propionibacterium..';
+  }
+
+  return null;
+}
+
 function isBookingIntent(message: string): boolean {
   const text = message.trim();
 
@@ -1143,6 +1196,9 @@ function isBookingIntent(message: string): boolean {
     /\bwould like an appointment\b/i.test(text) ||
     /\bneed to see a doctor\b/i.test(text) ||
     /\bneed a doctor\b/i.test(text) ||
+    /\b(?:i|we)\s+need\s+to\s+see\s+(?:the\s+)?doctor\b/i.test(text) ||
+    /\bcan\s+i\s+come\s+in\b/i.test(text) ||
+    /\bwhen\s+can\s+i\s+(?:come|visit)\b/i.test(text) ||
     /\bi need a consultation\b/i.test(text) ||
     /\bcan i get a same day appointment\b/i.test(text) ||
     /\bsame day appointment\b/i.test(text) ||
@@ -1290,7 +1346,7 @@ type TurnResult = {
 function processTurn(state: TurnState, message: string, isReturning?: boolean): TurnResult {
   const name = state.patientName;
 
-  if (isHumanSupportRequest(message)) {
+  if (isHumanSupportRequest(message) && !isBookingIntent(message)) {
     return {
       reply: `Of course, ${name}. I'll direct your request about a doctor or hospital staff member to our team — please hold on for assistance.`,
       state: { ...state, stage: "human_handoff" },
@@ -1511,12 +1567,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
   }
 
   return {
-    reply:
-      `${name}, I couldn’t match that to a specific answer. Did you mean ${getKnowledgeSuggestions(message).join(', or ')}? ` +
-      `Tell me which topic you mean and I’ll guide you. For medical questions, please contact our doctor or staff directly:\n` +
-      hospitalKnowledge.locations
-        .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(', ')}`)
-        .join('\n'),
+    reply: 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.',
     state,
   };
 }
@@ -1527,6 +1578,11 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
 
 export function generateBotReply(input: BotReplyInput): string {
   const message = input.message.trim();
+  const exactFaqAnswer = getExactClinicFaqAnswer(message);
+
+  if (exactFaqAnswer) {
+    return exactFaqAnswer;
+  }
 
   /*
    * Legacy/stateless mode:
@@ -1547,7 +1603,15 @@ export function generateBotReply(input: BotReplyInput): string {
 
     if (!resolvedName) {
       if (!message) return NAME_PROMPT;
-      return NAME_PROMPT;
+      if (isBookingIntent(message)) {
+        return generateAppointmentCollectionPrompt("there", {});
+      }
+      if (isUrgentSymptomRequest(message)) {
+        return formatMedicalAdviceRedirect("there", message);
+      }
+      return isGreeting(message)
+        ? NAME_PROMPT
+        : 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.';
     }
 
     const state: TurnState = {
@@ -1590,7 +1654,18 @@ export function generateBotReply(input: BotReplyInput): string {
 
   if (session.stage === "awaiting_name") {
     if (!extractedName) {
-      return NAME_PROMPT;
+      if (isBookingIntent(message)) {
+        session.stage = "collecting_appointment";
+        return generateAppointmentCollectionPrompt("there", {});
+      }
+
+      if (isUrgentSymptomRequest(message)) {
+        return formatMedicalAdviceRedirect("there", message);
+      }
+
+      return isGreeting(message)
+        ? NAME_PROMPT
+        : 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.';
     }
 
     session.patientName = extractedName;

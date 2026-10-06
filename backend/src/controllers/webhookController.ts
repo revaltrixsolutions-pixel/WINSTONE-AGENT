@@ -238,6 +238,7 @@ function isAppointmentLookupRequest(message: string): boolean {
 
 function isNewBookingRequest(message: string): boolean {
   return /\b(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\s+(?:an?\s+)?(?:appointment|booking|visit|consultation|slot)\b/i.test(message) ||
+    /\bappointment\s+please\b/i.test(message) ||
     /\b(?:book|booke)\s+(?:an?\s+)?new\s+appointment\b/i.test(message) ||
     /\b(?:can|could|would)\s+i\s+(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
     /\b(?:help|guide|assist)\s+me\s+(?:to\s+)?(?:book|booke|make|do|schedule|reserve|arrange|set\s+up)\b/i.test(message) ||
@@ -247,6 +248,10 @@ function isNewBookingRequest(message: string): boolean {
     /\b(?:schedule|book)\s+me\b/i.test(message) ||
     /\b(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+(?:schedule|arrange|book|make|do)\b/i.test(message) ||
     /\b(?:can|could|would)\s+i\s+(?:make|do|schedule|arrange)\b/i.test(message) ||
+    /\bcan\s+i\s+come\s+in\b/i.test(message) ||
+    /\bwhen\s+can\s+i\s+(?:come|visit)\b/i.test(message) ||
+    /\b(?:i|we)\s+need\s+to\s+see\s+the\s+doctor\b/i.test(message) ||
+    /\b(?:can|could|would)\s+i\s+(?:get|have)\s+(?:a\s+)?consultation\b/i.test(message) ||
     /\b(?:help|please help)\s+(?:me|us)\s+(?:make|do|schedule|arrange)\b/i.test(message) ||
     /\b(?:book|make|schedule|arrange)\s+(?:for me|me)\b/i.test(message) ||
     /\b(?:can|could|would)\s+you\s+(?:book|make|schedule|arrange)\b/i.test(message) ||
@@ -622,7 +627,7 @@ async function sendBotReply(
   const patientName = (isUsablePatientName(patient.fullName)
     ? patient.fullName
     : extractPatientName(effectiveMessage)) || 'Patient';
-  const bookingIntent = /book|appointment|visit|consult|schedule|booking/i.test(effectiveMessage);
+  const bookingIntent = isNewBookingRequest(effectiveMessage);
   const hasPatientName = patientName !== 'Patient';
   const appointmentDetails = parseAppointmentRequest(effectiveMessage);
   const nameWasJustCaptured = patient.nameWasJustCaptured === true;
@@ -693,7 +698,7 @@ async function sendBotReply(
     return;
   }
 
-  if (isHumanSupportRequest(effectiveMessage)) {
+  if (isHumanSupportRequest(effectiveMessage) && !bookingIntent) {
     const humanReply = hasPatientName
       ? `Thanks, ${patientName}. I have asked our staff to help you. Please briefly describe what you need, and a staff member will introduce themselves here shortly.`
       : 'I can connect you with a human staff member. Before I send the request, please reply with your full name and briefly tell me what you need help with.';
@@ -1533,7 +1538,7 @@ export async function handleWhatsAppWebhook(
                    */
                   chatStatus: patient.chatStatus === 'AGENT_ACTIVE'
                     ? 'AGENT_ACTIVE'
-                    : isHumanSupportRequest(messageBody)
+                    : isHumanSupportRequest(messageBody) && !isNewBookingRequest(messageBody)
                       ? 'PENDING_AGENT'
                       : 'BOT',
                 },
