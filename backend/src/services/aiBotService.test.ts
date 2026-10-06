@@ -112,6 +112,21 @@ test('answers the supplied location, fee, hours, and appointment questions', () 
   assert.equal(getServicePrice('Dermatologist'), 'KSh 1,000');
   const dermatologyFeeReply = searchKnowledgeBase('What is the dermatology consultation fee?') ?? '';
   assert.match(dermatologyFeeReply, /Dermatologist: \*KSh 1,000\*/i);
+  assert.doesNotMatch(dermatologyFeeReply, /Gynecologist|Paediatrician|Nutritionist/i);
+
+  for (const message of [
+    'How much do you charge to see a dermatologist?',
+    'Dermatology consultation fee',
+  ]) {
+    const reply = generateBotReply({
+      patientName: 'Mary',
+      message,
+      isReturning: false,
+      lastInteractionHours: 0,
+    });
+    assert.match(reply, /Dermatologist: \*KSh 1,000\*/i);
+    assert.doesNotMatch(reply, /Gynecologist|Paediatrician|Nutritionist/i);
+  }
 
   const hoursReply = generateBotReply({
     patientName: 'Mary',
@@ -550,6 +565,31 @@ test('answers consultation-fee questions during a session-backed conversation', 
   });
   assert.match(feeReply, /KSh 500/i);
   assert.doesNotMatch(feeReply, /what time|what date|which day/i);
+});
+
+test('answers dermatology pricing during an active appointment flow and continues booking', () => {
+  const patientId = 'appointment-flow-dermatologist-fee';
+  generateBotReply({ patientId, message: 'my name is Mary' });
+
+  const bookingPrompt = generateBotReply({
+    patientId,
+    message: 'Book appointment',
+  });
+  assert.match(bookingPrompt, /full name|department/i);
+
+  const feeReply = generateBotReply({
+    patientId,
+    message: 'How much do you charge to see a dermatologist?',
+  });
+  assert.match(feeReply, /Listed fee: KSh 1,000/i);
+  assert.doesNotMatch(feeReply, /Gynecologist|Paediatrician|Nutritionist/i);
+
+  const nextPrompt = generateBotReply({
+    patientId,
+    message: 'Dermatologist',
+  });
+  assert.match(nextPrompt, /Listed fee: KSh 1,000/i);
+  assert.match(nextPrompt, /preferred date and time|what date|what time/i);
 });
 
 test('handles appointment history and reschedule keywords with patient-friendly wording', () => {

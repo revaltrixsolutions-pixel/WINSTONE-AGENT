@@ -487,10 +487,26 @@ function buildAppointmentInteractive(
   }
 
   if (!appointmentState.department) {
-    const rows = appointmentServiceOptions.slice(0, 10).map((service) => ({
+    const prioritizedServices = [
+      'Dermatologist',
+      'Gynecology',
+      'General Consultation',
+      'Antenatal Clinic',
+      'General Outpatient Care',
+      'Paediatrician',
+      'Pediatric Clinic',
+      'Physiotherapy',
+      'Ultrasound Services',
+      'Well Baby Clinic',
+      ...appointmentServiceOptions,
+    ];
+    const rows = [...new Set(prioritizedServices)]
+      .filter((service) => appointmentServiceOptions.includes(service))
+      .slice(0, 10)
+      .map((service) => ({
       id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       title: service.slice(0, 24),
-    }));
+      }));
     const serviceList = appointmentServiceOptions.map((service, index) => `${index + 1}. ${service}`).join('\n');
 
     return {
@@ -527,7 +543,23 @@ function buildAppointmentInteractive(
   }
 
   if (!appointmentState.time) {
-    return undefined;
+    return {
+      type: 'list',
+      body: { text: `${prompt}\n\nThese are preferred request times, not live availability. You can also type another time.` },
+      action: {
+        button: 'Choose a time',
+        sections: [{
+          title: 'Preferred appointment time',
+          rows: [
+            { id: 'time_08_00_am', title: '8:00 AM' },
+            { id: 'time_10_00_am', title: '10:00 AM' },
+            { id: 'time_12_00_pm', title: '12:00 PM' },
+            { id: 'time_02_00_pm', title: '2:00 PM' },
+            { id: 'time_04_00_pm', title: '4:00 PM' },
+          ],
+        }],
+      },
+    };
   }
 
   return undefined;
@@ -628,6 +660,7 @@ async function sendBotReply(
     ? patient.fullName
     : extractPatientName(effectiveMessage)) || 'Patient';
   const bookingIntent = isNewBookingRequest(effectiveMessage);
+  const isPricingQuestion = /\b(how much|price|prices|cost|costs|fee|fees|charge|charges|pricing)\b/i.test(effectiveMessage);
   const hasPatientName = patientName !== 'Patient';
   const appointmentDetails = parseAppointmentRequest(effectiveMessage);
   const nameWasJustCaptured = patient.nameWasJustCaptured === true;
@@ -639,6 +672,7 @@ async function sendBotReply(
   if (
     appointmentConversationState.has(patient.id) &&
     !bookingIntent &&
+    !isPricingQuestion &&
     !appointmentDetails.date &&
     !appointmentDetails.time &&
     !appointmentDetails.department
@@ -867,6 +901,41 @@ async function sendBotReply(
     return;
   }
 
+  if (hasPatientName && appointmentConversationState.has(patient.id) && isPricingQuestion) {
+    const replyText = generateBotReply({
+      patientName,
+      message: effectiveMessage,
+    });
+
+    try {
+      const whatsappResult = await sendWhatsAppMessage({
+        recipientPhone: patient.phoneNumber,
+        messageText: replyText,
+      });
+
+      await prisma.messageLog.create({
+        data: {
+          patientId: patient.id,
+          sender: 'BOT',
+          body: replyText,
+          timestamp: new Date(),
+        },
+      });
+
+      console.info('[WhatsApp Appointment Pricing Reply Sent]', {
+        patientId: patient.id,
+        messageId: whatsappResult.messageId,
+      });
+    } catch (error) {
+      console.error('[WhatsApp Appointment Pricing Reply Failed]', {
+        patientId: patient.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+
+    return;
+  }
+
   if (hasPatientName && (bookingIntent || appointmentConversationState.has(patient.id))) {
     const appointmentState = updateAppointmentConversation(patient.id, patientName, effectiveMessage);
 
@@ -878,11 +947,17 @@ async function sendBotReply(
       });
 
       try {
-        await sendWhatsAppMessage({
-          recipientPhone: patient.phoneNumber,
-          messageText: replyText,
-          interactive,
-        });
+        if (interactive) {
+          await sendWhatsAppMessage({
+            recipientPhone: patient.phoneNumber,
+            interactive,
+          });
+        } else {
+          await sendWhatsAppMessage({
+            recipientPhone: patient.phoneNumber,
+            messageText: replyText,
+          });
+        }
 
         await prisma.messageLog.create({
           data: {

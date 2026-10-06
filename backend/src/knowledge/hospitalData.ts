@@ -325,6 +325,8 @@ const STOP_WORDS = new Set([
   'full',
   'complete',
   'every',
+  'consultation',
+  'consultations',
 ]);
 
 function normalizeText(value: string): string {
