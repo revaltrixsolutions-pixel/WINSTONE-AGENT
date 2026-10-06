@@ -75,6 +75,24 @@ export const appointmentServiceOptions: string[] = Array.from(
   ]),
 ).map((service) => service.trim()).filter(Boolean);
 
+export const appointmentTimeOptions = [
+  { id: "time_08_00_am", label: "8:00 AM", value: "08:00 AM" },
+  { id: "time_10_00_am", label: "10:00 AM", value: "10:00 AM" },
+  { id: "time_12_00_pm", label: "12:00 PM", value: "12:00 PM" },
+  { id: "time_02_00_pm", label: "2:00 PM", value: "02:00 PM" },
+  { id: "time_04_00_pm", label: "4:00 PM", value: "04:00 PM" },
+] as const;
+
+function isWithinAppointmentHours(time: string): boolean {
+  const match = time.match(/^(\d{2}):(\d{2}) (AM|PM)$/);
+  if (!match) return false;
+
+  let hour = Number(match[1]) % 12;
+  if (match[3] === "PM") hour += 12;
+  const minutesAfterMidnight = hour * 60 + Number(match[2]);
+  return minutesAfterMidnight >= 8 * 60 && minutesAfterMidnight <= 17 * 60;
+}
+
 /**
  * Returns the standard consultation-fee quote for a bookable
  * department/service, or null for a department this hospital doesn't
@@ -895,6 +913,9 @@ export function generateAppointmentCollectionPrompt(
 
     return (
       `${priceLine}Now, what ${missing[0]} would you like for your ${appointment.department} appointment?` +
+      (missing[0] === "time"
+        ? ` Available times are 8:00 AM, 10:00 AM, 12:00 PM, 2:00 PM, and 4:00 PM (clinic hours: 8:00 AM–5:00 PM).`
+        : "") +
       departmentHint(appointment.department) +
       `\n\n${intakeDetails}`
     );
@@ -962,9 +983,12 @@ export function updateAppointmentConversation(
   const appointment: Partial<AppointmentRequestData> = {
     ...session.appointment,
     ...(parsed.date ? { date: parsed.date } : {}),
-    ...(parsed.time ? { time: parsed.time } : {}),
+    ...(parsed.time && isWithinAppointmentHours(parsed.time) ? { time: parsed.time } : {}),
     ...(parsed.department ? { department: parsed.department } : {}),
   };
+  if (parsed.time && !isWithinAppointmentHours(parsed.time)) {
+    delete appointment.time;
+  }
 
   const completed = Boolean(appointment.date && appointment.time && appointment.department);
 

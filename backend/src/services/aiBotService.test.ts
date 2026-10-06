@@ -13,6 +13,7 @@ import {
   getServicePrice,
   CONVERSATION_MEMORY_MINUTES,
   appointmentServiceOptions,
+  appointmentTimeOptions,
   updateAppointmentConversation,
   resetPatientSession,
 } from './aiBotService';
@@ -934,6 +935,29 @@ test('appointment booking advances to confirmation only after service, date, and
   assert.match(time.prompt, /Department: Dermatologist/);
   assert.match(time.prompt, /Reply \*Yes\* to submit/);
 
+  resetPatientSession(patientId);
+});
+
+test('offers five appointment times within clinic hours and rejects out-of-hours times', () => {
+  assert.deepEqual(
+    appointmentTimeOptions.map(({ label }) => label),
+    ['8:00 AM', '10:00 AM', '12:00 PM', '2:00 PM', '4:00 PM'],
+  );
+
+  const patientId = 'appointment-time-options-and-hours';
+  resetPatientSession(patientId);
+  updateAppointmentConversation(patientId, 'Mary Wanjiku', 'Dermatology');
+  updateAppointmentConversation(patientId, 'Mary Wanjiku', 'tomorrow');
+
+  const outsideHours = updateAppointmentConversation(patientId, 'Mary Wanjiku', '7:00 AM');
+  assert.equal(outsideHours.completed, false);
+  assert.equal(outsideHours.data?.time, undefined);
+  assert.match(outsideHours.prompt, /8:00 AM.*10:00 AM.*12:00 PM.*2:00 PM.*4:00 PM/);
+  assert.match(outsideHours.prompt, /8:00 AM–5:00 PM/);
+
+  const validTime = updateAppointmentConversation(patientId, 'Mary Wanjiku', '4:00 PM');
+  assert.equal(validTime.completed, true);
+  assert.equal(validTime.data?.time, '04:00 PM');
   resetPatientSession(patientId);
 });
 

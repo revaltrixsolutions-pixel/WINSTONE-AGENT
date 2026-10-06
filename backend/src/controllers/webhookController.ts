@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import {
   appointmentServiceOptions,
+  appointmentTimeOptions,
   extractPatientName,
   generateBotReply,
   getKenyaGreeting,
@@ -546,18 +547,17 @@ function buildAppointmentInteractive(
   if (!appointmentState.time) {
     return {
       type: 'list',
-      body: { text: `${prompt}\n\nThese are preferred request times, not live availability. You can also type another time.` },
+      body: {
+        text: `${prompt}\n\nChoose one of these five appointment times between 8:00 AM and 5:00 PM. The hospital team will confirm the appointment.`,
+      },
       action: {
         button: 'Choose a time',
         sections: [{
           title: 'Preferred appointment time',
-          rows: [
-            { id: 'time_08_00_am', title: '8:00 AM' },
-            { id: 'time_10_00_am', title: '10:00 AM' },
-            { id: 'time_12_00_pm', title: '12:00 PM' },
-            { id: 'time_02_00_pm', title: '2:00 PM' },
-            { id: 'time_04_00_pm', title: '4:00 PM' },
-          ],
+          rows: appointmentTimeOptions.map(({ id, label }) => ({
+            id,
+            title: label,
+          })),
         }],
       },
     };
