@@ -20,19 +20,24 @@ type AssignChatBody = {
 
 /**
  * GET /api/agent/chats
- * Get all chats waiting for a human agent or currently assigned to one.
+ * Super admins can access every patient conversation and its complete history.
+ * Other staff see only conversations waiting for or assigned to an agent.
  */
 export async function getAgentChats(
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<Response> {
   try {
     const chats = await prisma.patient.findMany({
-      where: {
-        chatStatus: {
-          in: ['PENDING_AGENT', 'AGENT_ACTIVE'],
-        },
-      },
+      ...(req.user?.role === 'SUPER_ADMIN'
+        ? {}
+        : {
+            where: {
+              chatStatus: {
+                in: ['PENDING_AGENT', 'AGENT_ACTIVE'],
+              },
+            },
+          }),
       include: {
         messages: {
           orderBy: {
