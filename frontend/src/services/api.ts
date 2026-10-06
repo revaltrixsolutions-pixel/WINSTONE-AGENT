@@ -137,10 +137,7 @@ export interface RequestOptions extends Omit<RequestInit, 'signal'> {
    CONFIGURATION
    ========================================================================== */
 
-const API_BASE_URL = (
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
-  'http://localhost:5000'
-).replace(/\/$/, '');
+export const API_BASE_URL = 'https://winstone-agent.onrender.com';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 

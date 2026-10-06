@@ -27,26 +27,11 @@ const CRON_TIMEZONE = 'Africa/Nairobi';
 if (Number.isNaN(PORT) || PORT <= 0) {
     throw new Error(`[Startup Error]: Invalid PORT value "${process.env.PORT}".`);
 }
-/* =========================================================
-   CORS CONFIGURATION
-   ========================================================= */
-/**
- * Production frontend:
- * https://phadam-whats-app.vercel.app
- *
- * Production backend:
- * https://phadamwhatsapp.onrender.com
- *
- * Render environment variables supported:
- *
- * FRONTEND_URL=https://phadam-whats-app.vercel.app
- *
- * FRONTEND_URLS=https://example1.com,https://example2.com
- */
+
 const defaultAllowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
-    'https://phadam-whats-app.vercel.app',
+    'https://winstone-agent.vercel.app/',
 ];
 const environmentOrigins = [
     process.env.FRONTEND_URL,

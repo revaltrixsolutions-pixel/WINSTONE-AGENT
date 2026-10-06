@@ -46,8 +46,13 @@ test('answers the supplied location, fee, hours, and appointment questions', () 
   assert.match(locationReply, /Standard Drive, Fedha, Embakasi, Nairobi/i);
 
   const consultationReply = searchKnowledgeBase('What is your consultation fee?') ?? '';
-  assert.match(consultationReply, /KSh 1,000/i);
-  assert.doesNotMatch(consultationReply, /KSh 500/i);
+  assert.match(consultationReply, /KSh 500/i);
+  assert.doesNotMatch(consultationReply, /KSh 1,000/i);
+  assert.equal(getServicePrice('General Consultation'), 'KSh 500');
+  assert.equal(getServicePrice('General Outpatient Care'), 'KSh 500');
+  assert.equal(getServicePrice('Dermatologist'), 'KSh 1,000');
+  const dermatologyFeeReply = searchKnowledgeBase('What is the dermatology consultation fee?') ?? '';
+  assert.match(dermatologyFeeReply, /Dermatologist: \*KSh 1,000\*/i);
 
   const hoursReply = generateBotReply({
     patientName: 'Mary',
@@ -80,7 +85,7 @@ test('answers each supplied FAQ wording through the bot reply flow', () => {
     },
     {
       message: 'What is the consultation fee?',
-      expected: [/KSh 1,000/i],
+      expected: [/KSh 500/i],
     },
     {
       message: 'What time are you open?',
@@ -285,6 +290,45 @@ test('unknown content asks to speak to a doctor', () => {
   assert.match(reply, /doctor/i);
 });
 
+test('guides unknown questions with suggested topics and staff contacts', () => {
+  const reply = generateBotReply({
+    patientName: 'Mary',
+    message: 'Do you provide lunar cartography?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /Did you mean/i);
+  assert.match(reply, /clinic and specialist services/i);
+  assert.match(reply, /Tell me which topic you mean/i);
+  assert.match(reply, /0726 244040/i);
+  assert.match(reply, /0708 130100/i);
+  assert.doesNotMatch(reply, /I don.t have that information/i);
+});
+
+test('routes unrecognized medical questions to staff with direct contacts', () => {
+  const reply = generateBotReply({
+    patientName: 'Mary',
+    message: 'What causes persistent dizziness?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+
+  assert.match(reply, /medical questions need assessment by a clinician/i);
+  assert.match(reply, /0726 244040/i);
+  assert.match(reply, /0708 130100/i);
+  assert.doesNotMatch(reply, /Did you mean/i);
+
+  const unsupportedConditionReply = generateBotReply({
+    patientName: 'Mary',
+    message: 'Do you treat heart disease?',
+    isReturning: false,
+    lastInteractionHours: 0,
+  });
+  assert.match(unsupportedConditionReply, /medical questions need assessment by a clinician/i);
+  assert.match(unsupportedConditionReply, /0726 244040/i);
+});
+
 test('stale conversation triggers follow-up welcome', () => {
   const stale = isConversationStale(7);
   assert.equal(stale, true);
@@ -394,6 +438,49 @@ test('answers common price and rebooking questions naturally', () => {
     lastInteractionHours: 0,
   });
   assert.match(cancelReply, /cancel|cleared|No problem/i);
+});
+
+test('answers consultation-fee phrases instead of entering the booking flow', () => {
+  const questions = [
+    'How much is consultation',
+    'Consultation fee',
+    'how much is general consultation',
+    'how much is general consultation?',
+  ];
+
+  for (const message of questions) {
+    const reply = generateBotReply({
+      patientName: 'REVALTRIX TECHNOLOGIES',
+      message,
+      isReturning: false,
+      lastInteractionHours: 0,
+    });
+
+    assert.match(reply, /KSh 500/i, `Expected fee answer for "${message}"`);
+    assert.doesNotMatch(reply, /what time|what date|which day/i);
+  }
+});
+
+test('answers consultation-fee questions during a session-backed conversation', () => {
+  const patientId = 'consultation-fee-reply-regression';
+  const nameReply = generateBotReply({
+    patientId,
+    message: 'my name is REVALTRIX TECHNOLOGIES',
+  });
+  assert.match(nameReply, /How can I help you today/i);
+
+  const helloReply = generateBotReply({
+    patientId,
+    message: 'hello',
+  });
+  assert.match(helloReply, /How can I help you today/i);
+
+  const feeReply = generateBotReply({
+    patientId,
+    message: 'how much is general consultation',
+  });
+  assert.match(feeReply, /KSh 500/i);
+  assert.doesNotMatch(feeReply, /what time|what date|which day/i);
 });
 
 test('handles appointment history and reschedule keywords with patient-friendly wording', () => {

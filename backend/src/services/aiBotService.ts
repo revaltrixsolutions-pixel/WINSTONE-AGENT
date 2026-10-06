@@ -1,4 +1,8 @@
-import { hospitalKnowledge, searchKnowledgeBase } from "../knowledge/hospitalData.js";
+import {
+  getKnowledgeSuggestions,
+  hospitalKnowledge,
+  searchKnowledgeBase,
+} from "../knowledge/hospitalData.js";
 
 export const CONVERSATION_MEMORY_MINUTES = 15;
 
@@ -321,6 +325,10 @@ const SYMPTOM_PATTERNS: RegExp[] = [
   /\bdiagnos(e|is|ed)\b/i,
   /\brash\b/i,
   /\bstomach ache|stomachache|abdominal pain\b/i,
+  /\b(acne|keloid|vitiligo|hair loss|dark spots?|skin tags?|warts?|ingrown nails?)\b/i,
+  /\bwhat causes?\b|\bwhy (?:is|are|do|does|am)\b/i,
+  /\bwhat treatment\b|\bhow (?:can|do) i treat\b|\bshould i take\b/i,
+  /\bdo you (?:treat|diagnose)|\bmedical advice\b/i,
 ];
 
 const URGENT_SYMPTOM_PATTERNS: RegExp[] = [
@@ -336,6 +344,18 @@ const URGENT_SYMPTOM_PATTERNS: RegExp[] = [
 
 export function isMedicalSymptomRequest(message: string): boolean {
   return SYMPTOM_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function isSupportedMedicalFaq(message: string): boolean {
+  return (
+    (/\bdo you treat\b/i.test(message) &&
+      /\b(skin|rash|acne|keloid|vitiligo|hair loss|dark spots?|skin tags?|warts?|ingrown nails?)\b/i.test(message)) ||
+    (/\bdo you remove\b/i.test(message) &&
+      /\b(skin tags?|keloids?|warts?|ingrown nails?)\b/i.test(message)) ||
+    /\bskin analysis\b/i.test(message) ||
+    /\bwhat causes? (?:the )?dark spots?\b/i.test(message) ||
+    /\bwhat causes? acne keloidalis(?: nuchae)?\b/i.test(message)
+  );
 }
 
 function isUrgentSymptomRequest(message: string): boolean {
@@ -356,9 +376,9 @@ function formatMedicalAdviceRedirect(name: string, message: string): string {
   }
 
   return (
-    `${name}, I'm not able to give medical advice or a diagnosis over chat — for your safety, please speak directly with one of our clinicians.\n\n` +
+    `${name}, medical questions need assessment by a clinician. I can’t diagnose or recommend treatment over chat. Please speak directly with our staff for guidance.\n\n` +
     `📞 *Talk to Our Team*\n${contactLines}\n\n` +
-    `You can also reply "book appointment" and I'll help you schedule a consultation, or "menu" to see what else I can help with.`
+    `You can also reply "book appointment" and I'll help you request a consultation.`
   );
 }
 
@@ -1324,6 +1344,16 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     }
   }
 
+  if (
+    /\b(?:how much|price|cost|fee|charge|charges|pricing)\b/i.test(message) &&
+    /\b(?:consult(?:ation)?|clinic|dermatolog|skin specialist|gynecolog|gynaecolog|paediatrician|pediatrician|nutritionist)\b/i.test(message)
+  ) {
+    const answer = answerKnowledgeBase(name, message);
+    if (answer) {
+      return { reply: answer, state };
+    }
+  }
+
   if (isAppointmentHistoryRequest(message)) {
     return {
       reply:
@@ -1341,7 +1371,7 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
     state.stage !== "collecting_appointment" &&
     state.stage !== "confirming_appointment" &&
     !isBookingIntent(message) &&
-    !/\b(?:do you|can you|does your dermatologist)\s+(?:treat|handle)\b|\bskin analysis\b/i.test(message) &&
+    !isSupportedMedicalFaq(message) &&
     isMedicalSymptomRequest(message)
   ) {
     return {
@@ -1481,8 +1511,11 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
 
   return {
     reply:
-      `I'm sorry, ${name}, I don't have that information on hand. ` +
-      `I can connect you with our hospital staff or a doctor, or we can look at services, prices, locations, or insurance instead.`,
+      `${name}, I couldn’t match that to a specific answer. Did you mean ${getKnowledgeSuggestions(message).join(', or ')}? ` +
+      `Tell me which topic you mean and I’ll guide you. For medical questions, please contact our doctor or staff directly:\n` +
+      hospitalKnowledge.locations
+        .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(', ')}`)
+        .join('\n'),
     state,
   };
 }

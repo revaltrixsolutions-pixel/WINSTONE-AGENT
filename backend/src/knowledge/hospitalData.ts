@@ -70,7 +70,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
   emails: ['winstonmedicalcentre01@gmail.com'],
   postalAddress: 'P.O. Box 1022-00606, Nairobi',
   history: 'Winston Medical Centre opened in 2016 to provide quality, affordable healthcare to the surrounding community. It is a registered private hospital administered in accordance with the Medical Practitioners and Dentists Board; management approval was granted in 2016.',
-  consultationFee: 'KSh 1,000',
+  consultationFee: 'KSh 500',
   openingHours: 'Monday to Saturday, 8:00 AM to 5:00 PM',
   holidayAppointmentNote: 'Appointments can also be booked on Sundays and public holidays. Please call 0726 244040 or 0708 130100 directly to arrange one at a convenient time.',
   virtualConsultationFee: 'KSh 1,000',
@@ -144,7 +144,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
   ],
   specialistClinics: ['Gynecologist', 'Paediatrician', 'Dermatologist', 'Nutritionist'],
   departments: {
-    'General Outpatient Care': 'General outpatient consultations and care are available. The listed general consultation fee is KSh 1,000; investigations, medicines and other services are priced separately.',
+    'General Outpatient Care': 'General outpatient consultations and care are available. The listed general consultation fee is KSh 500; investigations, medicines and other services are priced separately.',
     'General Medicine': 'General Medicine is one of the hospital’s inpatient specialties. The centre has two beds; real-time bed availability is not provided here.',
     'Minor Surgery': 'Minor Surgery is an inpatient specialty. Specific procedure prices are not included in the supplied price list and should be confirmed with the hospital.',
     Gynecology: 'Gynecology is an inpatient specialty and a listed clinic service. The listed gynecologist fee is KSh 1,500.',
@@ -178,7 +178,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
     { procedure: 'Circumcision', price: 'KSh 1,000', keywords: ['male circumcision'] },
     { procedure: 'Gynecologist', price: 'KSh 1,500', keywords: ['gynecology', 'gynaecology', 'gynaecologist', 'gynecologist consultation', 'gynaecologist consultation', 'women’s health doctor', 'ob-gyn', 'obgyn'] },
     { procedure: 'Paediatrician', price: 'KSh 1,500', keywords: ['pediatrician', 'paediatrician consultation', 'pediatrician consultation', 'children’s doctor', 'child specialist'] },
-    { procedure: 'Dermatologist', price: 'KSh 3,000', keywords: ['dermatology', 'skin specialist', 'skin doctor'] },
+    { procedure: 'Dermatologist', price: 'KSh 1,000', keywords: ['dermatology', 'skin specialist', 'skin doctor'] },
     { procedure: 'Nutritionist', price: 'KSh 1,000', keywords: ['nutrition', 'dietitian', 'dietician', 'nutrition consultation'] },
     { procedure: 'Rota virus test', price: 'KSh 1,000', keywords: ['rotavirus', 'rota virus'] },
     { procedure: 'BS for MPs', price: 'KSh 200', keywords: ['blood smear for malaria', 'malaria parasite test', 'mp test'] },
@@ -204,9 +204,9 @@ export const hospitalKnowledge: HospitalKnowledge = {
     { procedure: 'PSA', price: 'KSh 1,000', keywords: ['prostate-specific antigen', 'prostate test'] },
   ],
   bookingFees: {
-    'General Consultation': 'KSh 1,000',
-    'General Outpatient Care': 'KSh 1,000',
-    'General Medicine': 'KSh 1,000',
+    'General Consultation': 'KSh 500',
+    'General Outpatient Care': 'KSh 500',
+    'General Medicine': 'KSh 500',
     'Counseling': 'KSh 500',
     'Obstetrics and Gynecology': 'KSh 1,500',
     'Antenatal Clinic': 'KSh 300',
@@ -217,7 +217,7 @@ export const hospitalKnowledge: HospitalKnowledge = {
     Gynecologist: 'KSh 1,500',
     Paediatrician: 'KSh 1,500',
     'Pediatric Clinic': 'KSh 1,500',
-    Dermatologist: 'KSh 3,000',
+    Dermatologist: 'KSh 1,000',
     Nutritionist: 'KSh 1,000',
     Circumcision: 'KSh 1,000',
   },
@@ -621,12 +621,57 @@ function formatAbout(): string {
   ].join('\n');
 }
 
+const GENERAL_KNOWLEDGE_SUGGESTIONS = [
+  'clinic and specialist services',
+  'consultation, test, and procedure prices',
+  'appointments and opening hours',
+  'location, directions, and contact details',
+  'insurance and medical cover',
+];
+
+export function getKnowledgeSuggestions(query: string): string[] {
+  const queryTerms = getSearchTerms(expandQuerySynonyms(normalizeText(query)));
+  const candidates = [
+    ...hospitalKnowledge.services,
+    ...hospitalKnowledge.specialistClinics,
+    ...Object.keys(hospitalKnowledge.departments),
+    ...hospitalKnowledge.surgicalPrices.map((item) => item.procedure),
+  ];
+  const scores = new Map<string, number>();
+
+  for (const candidate of candidates) {
+    const candidateTerms = getSearchTerms(normalizeText(candidate));
+    const score = queryTerms.reduce(
+      (total, queryTerm) => total + Number(candidateTerms.some((candidateTerm) =>
+        candidateTerm.includes(queryTerm) ||
+        queryTerm.includes(candidateTerm) ||
+        (queryTerm.length >= 5 && candidateTerm.startsWith(queryTerm.slice(0, 5))) ||
+        (candidateTerm.length >= 5 && queryTerm.startsWith(candidateTerm.slice(0, 5))),
+      )),
+      0,
+    );
+
+    if (score > 0) scores.set(candidate, score);
+  }
+
+  const relevant = [...scores.entries()]
+    .sort((first, second) => second[1] - first[1])
+    .slice(0, 3)
+    .map(([candidate]) => candidate);
+
+  return relevant.length ? relevant : GENERAL_KNOWLEDGE_SUGGESTIONS;
+}
+
 function formatUnknown(topicHint?: string): string {
+  const suggestions = getKnowledgeSuggestions(topicHint ?? '');
   return [
-    "That detail wasn't included in the hospital information I have, so I won't guess.",
-    topicHint ? `(Topic: ${topicHint})` : '',
+    topicHint
+      ? `I can’t confirm current information about ${topicHint}.`
+      : "I couldn’t match that question to a specific answer, and I don’t want to guess.",
     '',
-    'Please contact a branch directly for this:',
+    `Did you mean one of these? ${suggestions.join('; ')}? Tell me which topic you meant and I’ll guide you.`,
+    '',
+    'For confirmation or help from staff, please contact Winston Medical Centre:',
     ...hospitalKnowledge.locations.map(
       (location) => `• ${location.branch}: ${location.phoneNumbers.join(', ')}`,
     ),
@@ -889,6 +934,24 @@ export function searchKnowledgeBase(query: string): string | null {
 
   const expandedQuery = expandQuerySynonyms(normalizedQuery);
 
+  if (
+    /\b(consult|consultation)\b/i.test(normalizedQuery) &&
+    includesAny(normalizedQuery, ['how much', 'price', 'cost', 'fee', 'charge', 'charges', 'pricing']) &&
+    !includesAny(normalizedQuery, ['online', 'virtual']) &&
+    !includesAny(expandedQuery, [
+      'dermatolog',
+      'skin specialist',
+      'skin doctor',
+      'gynecolog',
+      'gynaecolog',
+      'paediatrician',
+      'pediatrician',
+      'nutritionist',
+    ])
+  ) {
+    return `General consultation: *${hospitalKnowledge.consultationFee}*.`;
+  }
+
   if (includesAny(normalizedQuery, ['acne keloidalis nuchae', 'acne keloidalis'])) {
     return hospitalKnowledge.acneKeloidalisNuchaeNote;
   }
@@ -916,6 +979,13 @@ export function searchKnowledgeBase(query: string): string | null {
     includesAny(expandedQuery, ['remove', 'removal', 'treat', 'treatment', 'handle', 'do you', 'can you'])
   ) {
     return hospitalKnowledge.skinLesionAssessmentNote;
+  }
+
+  if (
+    includesAny(expandedQuery, ['price', 'prices', 'cost', 'fee', 'fees', 'charge', 'charges', 'how much']) &&
+    includesAny(expandedQuery, ['dermatolog', 'skin specialist', 'skin doctor'])
+  ) {
+    return formatPrices(expandedQuery);
   }
 
   if (includesAny(expandedQuery, ['how many beds', 'bed count', 'number of beds', 'registration number', 'hospital registration'])) {
@@ -972,6 +1042,28 @@ export function searchKnowledgeBase(query: string): string | null {
     !findMatchingProcedures(expandedQuery).length
   ) {
     return hospitalKnowledge.treatmentPricingNote;
+  }
+
+  if (
+    includesAny(expandedQuery, [
+      'consultation fee',
+      'consultation fees',
+      'general consultation',
+      'consultation cost',
+      'consultation charge',
+    ]) &&
+    !includesAny(expandedQuery, [
+      'dermatolog',
+      'skin specialist',
+      'skin doctor',
+      'gynecolog',
+      'gynaecolog',
+      'paediatrician',
+      'pediatrician',
+      'nutritionist',
+    ])
+  ) {
+    return `General consultation: *${hospitalKnowledge.consultationFee}*.`;
   }
 
   // 1. Confirmed hours and availability questions.

@@ -36,28 +36,11 @@ if (Number.isNaN(PORT) || PORT <= 0) {
   );
 }
 
-/* =========================================================
-   CORS CONFIGURATION
-   ========================================================= */
-
-/**
- * Production frontend:
- * https://phadam-whats-app.vercel.app
- *
- * Production backend:
- * https://phadamwhatsapp.onrender.com
- *
- * Render environment variables supported:
- *
- * FRONTEND_URL=https://phadam-whats-app.vercel.app
- *
- * FRONTEND_URLS=https://example1.com,https://example2.com
- */
 
 const defaultAllowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://phadam-whats-app.vercel.app',
+  'https://winstone-agent.vercel.app',
 ];
 
 const environmentOrigins = [

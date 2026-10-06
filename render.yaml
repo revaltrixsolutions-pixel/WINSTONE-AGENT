@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: phadamwhatsapp
+    name: winstonagent
     runtime: node
     rootDir: backend
     buildCommand: npm install && npm run build
@@ -18,5 +18,7 @@ services:
         sync: false
       - key: SUPER_ADMIN_NAME
         sync: false
+      - key: FRONTEND_URL
+        value: https://winstone-agent.vercel.app
       - key: NODE_ENV
         value: production

@@ -4,6 +4,7 @@ import React, {
   useState,
 } from 'react';
 import { getAppointmentWhatsAppLink } from '../services/appointmentWhatsApp';
+import { API_BASE_URL } from '../services/api';
 
 export type Appointment = {
   id: string;
@@ -32,9 +33,6 @@ type AppointmentApiResponse =
       appointments?: Appointment[];
       data?: Appointment[];
     };
-
-const DEFAULT_API_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const statusStyles: Record<
   string,
@@ -136,7 +134,7 @@ export const AppointmentTable: React.FC<
   AppointmentTableProps
 > = ({
   appointments: initialAppointments,
-  apiUrl = DEFAULT_API_URL,
+  apiUrl = API_BASE_URL,
   refreshInterval = 30_000,
   onStatusChange,
 }) => {
