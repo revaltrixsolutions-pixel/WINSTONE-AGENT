@@ -947,7 +947,12 @@ test('offers five appointment times within clinic hours and rejects out-of-hours
   const patientId = 'appointment-time-options-and-hours';
   resetPatientSession(patientId);
   updateAppointmentConversation(patientId, 'Mary Wanjiku', 'Dermatology');
-  updateAppointmentConversation(patientId, 'Mary Wanjiku', 'tomorrow');
+  const datePrompt = updateAppointmentConversation(patientId, 'Mary Wanjiku', 'Tomorrow');
+  assert.equal(datePrompt.data?.department, 'Dermatologist');
+  assert.ok(datePrompt.data?.date);
+  assert.equal(datePrompt.data?.time, undefined);
+  assert.match(datePrompt.prompt, /8:00 AM.*10:00 AM.*12:00 PM.*2:00 PM.*4:00 PM/);
+  assert.match(datePrompt.prompt, /clinic hours: 8:00 AM–5:00 PM/);
 
   const outsideHours = updateAppointmentConversation(patientId, 'Mary Wanjiku', '7:00 AM');
   assert.equal(outsideHours.completed, false);

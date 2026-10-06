@@ -83,6 +83,10 @@ export const appointmentTimeOptions = [
   { id: "time_04_00_pm", label: "4:00 PM", value: "04:00 PM" },
 ] as const;
 
+function appointmentTimeOptionsText(): string {
+  return appointmentTimeOptions.map(({ label }) => label).join(", ");
+}
+
 function isWithinAppointmentHours(time: string): boolean {
   const match = time.match(/^(\d{2}):(\d{2}) (AM|PM)$/);
   if (!match) return false;
@@ -914,7 +918,7 @@ export function generateAppointmentCollectionPrompt(
     return (
       `${priceLine}Now, what ${missing[0]} would you like for your ${appointment.department} appointment?` +
       (missing[0] === "time"
-        ? ` Available times are 8:00 AM, 10:00 AM, 12:00 PM, 2:00 PM, and 4:00 PM (clinic hours: 8:00 AM–5:00 PM).`
+        ? ` Choose one of these available times: ${appointmentTimeOptionsText()} (clinic hours: 8:00 AM–5:00 PM).`
         : "") +
       departmentHint(appointment.department) +
       `\n\n${intakeDetails}`

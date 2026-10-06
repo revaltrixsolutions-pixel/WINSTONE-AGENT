@@ -545,10 +545,13 @@ function buildAppointmentInteractive(
   }
 
   if (!appointmentState.time) {
+    const availableTimes = appointmentTimeOptions.map(({ label }) => label).join(', ');
     return {
       type: 'list',
       body: {
-        text: `${prompt}\n\nChoose one of these five appointment times between 8:00 AM and 5:00 PM. The hospital team will confirm the appointment.`,
+        text: appointmentState.date && appointmentState.department
+          ? `${prompt}\n\nChoose one of the listed times below or reply with a time.`
+          : `${prompt}\n\nAvailable appointment times from 8:00 AM to 5:00 PM: ${availableTimes}.`,
       },
       action: {
         button: 'Choose a time',
@@ -969,7 +972,7 @@ async function sendBotReply(
           data: {
             patientId: patient.id,
             sender: 'BOT',
-            body: replyText,
+            body: interactive?.type === 'list' ? interactive.body.text : replyText,
             timestamp: new Date(),
           },
         });
@@ -983,6 +986,34 @@ async function sendBotReply(
           patientId: patient.id,
           error: error instanceof Error ? error.message : error,
         });
+
+        if (interactive) {
+          try {
+            const fallbackResult = await sendWhatsAppMessage({
+              recipientPhone: patient.phoneNumber,
+              messageText: replyText,
+            });
+
+            await prisma.messageLog.create({
+              data: {
+                patientId: patient.id,
+                sender: 'BOT',
+                body: replyText,
+                timestamp: new Date(),
+              },
+            });
+
+            console.info('[WhatsApp Appointment Prompt Text Fallback Sent]', {
+              patientId: patient.id,
+              messageId: fallbackResult.messageId,
+            });
+          } catch (fallbackError) {
+            console.error('[WhatsApp Appointment Prompt Text Fallback Failed]', {
+              patientId: patient.id,
+              error: fallbackError instanceof Error ? fallbackError.message : fallbackError,
+            });
+          }
+        }
       }
 
       return;
