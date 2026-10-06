@@ -5,5 +5,9 @@
     "build": "npm --prefix backend install && npm --prefix backend run build",
     "start": "npm --prefix backend start",
     "test": "npm --prefix backend test"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.9.1",
+    "prisma": "^7.9.1"
   }
 }

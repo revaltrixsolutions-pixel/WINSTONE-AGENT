@@ -1,1 +1,0 @@
-ALTER TABLE "Patient" ADD COLUMN "agentLastActiveAt" TIMESTAMP(3);
