@@ -11,6 +11,8 @@ exports.setHospitalPhoneSetting = setHospitalPhoneSetting;
 exports.getAppointmentReminders = getAppointmentReminders;
 const prisma_1 = require("../lib/prisma");
 const hospitalSettings_1 = require("../lib/hospitalSettings");
+const appointmentNotification_1 = require("../services/appointmentNotification");
+const aiBotService_1 = require("../services/aiBotService");
 const whatsappService_1 = require("../services/whatsappService");
 function parseSlotTime(value) {
     if (typeof value !== 'string' || !value.trim())
@@ -80,9 +82,9 @@ async function updateAppointmentStatus(req, res) {
     });
     if (status === 'CONFIRMED' && appointment.patient.phoneNumber) {
         const confirmation = [
-            '🏥 *Phadam Hospital Appointment Confirmed*',
+            '🏥 *Winston Medical Centre Appointment Confirmed*',
             '',
-            `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. Your appointment is confirmed.`,
+            `Hello ${appointment.patient.fullName || 'Patient'}, this is Winston Medical Centre. Your appointment is confirmed.`,
             '',
             `Service: ${appointment.specialty}`,
             `Date: ${appointment.slotTime.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'full' })}`,
@@ -98,7 +100,7 @@ async function updateAppointmentStatus(req, res) {
     }
     if (status === 'CANCELLED' && appointment.patient.phoneNumber) {
         const cancellation = [
-            'Hello ' + (appointment.patient.fullName || 'Patient') + ', this is Phadam Hospital. We are following up on your appointment.',
+            'Hello ' + (appointment.patient.fullName || 'Patient') + ', this is Winston Medical Centre. We are following up on your appointment.',
             '',
             'Your appointment has been cancelled.',
             `Service: ${appointment.specialty}`,
@@ -123,6 +125,7 @@ async function createPatientWithAppointment(req, res) {
         ? req.body.doctorName.trim()
         : 'To be assigned';
     const slotTime = parseSlotTime(req.body?.slotTime);
+    const listedFee = (0, aiBotService_1.getServicePrice)(specialty);
     if (!fullName || phoneNumber.length < 7 || !specialty || !slotTime) {
         return res.status(400).json({
             success: false,
@@ -139,14 +142,28 @@ async function createPatientWithAppointment(req, res) {
             patientId: patient.id,
             doctorName,
             specialty,
-            servicePrice: typeof req.body?.servicePrice === 'string' ? req.body.servicePrice : 'KSh 0',
-            consultationFee: typeof req.body?.consultationFee === 'string' ? req.body.consultationFee : 'KSh 1,000',
+            servicePrice: typeof req.body?.servicePrice === 'string' ? req.body.servicePrice : listedFee ?? 'To be confirmed',
+            consultationFee: typeof req.body?.consultationFee === 'string' ? req.body.consultationFee : listedFee ?? 'To be confirmed',
             slotTime,
             status: 'CONFIRMED',
         },
         include: { patient: true },
     });
-    return res.status(201).json({ success: true, patient, appointment });
+    let notification = { sent: false };
+    try {
+        const result = await (0, appointmentNotification_1.sendAppointmentNotification)(appointment);
+        notification = { sent: !result.simulated, simulated: result.simulated };
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        notification = { sent: false, error: errorMessage };
+        console.error('[Appointment WhatsApp Notification Failed]', {
+            appointmentId: appointment.id,
+            recipientPhone: '254708130100',
+            error: errorMessage,
+        });
+    }
+    return res.status(201).json({ success: true, patient, appointment, notification });
 }
 async function createAppointmentFollowUp(req, res) {
     const appointmentId = req.params.appointmentId?.trim();
@@ -195,7 +212,7 @@ async function triggerAppointmentFollowUp(req, res) {
     });
     if (appointment.patient.phoneNumber) {
         const message = [
-            `Hello ${appointment.patient.fullName || 'Patient'}, this is Phadam Hospital. We are following up on your appointment.`,
+            `Hello ${appointment.patient.fullName || 'Patient'}, this is Winston Medical Centre. We are following up on your appointment.`,
             '',
             `Appointment reference: ${appointment.id.slice(0, 8)}`,
             `Service: ${appointment.specialty}`,

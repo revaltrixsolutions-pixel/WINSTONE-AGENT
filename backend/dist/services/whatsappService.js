@@ -69,12 +69,18 @@ async function parseApiResponse(response) {
  * Free-form messages may only be sent during the active 24-hour customer
  * service window after the customer has messaged the business.
  */
-async function sendWhatsAppMessage({ recipientPhone, messageText, interactive, }) {
+async function sendWhatsAppMessage({ recipientPhone, messageText, interactive, template, }) {
     if (!recipientPhone?.trim()) {
         throw new Error('[WhatsApp API Error]: recipientPhone is required.');
     }
-    if (!messageText?.trim() && !interactive) {
-        throw new Error('[WhatsApp API Error]: messageText is required.');
+    if (!messageText?.trim() && !interactive && !template) {
+        throw new Error('[WhatsApp API Error]: messageText, interactive, or template content is required.');
+    }
+    if ([interactive, template].filter(Boolean).length > 1 || (messageText?.trim() && (interactive || template))) {
+        throw new Error('[WhatsApp API Error]: Provide exactly one WhatsApp message content type.');
+    }
+    if (template && (!template.name.trim() || !template.languageCode.trim())) {
+        throw new Error('[WhatsApp API Error]: A template name and language code are required.');
     }
     if (messageText && messageText.length > MAX_TEXT_MESSAGE_LENGTH) {
         throw new Error(`[WhatsApp API Error]: Message exceeds the ${MAX_TEXT_MESSAGE_LENGTH}-character WhatsApp text limit. Split the response before sending.`);
@@ -85,7 +91,7 @@ async function sendWhatsAppMessage({ recipientPhone, messageText, interactive, }
         console.warn('[WhatsApp SIMULATION: message not sent]', {
             recipientPhone: cleanPhone,
             messageId,
-            messageLength: messageText?.length || interactive?.body.text.length || 0,
+            messageLength: messageText?.length || interactive?.body.text.length || template?.bodyParameters.join('\n').length || 0,
         });
         return {
             recipientPhone: cleanPhone,
@@ -110,18 +116,35 @@ async function sendWhatsAppMessage({ recipientPhone, messageText, interactive, }
             body: JSON.stringify({
                 messaging_product: 'whatsapp',
                 to: cleanPhone,
-                ...(interactive
+                ...(template
                     ? {
-                        type: 'interactive',
-                        interactive,
-                    }
-                    : {
-                        type: 'text',
-                        text: {
-                            preview_url: false,
-                            body: messageText,
+                        type: 'template',
+                        template: {
+                            name: template.name,
+                            language: { code: template.languageCode },
+                            components: template.bodyParameters.length
+                                ? [{
+                                        type: 'body',
+                                        parameters: template.bodyParameters.map((text) => ({
+                                            type: 'text',
+                                            text,
+                                        })),
+                                    }]
+                                : [],
                         },
-                    }),
+                    }
+                    : interactive
+                        ? {
+                            type: 'interactive',
+                            interactive,
+                        }
+                        : {
+                            type: 'text',
+                            text: {
+                                preview_url: false,
+                                body: messageText,
+                            },
+                        }),
             }),
         });
         const data = await parseApiResponse(response);

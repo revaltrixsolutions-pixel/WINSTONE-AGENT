@@ -35,13 +35,6 @@ exports.appointmentServiceOptions = Array.from(new Set([
     "General Consultation",
     ...hospitalData_js_1.hospitalKnowledge.services,
     ...hospitalData_js_1.hospitalKnowledge.specialistClinics,
-    "Maternity",
-    "Pediatrics",
-    "Emergency",
-    "Laboratory",
-    "Pharmacy",
-    "Radiology",
-    "Physiotherapy",
 ])).map((service) => service.trim()).filter(Boolean);
 /**
  * Returns the standard consultation-fee quote for a bookable
@@ -56,9 +49,9 @@ exports.appointmentServiceOptions = Array.from(new Set([
 function getServicePrice(department) {
     if (!department)
         return null;
-    if (!exports.appointmentServiceOptions.includes(department))
-        return null;
-    return hospitalData_js_1.hospitalKnowledge.consultationFee;
+    const normalizedDepartment = department.toLowerCase();
+    const matchingFee = Object.entries(hospitalData_js_1.hospitalKnowledge.bookingFees).find(([service]) => service.toLowerCase() === normalizedDepartment);
+    return matchingFee?.[1] ?? null;
 }
 /* =========================================================
    CONVERSATION MEMORY
@@ -266,6 +259,10 @@ const SYMPTOM_PATTERNS = [
     /\bdiagnos(e|is|ed)\b/i,
     /\brash\b/i,
     /\bstomach ache|stomachache|abdominal pain\b/i,
+    /\b(acne|keloid|vitiligo|hair loss|dark spots?|skin tags?|warts?|ingrown nails?)\b/i,
+    /\bwhat causes?\b|\bwhy (?:is|are|do|does|am)\b/i,
+    /\bwhat treatment\b|\bhow (?:can|do) i treat\b|\bshould i take\b/i,
+    /\bdo you (?:treat|diagnose)|\bmedical advice\b/i,
 ];
 const URGENT_SYMPTOM_PATTERNS = [
     /\bchest pain\b/i,
@@ -280,6 +277,15 @@ const URGENT_SYMPTOM_PATTERNS = [
 function isMedicalSymptomRequest(message) {
     return SYMPTOM_PATTERNS.some((pattern) => pattern.test(message));
 }
+function isSupportedMedicalFaq(message) {
+    return ((/\bdo you treat\b/i.test(message) &&
+        /\b(skin|rash|acne|keloid|vitiligo|hair loss|dark spots?|skin tags?|warts?|ingrown nails?)\b/i.test(message)) ||
+        (/\bdo you remove\b/i.test(message) &&
+            /\b(skin tags?|keloids?|warts?|ingrown nails?)\b/i.test(message)) ||
+        /\bskin analysis\b/i.test(message) ||
+        /\bwhat causes? (?:the )?dark spots?\b/i.test(message) ||
+        /\bwhat causes? acne keloidalis(?: nuchae)?\b/i.test(message));
+}
 function isUrgentSymptomRequest(message) {
     return URGENT_SYMPTOM_PATTERNS.some((pattern) => pattern.test(message));
 }
@@ -292,9 +298,9 @@ function formatMedicalAdviceRedirect(name, message) {
             `📞 *Emergency Contacts*\n${contactLines}\n\n` +
             `If you or someone with you is in immediate danger, please contact emergency services or go to the nearest hospital now.`);
     }
-    return (`${name}, I'm not able to give medical advice or a diagnosis over chat — for your safety, please speak directly with one of our clinicians.\n\n` +
+    return (`${name}, medical questions need assessment by a clinician. I can’t diagnose or recommend treatment over chat. Please speak directly with our staff for guidance.\n\n` +
         `📞 *Talk to Our Team*\n${contactLines}\n\n` +
-        `You can also reply "book appointment" and I'll help you schedule a consultation, or "menu" to see what else I can help with.`);
+        `You can also reply "book appointment" and I'll help you request a consultation.`);
 }
 /* =========================================================
    CONTROL COMMANDS (cancel / restart / menu)
@@ -317,21 +323,35 @@ function isMenuCommand(message) {
 ========================================================= */
 const DEPARTMENTS = [
     {
-        name: "Maternity",
+        name: "Well Baby Clinic",
         patterns: [
-            /\bmaternity\b/i,
-            /\bantenatal\b/i,
-            /\bpostnatal\b/i,
-            /\bantenatal clinic\b/i,
-            /\bpostnatal clinic\b/i,
-            /\banc\b/i,
-            /\bdelivery\b/i,
-            /\blabou?r\b/i,
-            /\bpregnan(t|cy)\b/i,
-            /\bc[\s-]?section\b/i,
-            /\bcaesarean\b/i,
-            /\bcesarean\b/i,
+            /\bwell[ -]?baby\b/i,
+            /\bbaby clinic\b/i,
+            /\binfant clinic\b/i,
         ],
+    },
+    {
+        name: "Antenatal Clinic",
+        patterns: [
+            /\bantenatal\b/i,
+            /\bprenatal\b/i,
+            /\bantenatal clinic\b/i,
+            /\banc\b/i,
+            /\bpregnan(t|cy)\b/i,
+            /\bmaternity\b/i,
+        ],
+    },
+    {
+        name: "Family Planning Services",
+        patterns: [/\bfamily planning\b/i, /\bbirth control\b/i, /\bcontraception\b/i],
+    },
+    {
+        name: "Ultrasound Services",
+        patterns: [/\bultrasound\b/i, /\bsonography\b/i, /\bpregnancy scan\b/i],
+    },
+    {
+        name: "ECG/ECHO",
+        patterns: [/\becg\b/i, /\becho\b/i, /\belectrocardiogram\b/i, /\bechocardiogram\b/i],
     },
     {
         name: "General Consultation",
@@ -376,8 +396,6 @@ const DEPARTMENTS = [
             /\bkid(s)?\b/i,
             /\bbaby\b/i,
             /\bbabies\b/i,
-            /\bwell-baby\b/i,
-            /\bwell baby\b/i,
             /\bimmunization\b/i,
         ],
     },
@@ -519,9 +537,23 @@ function extractDepartment(message) {
     const exactService = exports.appointmentServiceOptions.find((service) => normalizedMessage.includes(service.toLowerCase()));
     if (exactService)
         return exactService;
+    const departmentAliases = {
+        Maternity: "Antenatal Clinic",
+        "Obstetrics and Gynecology": "Gynecology",
+        Pediatrics: "Pediatric Clinic",
+        Emergency: "Urgent Care Centre",
+        Laboratory: "Laboratory Services",
+        "Surgical Outpatient": "Minor Surgery",
+        Dermatology: "Dermatologist",
+        Nutrition: "Nutritionist",
+        "Psychology and Counselling": "Counseling",
+    };
     for (const department of DEPARTMENTS) {
         if (department.patterns.some((pattern) => pattern.test(message))) {
-            return department.name;
+            const resolvedName = departmentAliases[department.name] ?? department.name;
+            const bookableOption = exports.appointmentServiceOptions.find((service) => service.toLowerCase() === resolvedName.toLowerCase());
+            if (bookableOption)
+                return bookableOption;
         }
     }
     return undefined;
@@ -692,7 +724,7 @@ function departmentPriceLine(department) {
         return "";
     const price = getServicePrice(department);
     return price
-        ? `Great, ${department} it is! Standard consultation fee: ${price} (this excludes tests, procedures, or medication). `
+        ? `Great, ${department} it is! Listed fee: ${price} (tests, procedures, or medication may be charged separately). `
         : `Great, ${department} it is! `;
 }
 function fullDepartmentListBlock() {
@@ -732,8 +764,8 @@ function generateAppointmentCollectionPrompt(patientName, appointment) {
         `1. Department or clinic\n` +
         `2. Preferred date\n` +
         `3. Preferred time\n\n` +
-        `For example: "Dental appointment on Friday at 2pm". ` +
-        `I’ll guide you through the booking step by step, and once a department is selected I’ll confirm the standard fee before we continue.`);
+        `For example: "Physiotherapy appointment on Friday at 2pm". ` +
+        `I’ll guide you through the booking step by step and share any listed fee for the service you choose.`);
 }
 /* =========================================================
    APPOINTMENT CONVERSATION STATE (standalone helper API)
@@ -801,13 +833,13 @@ function renderAppointmentSummary(name, appointment) {
         `• Department: ${appointment.department}\n` +
         `• Date: ${appointment.date}\n` +
         `• Time: ${appointment.time}\n` +
-        (price ? `• Standard consultation fee: ${price}\n` : '') +
-        `\nNote: this covers a standard consultation only — lab tests, procedures, admission, or medication are charged separately and confirmed by reception.\n\n` +
-        `Is this correct? Reply *Yes* to confirm or *No* to change it.`);
+        (price ? `• Listed fee: ${price}\n` : '') +
+        `\nThe hospital team will confirm availability and any additional charges.\n\n` +
+        `Are these details correct? Reply *Yes* to submit the request or *No* to change them.`);
 }
 function generateBookingReference() {
     const random = Math.random().toString(36).slice(2, 8).toUpperCase();
-    return `PH-${random}`;
+    return `WMC-${random}`;
 }
 /**
  * Final success message sent once the patient confirms their appointment
@@ -821,14 +853,14 @@ function renderAppointmentSuccess(name, appointment) {
     const contactLines = hospitalData_js_1.hospitalKnowledge.locations
         .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(", ")}`)
         .join("\n");
-    return (`✅ *Appointment Confirmed*\n\n` +
-        `Thank you, ${name} — your appointment request has been received and sent to our hospital team for processing.\n\n` +
+    return (`✅ *Appointment Request Received*\n\n` +
+        `Thank you, ${name} — your request has been sent to the Winston Medical Centre team for processing.\n\n` +
         `• Booking reference: *${reference}*\n` +
         `• Department: ${appointment.department}\n` +
         `• Date: ${appointment.date}\n` +
         `• Time: ${appointment.time}\n` +
-        (price ? `• Standard consultation fee: ${price} (excludes tests, procedures, or medication)\n` : '') +
-        `\nOur staff will reach out to finalize your slot. If you need to reach us sooner, please call your nearest branch:\n` +
+        (price ? `• Listed fee: ${price} (additional services may cost extra)\n` : '') +
+        `\nOur staff will contact you to confirm availability. If you need to reach us sooner, please call Winston Medical Centre:\n` +
         contactLines +
         `\n\nSay "menu" any time if you need anything else.`);
 }
@@ -850,15 +882,14 @@ function getKenyaGreeting(date = new Date()) {
 /* =========================================================
    BOT COPY
 ========================================================= */
-const NAME_PROMPT = "Welcome to Phadam Hospital. Before we continue, please tell me your full name. What is your name?";
+const NAME_PROMPT = "Welcome to Winston Medical Centre. Before we continue, please tell me your full name. What is your name?";
 const MENU_PROMPT = (name) => `${getKenyaGreeting()}, ${name}. How can I help you today?\n\n` +
     `You can ask me about:\n` +
     `• Our services, departments, or specialist clinics\n` +
-    `• Surgical procedure prices (e.g. "cost of a caesarean section"), or say "price list" for the full list\n` +
-    `• Consultation fees\n` +
-    `• Locations and contacts (Nasra or Umoja)\n` +
-    `• SHA / insurance partners\n` +
-    `• Booking an appointment\n` +
+    `• Clinic, outpatient, urgent-care, and laboratory services\n` +
+    `• Listed consultation, clinic, ultrasound, and laboratory fees (say "price list")\n` +
+    `• Location, phone numbers, email, and directions\n` +
+    `• Appointment requests and booking details\n` +
     `• Speaking with our hospital staff\n\n` +
     `If you're feeling unwell or need medical advice, just tell me and I'll connect you directly with our clinical team instead of guessing.`;
 function isGreeting(message) {
@@ -960,8 +991,7 @@ function answerKnowledgeBase(name, message) {
         return null;
     const looksStructured = /^[\p{Emoji}\p{So}]/u.test(trimmed) || trimmed.includes("\n\n•") || trimmed.includes("\n•");
     if (looksStructured) {
-        const stripped = trimmed.replace(/^[\p{Emoji}\p{So}\s]+/u, '').replace(/^\*+|\*+$/g, '');
-        return `Yes, ${name}. ${stripped}`;
+        return trimmed;
     }
     if (/^(yes|no)\b/i.test(trimmed)) {
         return trimmed.replace(/^(yes|no)\b\s*,?/i, (_, prefix) => `${prefix}, ${name}`);
@@ -975,45 +1005,45 @@ function getCommonPatientReply(name, message) {
         { pattern: /\b(okay|ok|alright|sure|nice|great|perfect|sounds good|all good|yes please)\b/i, reply: `${name}, great. I can help with the next step.` },
         { pattern: /\b(show my appointment history|appointment history|my appointment history|show my appointments|my appointments|upcoming appointments|scheduled appointments)\b/i, reply: `${name}, I can help with your appointment history. Please tell me if you want your upcoming bookings, past visits, or to reschedule one of them.` },
         { pattern: /\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment)\b/i, reply: `${name}, no problem. Please share the new date and time, or tell me the department, and I’ll help update your appointment.` },
-        { pattern: /\b(available appointment|available appointments|next available slot|next slots|open times|what slots are free)\b/i, reply: `${name}, I can help check the available slots. Please tell me the department and preferred day, and I’ll suggest the next open times.` },
+        { pattern: /\b(available appointment|available appointments|next available slot|next slots|open times|what slots are free)\b/i, reply: `${name}, I can't verify live appointment slots here. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to confirm availability.` },
         { pattern: /\b(i am running late|i'm late|im late|running late)\b/i, reply: `${name}, no problem. Please let our front desk know as soon as you can, and we’ll do our best to keep your appointment updated.` },
         { pattern: /\b(can you confirm my appointment|please confirm my appointment|confirm my appointment|appointment confirmation|check my appointment)\b/i, reply: `${name}, I can help with that. Please tell me the department, date, or visit you want confirmed, and I’ll check the details for you.` },
-        { pattern: /\b(is there a doctor available now|doctor available now|is a doctor available|any doctor available)\b/i, reply: `${name}, I can help with doctor availability. Please tell me the department you need and your preferred day or time, and I’ll guide you toward the right appointment or booking option.` },
+        { pattern: /\b(is there a doctor available now|doctor available now|is a doctor available|any doctor available)\b/i, reply: `${name}, I don't have live clinician availability. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to check.` },
         { pattern: /\b(i need a female doctor|female doctor|woman doctor|lady doctor)\b/i, reply: `${name}, we can help with that. Please tell me the department or service you need, and I’ll guide you to the most suitable doctor or booking option.` },
         { pattern: /\b(i need to speak to a doctor|speak to the doctor|talk to the doctor|talk to a doctor|need a doctor)\b/i, reply: `${name}, I can connect you with our clinical team. Please tell me the department or concern, and I’ll guide you to the right next step.` },
-        { pattern: /\b(where are you located|where is the clinic|clinic location|branch location|where is your hospital|your location)\b/i, reply: `${name}, our hospital has branches in Nasra and Umoja. I can share the right contact details and directions if you’d like.` },
-        { pattern: /\b(when are you open|what time do you open|opening hours|working hours|are you open on weekends|weekend opening hours)\b/i, reply: `${name}, our teams are available during normal clinic hours, and I can help you with appointments or the best time to visit.` },
-        { pattern: /\b(what services do you have|what departments do you have|services available|departments available|what clinics do you have)\b/i, reply: `${name}, we offer general consultation, maternity, dental, pediatric, obstetrics and gynecology, lab services, and more. Tell me what you need and I’ll guide you.` },
+        { pattern: /\b(where are you located|where is the clinic|clinic location|branch location|where is your hospital|your location)\b/i, reply: `${name}, Winston Medical Centre is at Standard Drive Estate, along Nyayo Gate B Road, about 400 metres from Fedha Stage in Tassia Estate, Nairobi. Call 0726 244040 or 0708 130100.` },
+        { pattern: /\b(when are you open|what time do you open|opening hours|working hours|are you open on weekends|weekend opening hours)\b/i, reply: `${name}, we are open daily, Monday to Saturday from 8:00 AM to 5:00 PM. Sunday and public-holiday appointments can be arranged by calling 0726 244040 or 0708 130100.` },
+        { pattern: /\b(what services do you have|what departments do you have|services available|departments available|what clinics do you have)\b/i, reply: `${name}, Winston Medical Centre offers General Outpatient Care, General Medicine, Minor Surgery, Gynecology, urgent care, pharmacy, laboratory, antenatal and well-baby clinics, ultrasound, counseling, maternal and child healthcare, physiotherapy, ECG/ECHO, pediatric care, circumcision, and family planning.` },
         { pattern: /\b(i want to cancel|cancel my appointment|cancel appointment|need to cancel|i need to cancel)\b/i, reply: `${name}, no problem. I can help you cancel or reschedule. Please tell me the department and the day or time you’d like to change.` },
-        { pattern: /\b(do you accept sha|accept sha|insurance|nhif|do you take insurance|do you accept insurance)\b/i, reply: `${name}, yes, we do accept SHA and other major insurance arrangements. Tell me which cover you have and I’ll guide you on the next step.` },
+        { pattern: /\b(do you accept sha|accept sha|insurance|nhif|do you take insurance|do you accept insurance)\b/i, reply: `${name}, our accepted insurance partners include GA Insurance, Kenyan Alliance, and MTIBA under GA Insurance. Dermatology services are cash-only and do not accept SHA. Please call 0726 244040 or 0708 130100 to confirm cover for your service.` },
         { pattern: /\b(how do i book|how can i book|how to book|how do i schedule|how to schedule)\b/i, reply: `${name}, I can help with that. Just tell me the department, preferred date, and time, and I’ll prepare the booking details for you.` },
-        { pattern: /\b(do you have same day appointment|same day appointment|can i get a same day appointment|same day booking)\b/i, reply: `${name}, same-day availability depends on the department and doctor schedule. Please tell me the department and preferred time, and I’ll check the best option for you.` },
-        { pattern: /\b(i need urgent care|urgent care|emergency|very urgent|i need help now)\b/i, reply: `${name}, if this is urgent or you need immediate medical help, please call the hospital directly or visit the nearest branch as quickly as possible. I can also help you book the right service.` },
+        { pattern: /\b(do you have same day appointment|same day appointment|can i get a same day appointment|same day booking)\b/i, reply: `${name}, I can't verify same-day availability here. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to confirm.` },
+        { pattern: /\b(i need urgent care|urgent care|emergency|very urgent|i need help now)\b/i, reply: `${name}, Winston Medical Centre has an Urgent Care Centre with a Local Injuries Unit and Medical Assessment Unit. For urgent help, call 0726 244040 or 0708 130100.` },
         { pattern: /\b(i am not feeling well|not feeling well|i feel unwell|i feel sick|i'm sick)\b/i, reply: `${name}, I’m sorry to hear that. Please tell me the main concern or department you need, and I’ll guide you to the right support or appointment.` },
-        { pattern: /\b(can i come tomorrow|come tomorrow|can i book tomorrow|book for tomorrow)\b/i, reply: `${name}, yes, that’s usually possible. Please tell me the department and preferred time, and I’ll help you set it up.` },
+        { pattern: /\b(can i come tomorrow|come tomorrow|can i book tomorrow|book for tomorrow)\b/i, reply: `${name}, I can submit an appointment request for tomorrow, but the hospital team must confirm availability. Which clinic or service and what time would you prefer?` },
         { pattern: /\b(i have pain|mild pain|severe pain|i am in pain|i have a headache|i have stomach pain)\b/i, reply: `${name}, I’m sorry you’re in pain. Please let me know the department or concern, and I’ll guide you to the right care or appointment option.` },
         { pattern: /\b(can i get a referral|need a referral|i need a referral letter|referral)\b/i, reply: `${name}, I can help with the next step. Please tell me the department or doctor you need, and I’ll guide you on the referral process.` },
-        { pattern: /\b(what is the cost|what does it cost|how much does it cost|what is the consultation fee|consultation fee)\b/i, reply: `${name}, our standard consultation fee is KSh 1,000. If you want a specific department or procedure price, tell me the service and I’ll give the exact amount.` },
-        { pattern: /\b(where is the nearest branch|nearest branch|which branch is closest|closest branch)\b/i, reply: `${name}, we have branches in Nasra and Umoja. Tell me which area is convenient for you and I’ll guide you to the most suitable one.` },
+        { pattern: /\b(what is the cost|what does it cost|how much does it cost|what is the consultation fee|consultation fee)\b/i, reply: `${name}, a general consultation is ${hospitalData_js_1.hospitalKnowledge.consultationFee}. Fees vary by service; tell me the clinic or test for its listed price, or say "price list" for all supplied prices.` },
+        { pattern: /\b(where is the nearest branch|nearest branch|which branch is closest|closest branch)\b/i, reply: `${name}, Winston Medical Centre is at Standard Drive Estate, along Nyayo Gate B Road, about 400 metres from Fedha Stage in Tassia Estate, Nairobi.` },
         { pattern: /\b(can i book online|book online|online booking|do you have online booking)\b/i, reply: `${name}, yes, you can start the booking with me here. Just share the department, date, and preferred time, and I’ll help you complete it.` },
         { pattern: /\b(i need a follow up|follow up appointment|need follow up|i want a follow up)\b/i, reply: `${name}, I can help you arrange a follow-up. Please tell me the department and the day or time that works best for you.` },
         { pattern: /\b(please call me back|call me back|can you call me|call me)\b/i, reply: `${name}, of course. Please share the best time or number to reach you, and our team will get in touch as soon as possible.` },
         { pattern: /\b(i am here|i'm here|arrived|here for appointment)\b/i, reply: `${name}, thank you for letting me know. Please check in with the reception desk or tell me the department and time of your appointment so I can help.` },
         { pattern: /\b(what is the procedure|what does the procedure involve|procedure details|what happens in the procedure)\b/i, reply: `${name}, I’d be happy to explain the process. Please tell me the service or procedure name, and I’ll guide you with the right information.` },
         { pattern: /\b(can you help me choose a doctor|help me choose a doctor|which doctor should i choose|doctor recommendation|recommended doctor)\b/i, reply: `${name}, I can help narrow it down. Please tell me the department, your concern, and whether you prefer a male or female doctor, and I’ll guide you.` },
-        { pattern: /\b(do you have a doctor for my child|pediatrician|child doctor|doctor for my baby|kids doctor)\b/i, reply: `${name}, yes, we can help with pediatric consultations and child health visits. Please tell me the concern or age, and I’ll guide you to the right department.` },
+        { pattern: /\b(do you have a doctor for my child|pediatrician|paediatrician|child doctor|doctor for my baby|kids doctor)\b/i, reply: `${name}, Winston Medical Centre has a Pediatric Clinic and Well Baby Clinic. The listed paediatrician fee is KSh 1,500; please contact the hospital to confirm clinic availability.` },
         { pattern: /\b(i want to reschedule|reschedule my appointment|need to reschedule|change my appointment)\b/i, reply: `${name}, no problem. I can help you reschedule. Please share the new day and time, or tell me the department and I’ll help update it.` },
-        { pattern: /\b(are you open on weekends|weekend appointments|can i book on saturday|can i book on sunday)\b/i, reply: `${name}, weekend availability depends on the department and clinic schedule. Please tell me the preferred day and department, and I’ll guide you from there.` },
-        { pattern: /\b(maternity|pregnancy|antenatal|delivery|obstetrics|gynecology)\b/i, reply: `${name}, we can help with maternity and obstetrics services. Please tell me whether you’d like an appointment for antenatal care, delivery support, or a general consultation.` },
+        { pattern: /\b(are you open on weekends|weekend appointments|can i book on saturday|can i book on sunday)\b/i, reply: `${name}, we are open Monday to Saturday, 8:00 AM to 5:00 PM. Sunday and public-holiday appointments can be arranged by calling 0726 244040 or 0708 130100.` },
+        { pattern: /\b(maternity|pregnancy|antenatal|delivery|obstetrics|gynecology)\b/i, reply: `${name}, Winston Medical Centre offers an Antenatal Clinic, Maternal & Child Healthcare Clinic, and Gynecology. Which service would you like to ask about or request an appointment for?` },
         { pattern: /\b(do you have lab tests|lab tests|blood test|labs|laboratory services)\b/i, reply: `${name}, yes, we do offer laboratory services and diagnostic tests. I can help you identify the right department or service for your request.` },
         { pattern: /\b(i am unable to come|can't make it|cannot come|i can’t make it|unable to attend)\b/i, reply: `${name}, I’m sorry to hear that. Please let me know if you’d like to reschedule or cancel, and I’ll help with the next step.` },
-        { pattern: /\b(what does sha cover|does sha cover this|sha cover|insurance coverage)\b/i, reply: `${name}, SHA coverage varies by service and facility policy. Please tell me the department or service you need, and I’ll guide you on the most relevant coverage details.` },
+        { pattern: /\b(what does sha cover|does sha cover this|sha cover|insurance coverage)\b/i, reply: `${name}, we do not accept SHA for dermatology services, which are cash-only. For cover for another service, please call 0726 244040 or 0708 130100 to check.` },
         { pattern: /\b(can my family come|family appointment|book for my family|my husband|my wife|my child)\b/i, reply: `${name}, yes, we can help with family and dependent appointments. Please tell me the department and the number of patients, and I’ll guide you through the booking.` },
         { pattern: /\b(i need an appointment for my mother|appointment for my father|visit for my parent|for my family member)\b/i, reply: `${name}, absolutely. Please share the department, the patient’s name if it’s different, and the preferred date or time, and I’ll help you arrange it.` },
         { pattern: /\b(hey there|hi there|hello there|good morning|good afternoon|good evening)\b/i, reply: `${name}, hello. How can I help you today?` },
         { pattern: /\b(i am here for consultation|for consultation|for check up|check up appointment|doctor visit)\b/i, reply: `${name}, I can help with that. Please tell me the department and your preferred time, and I’ll guide you through the booking.` },
         { pattern: /\b(i need a doctor for my pregnancy|pregnancy checkup|prenatal care|antenatal appointment)\b/i, reply: `${name}, we can help with prenatal and maternity care. Please tell me whether this is an antenatal checkup or a general obstetrics visit, and I’ll guide you appropriately.` },
-        { pattern: /\b(dental|teeth|tooth pain|dentist)\b/i, reply: `${name}, we can help with dental consultations and appointments. Please tell me the issue or preferred day and time so I can guide you to the right booking.` },
+        { pattern: /\b(dental|teeth|tooth pain|dentist)\b/i, reply: `${name}, dental care is not listed among the services I have for Winston Medical Centre. Please call 0726 244040 or 0708 130100 to confirm whether it is available.` },
     ];
     for (const entry of replyMap) {
         if (entry.pattern.test(text)) {
@@ -1037,6 +1067,12 @@ function processTurn(state, message, isReturning) {
         };
     }
     if ((isGreeting(message) || isMenuCommand(message)) && !isBookingIntent(message)) {
+        if (/^hello[?!.\s]*$/i.test(message.trim())) {
+            return {
+                reply: `Hello too, ${name}! Welcome. How can I help you today? Do you have any enquiry?`,
+                state: { ...state, stage: "menu" },
+            };
+        }
         return {
             reply: isReturning && isGreeting(message) ? `Welcome back, ${name}. ${MENU_PROMPT(name)}` : MENU_PROMPT(name),
             state: { ...state, stage: "menu" },
@@ -1047,6 +1083,27 @@ function processTurn(state, message, isReturning) {
             reply: `No problem, ${name}. I've cleared that request. ${MENU_PROMPT(name)}`,
             state: { ...state, stage: "menu", appointment: {} },
         };
+    }
+    if (/\b(sunday|public holidays?)\b/i.test(message) &&
+        /\b(appointment|book|open|visit|available)\b/i.test(message)) {
+        const answer = answerKnowledgeBase(name, message);
+        if (answer) {
+            return { reply: answer, state: { ...state, stage: "menu" } };
+        }
+    }
+    if (/\b(?:online|virtual)\s+(?:consultation|consult)\b|\b(?:consultation|consult)\s+(?:online|virtual)\b/i.test(message) &&
+        !/\b(book|schedule|appointment)\b/i.test(message)) {
+        const answer = answerKnowledgeBase(name, message);
+        if (answer) {
+            return { reply: answer, state: { ...state, stage: "menu" } };
+        }
+    }
+    if (/\b(?:how much|price|cost|fee|charge|charges|pricing)\b/i.test(message) &&
+        /\b(?:consult(?:ation)?|clinic|dermatolog|skin specialist|gynecolog|gynaecolog|paediatrician|pediatrician|nutritionist)\b/i.test(message)) {
+        const answer = answerKnowledgeBase(name, message);
+        if (answer) {
+            return { reply: answer, state };
+        }
     }
     if (isAppointmentHistoryRequest(message)) {
         return {
@@ -1062,6 +1119,7 @@ function processTurn(state, message, isReturning) {
     if (state.stage !== "collecting_appointment" &&
         state.stage !== "confirming_appointment" &&
         !isBookingIntent(message) &&
+        !isSupportedMedicalFaq(message) &&
         isMedicalSymptomRequest(message)) {
         return {
             reply: formatMedicalAdviceRedirect(name, message),
@@ -1124,7 +1182,7 @@ function processTurn(state, message, isReturning) {
     }
     if (/\b(cost|price|fee|charges|how much|consultation fee|pricing|what does it cost|how much is it|what is the cost|what is the price)\b/i.test(message)) {
         return {
-            reply: `${name}, the standard consultation fee is KSh 1,000. If you want a specific department or procedure price, tell me the service and I’ll give the exact amount.`,
+            reply: `${name}, a general consultation is ${hospitalData_js_1.hospitalKnowledge.consultationFee}. Fees vary by service; tell me the clinic or test for its listed price, or say "price list" for supplied prices.`,
             state,
         };
     }
@@ -1136,13 +1194,13 @@ function processTurn(state, message, isReturning) {
     }
     if (/\b(open|opening|hours|working hours|when are you open|what time do you open|clinic hours|operating hours|available|availability|are you open|is the clinic open)\b/i.test(message)) {
         return {
-            reply: `${name}, our hospital teams are available for appointments and support during normal clinic hours, and I can help you book a consultation. If you want, tell me the department and preferred day or time and I’ll help schedule it.`,
+            reply: `${name}, we are open daily, Monday to Saturday from 8:00 AM to 5:00 PM. Sunday and public-holiday appointments can be arranged by calling 0726 244040 or 0708 130100.`,
             state: { ...state, stage: "menu" },
         };
     }
     if (/\b(insurance|sha|nhif|coverage|cover|medical cover|accept insurance|do you accept sha|do you accept insurance)\b/i.test(message)) {
         return {
-            reply: `${name}, we do accept SHA and other major insurance partners. Tell me which cover you have, and I can guide you on the next step or help you book the appointment.`,
+            reply: `${name}, our accepted insurance partners include GA Insurance, Kenyan Alliance, and MTIBA under GA Insurance. Dermatology services are cash-only and do not accept SHA. Please call 0726 244040 or 0708 130100 to confirm cover for your service.`,
             state: { ...state, stage: "menu" },
         };
     }
@@ -1160,19 +1218,22 @@ function processTurn(state, message, isReturning) {
     }
     if (/\b(reschedule my appointment|reschedule appointment|need to reschedule|change my appointment|change appointment|move my appointment)\b/i.test(message)) {
         return {
-            reply: `${name}, I can help reschedule it. Please share the new day and time, or tell me the department and I’ll guide you to the next available appointment.`,
+            reply: `${name}, I can help submit a reschedule request. Please share the new date and time; the hospital team must confirm availability.`,
             state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
         };
     }
     if (/\b(available appointment|available appointments|next available slot|open slots|available slots|next available appointment)\b/i.test(message)) {
         return {
-            reply: `${name}, I can suggest the next available appointment slots. Please give me the department and preferred day, and I’ll recommend the earliest open times.`,
+            reply: `${name}, I can't verify live appointment slots here. Please call Winston Medical Centre on 0726 244040 or 0708 130100 to confirm availability.`,
             state: { ...state, stage: "collecting_appointment", appointment: state.appointment },
         };
     }
     return {
-        reply: `I'm sorry, ${name}, I don't have that information on hand. ` +
-            `I can connect you with our hospital staff or a doctor, or we can look at services, prices, locations, or insurance instead.`,
+        reply: `${name}, I couldn’t match that to a specific answer. Did you mean ${(0, hospitalData_js_1.getKnowledgeSuggestions)(message).join(', or ')}? ` +
+            `Tell me which topic you mean and I’ll guide you. For medical questions, please contact our doctor or staff directly:\n` +
+            hospitalData_js_1.hospitalKnowledge.locations
+                .map((location) => `• ${location.branch}: ${location.phoneNumbers.join(', ')}`)
+                .join('\n'),
         state,
     };
 }

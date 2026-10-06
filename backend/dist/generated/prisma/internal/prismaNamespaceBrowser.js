@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.UserScalarFieldEnum = exports.MessageLogScalarFieldEnum = exports.AppointmentScalarFieldEnum = exports.PatientScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.UserScalarFieldEnum = exports.MessageLogScalarFieldEnum = exports.ReminderDeliveryScalarFieldEnum = exports.AppointmentFollowUpScalarFieldEnum = exports.AppointmentScalarFieldEnum = exports.PatientScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -77,6 +77,8 @@ exports.AnyNull = runtime.AnyNull;
 exports.ModelName = {
     Patient: 'Patient',
     Appointment: 'Appointment',
+    AppointmentFollowUp: 'AppointmentFollowUp',
+    ReminderDelivery: 'ReminderDelivery',
     MessageLog: 'MessageLog',
     User: 'User'
 };
@@ -97,6 +99,7 @@ exports.PatientScalarFieldEnum = {
     isVerified: 'isVerified',
     chatStatus: 'chatStatus',
     assignedTo: 'assignedTo',
+    agentLastActiveAt: 'agentLastActiveAt',
     createdAt: 'createdAt'
 };
 exports.AppointmentScalarFieldEnum = {
@@ -109,6 +112,21 @@ exports.AppointmentScalarFieldEnum = {
     slotTime: 'slotTime',
     status: 'status',
     createdAt: 'createdAt'
+};
+exports.AppointmentFollowUpScalarFieldEnum = {
+    id: 'id',
+    appointmentId: 'appointmentId',
+    authorId: 'authorId',
+    authorName: 'authorName',
+    note: 'note',
+    createdAt: 'createdAt'
+};
+exports.ReminderDeliveryScalarFieldEnum = {
+    id: 'id',
+    appointmentId: 'appointmentId',
+    kind: 'kind',
+    recipientType: 'recipientType',
+    sentAt: 'sentAt'
 };
 exports.MessageLogScalarFieldEnum = {
     id: 'id',

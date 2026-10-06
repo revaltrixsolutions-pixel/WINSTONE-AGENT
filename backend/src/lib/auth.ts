@@ -15,15 +15,32 @@ export type PublicUser = {
 
 type TokenPayload = PublicUser & { iat: number };
 
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() ||
-  'wilsonnyaanga2@gmail.com';
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD?.trim() ||
-  '38895790@WO';
-const SUPER_ADMIN_NAME = process.env.SUPER_ADMIN_NAME?.trim() || 'Wilson Nyaanga';
 const AUTH_SECRET = process.env.AUTH_SECRET?.trim() || crypto
   .createHash('sha256')
-  .update(`${SUPER_ADMIN_EMAIL}:${SUPER_ADMIN_PASSWORD}:${process.env.DATABASE_URL || 'phadam'}`)
+  .update(
+    `${process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || ''}:${process.env.SUPER_ADMIN_PASSWORD || ''}:${process.env.DATABASE_URL || 'phadam'}`,
+  )
   .digest('hex');
+
+export type SuperAdminConfig = {
+  email: string;
+  name: string;
+  password: string;
+};
+
+export function getSuperAdminConfig(): SuperAdminConfig {
+  const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const name = process.env.SUPER_ADMIN_NAME?.trim();
+  const password = process.env.SUPER_ADMIN_PASSWORD?.trim();
+
+  if (!email || !email.includes('@') || !name || !password || password.length < 8) {
+    throw new Error(
+      'Configure SUPER_ADMIN_EMAIL, SUPER_ADMIN_NAME, and SUPER_ADMIN_PASSWORD (at least 8 characters).',
+    );
+  }
+
+  return { email, name, password };
+}
 
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -125,7 +142,8 @@ export async function createUser(input: { name: string; email: string; password:
 }
 
 export async function ensureSuperAdmin(): Promise<void> {
-  const existing = await findUserByEmail(SUPER_ADMIN_EMAIL);
+  const { email, name, password } = getSuperAdminConfig();
+  const existing = await findUserByEmail(email);
   if (existing) {
     if (existing.role !== 'SUPER_ADMIN') {
       await prisma.user.update({ where: { id: existing.id }, data: { role: 'SUPER_ADMIN' } });
@@ -135,9 +153,9 @@ export async function ensureSuperAdmin(): Promise<void> {
 
   await prisma.user.create({
     data: {
-      name: SUPER_ADMIN_NAME,
-      email: SUPER_ADMIN_EMAIL,
-      password: hashPassword(SUPER_ADMIN_PASSWORD),
+      name,
+      email,
+      password: hashPassword(password),
       role: 'SUPER_ADMIN',
       isActive: true,
     },

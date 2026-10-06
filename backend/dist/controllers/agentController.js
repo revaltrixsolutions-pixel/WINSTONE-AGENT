@@ -92,6 +92,7 @@ async function assignChat(req, res) {
             data: {
                 chatStatus: 'AGENT_ACTIVE',
                 assignedTo: staffUser.name,
+                agentLastActiveAt: new Date(),
             },
         });
         console.info('[Agent Chat Assigned]', {
@@ -182,6 +183,7 @@ async function sendAgentReply(req, res) {
                 data: {
                     chatStatus: 'AGENT_ACTIVE',
                     assignedTo: patient.assignedTo || trimmedAgentName,
+                    agentLastActiveAt: new Date(),
                 },
             }),
         ]);

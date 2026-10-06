@@ -1,11 +1,9 @@
 import 'dotenv/config';
 
 import { prisma } from '../src/lib/prisma';
-import { ensureSuperAdmin } from '../src/lib/auth';
+import { ensureSuperAdmin, getSuperAdminConfig } from '../src/lib/auth';
 
-const superAdminEmail =
-  process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() ||
-  'wilsonnyaanga2@gmail.com';
+const { email: superAdminEmail } = getSuperAdminConfig();
 
 async function resetData(): Promise<void> {
   await prisma.$transaction([

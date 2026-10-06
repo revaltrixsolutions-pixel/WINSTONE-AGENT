@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireSuperAdmin = exports.requireAuth = void 0;
+exports.getSuperAdminConfig = getSuperAdminConfig;
 exports.hashPassword = hashPassword;
 exports.comparePassword = comparePassword;
 exports.createUserToken = createUserToken;
@@ -15,15 +16,19 @@ exports.createUser = createUser;
 exports.ensureSuperAdmin = ensureSuperAdmin;
 const node_crypto_1 = __importDefault(require("node:crypto"));
 const prisma_1 = require("./prisma");
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() ||
-    'wilsonnyaanga2@gmail.com';
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD?.trim() ||
-    '38895790@WO';
-const SUPER_ADMIN_NAME = process.env.SUPER_ADMIN_NAME?.trim() || 'Wilson Nyaanga';
 const AUTH_SECRET = process.env.AUTH_SECRET?.trim() || node_crypto_1.default
     .createHash('sha256')
-    .update(`${SUPER_ADMIN_EMAIL}:${SUPER_ADMIN_PASSWORD}:${process.env.DATABASE_URL || 'phadam'}`)
+    .update(`${process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || ''}:${process.env.SUPER_ADMIN_PASSWORD || ''}:${process.env.DATABASE_URL || 'phadam'}`)
     .digest('hex');
+function getSuperAdminConfig() {
+    const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+    const name = process.env.SUPER_ADMIN_NAME?.trim();
+    const password = process.env.SUPER_ADMIN_PASSWORD?.trim();
+    if (!email || !email.includes('@') || !name || !password || password.length < 8) {
+        throw new Error('Configure SUPER_ADMIN_EMAIL, SUPER_ADMIN_NAME, and SUPER_ADMIN_PASSWORD (at least 8 characters).');
+    }
+    return { email, name, password };
+}
 function hashPassword(password) {
     const salt = node_crypto_1.default.randomBytes(16).toString('hex');
     const derived = node_crypto_1.default.pbkdf2Sync(password, salt, 210_000, 64, 'sha512').toString('hex');
@@ -107,7 +112,8 @@ async function createUser(input) {
     return toPublicUser(user);
 }
 async function ensureSuperAdmin() {
-    const existing = await findUserByEmail(SUPER_ADMIN_EMAIL);
+    const { email, name, password } = getSuperAdminConfig();
+    const existing = await findUserByEmail(email);
     if (existing) {
         if (existing.role !== 'SUPER_ADMIN') {
             await prisma_1.prisma.user.update({ where: { id: existing.id }, data: { role: 'SUPER_ADMIN' } });
@@ -116,9 +122,9 @@ async function ensureSuperAdmin() {
     }
     await prisma_1.prisma.user.create({
         data: {
-            name: SUPER_ADMIN_NAME,
-            email: SUPER_ADMIN_EMAIL,
-            password: hashPassword(SUPER_ADMIN_PASSWORD),
+            name,
+            email,
+            password: hashPassword(password),
             role: 'SUPER_ADMIN',
             isActive: true,
         },

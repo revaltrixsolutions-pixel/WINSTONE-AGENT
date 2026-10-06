@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.UserScalarFieldEnum = exports.MessageLogScalarFieldEnum = exports.AppointmentScalarFieldEnum = exports.PatientScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.UserScalarFieldEnum = exports.MessageLogScalarFieldEnum = exports.ReminderDeliveryScalarFieldEnum = exports.AppointmentFollowUpScalarFieldEnum = exports.AppointmentScalarFieldEnum = exports.PatientScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -105,6 +105,8 @@ exports.AnyNull = runtime.AnyNull;
 exports.ModelName = {
     Patient: 'Patient',
     Appointment: 'Appointment',
+    AppointmentFollowUp: 'AppointmentFollowUp',
+    ReminderDelivery: 'ReminderDelivery',
     MessageLog: 'MessageLog',
     User: 'User'
 };
@@ -125,6 +127,7 @@ exports.PatientScalarFieldEnum = {
     isVerified: 'isVerified',
     chatStatus: 'chatStatus',
     assignedTo: 'assignedTo',
+    agentLastActiveAt: 'agentLastActiveAt',
     createdAt: 'createdAt'
 };
 exports.AppointmentScalarFieldEnum = {
@@ -137,6 +140,21 @@ exports.AppointmentScalarFieldEnum = {
     slotTime: 'slotTime',
     status: 'status',
     createdAt: 'createdAt'
+};
+exports.AppointmentFollowUpScalarFieldEnum = {
+    id: 'id',
+    appointmentId: 'appointmentId',
+    authorId: 'authorId',
+    authorName: 'authorName',
+    note: 'note',
+    createdAt: 'createdAt'
+};
+exports.ReminderDeliveryScalarFieldEnum = {
+    id: 'id',
+    appointmentId: 'appointmentId',
+    kind: 'kind',
+    recipientType: 'recipientType',
+    sentAt: 'sentAt'
 };
 exports.MessageLogScalarFieldEnum = {
     id: 'id',
