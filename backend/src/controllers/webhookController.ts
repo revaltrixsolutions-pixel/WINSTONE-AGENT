@@ -500,14 +500,15 @@ function buildAppointmentInteractive(
       'Well Baby Clinic',
       ...appointmentServiceOptions,
     ];
-    const rows = [...new Set(prioritizedServices)]
-      .filter((service) => appointmentServiceOptions.includes(service))
-      .slice(0, 10)
-      .map((service) => ({
+    const orderedServices = [...new Set(prioritizedServices)]
+      .filter((service) => appointmentServiceOptions.includes(service));
+    const rows = orderedServices.slice(0, 10).map((service) => ({
       id: `service_${service.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-      title: service.slice(0, 24),
-      }));
-    const serviceList = appointmentServiceOptions.map((service, index) => `${index + 1}. ${service}`).join('\n');
+      title: (service === 'Dermatologist' ? 'Dermatology' : service).slice(0, 24),
+    }));
+    const serviceList = orderedServices
+      .map((service, index) => `${index + 1}. ${service === 'Dermatologist' ? 'Dermatology' : service}`)
+      .join('\n');
 
     return {
       type: 'list',
@@ -659,13 +660,17 @@ async function sendBotReply(
   const patientName = (isUsablePatientName(patient.fullName)
     ? patient.fullName
     : extractPatientName(effectiveMessage)) || 'Patient';
-  const bookingIntent = isNewBookingRequest(effectiveMessage);
+  const priorAppointmentState = appointmentConversationState.get(patient.id);
+  const isConfirmationReply = /^(confirm|yes|y|correct|submit|appointment_confirm)$/i.test(effectiveMessage.trim());
+  const isChangeReply = /^(no|change|change details|edit|appointment_change)$/i.test(effectiveMessage.trim());
+  const restartBooking = Boolean(priorAppointmentState?.completed && isChangeReply);
+  const bookingIntent = isNewBookingRequest(effectiveMessage) || restartBooking;
   const isPricingQuestion = /\b(how much|price|prices|cost|costs|fee|fees|charge|charges|pricing)\b/i.test(effectiveMessage);
   const hasPatientName = patientName !== 'Patient';
   const appointmentDetails = parseAppointmentRequest(effectiveMessage);
   const nameWasJustCaptured = patient.nameWasJustCaptured === true;
 
-  if (isNewBookingRequest(effectiveMessage)) {
+  if (bookingIntent) {
     resetPatientSession(patient.id);
   }
 
@@ -673,6 +678,7 @@ async function sendBotReply(
     appointmentConversationState.has(patient.id) &&
     !bookingIntent &&
     !isPricingQuestion &&
+    !isConfirmationReply &&
     !appointmentDetails.date &&
     !appointmentDetails.time &&
     !appointmentDetails.department
@@ -979,8 +985,42 @@ async function sendBotReply(
         });
       }
 
-      if (appointmentState.awaitingConfirmation) {
-        return;
+      return;
+    }
+
+    if (appointmentState.awaitingConfirmation && !isConfirmationReply) {
+      const replyText = appointmentState.prompt;
+      const interactive = buildAppointmentInteractive(replyText, {
+        ...appointmentState.data,
+        awaitingConfirmation: true,
+      });
+
+      try {
+        if (interactive) {
+          await sendWhatsAppMessage({
+            recipientPhone: patient.phoneNumber,
+            interactive,
+          });
+        } else {
+          await sendWhatsAppMessage({
+            recipientPhone: patient.phoneNumber,
+            messageText: replyText,
+          });
+        }
+
+        await prisma.messageLog.create({
+          data: {
+            patientId: patient.id,
+            sender: 'BOT',
+            body: replyText,
+            timestamp: new Date(),
+          },
+        });
+      } catch (error) {
+        console.error('[WhatsApp Appointment Confirmation Prompt Failed]', {
+          patientId: patient.id,
+          error: error instanceof Error ? error.message : error,
+        });
       }
 
       return;
@@ -1032,6 +1072,7 @@ async function sendBotReply(
           status: 'PENDING',
         },
       });
+      resetPatientSession(patient.id);
 
       try {
         const notification = await sendAppointmentNotification({

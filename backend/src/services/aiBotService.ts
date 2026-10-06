@@ -68,6 +68,7 @@ export const appointmentConversationState =
 
 export const appointmentServiceOptions: string[] = Array.from(
   new Set([
+    "Dermatologist",
     "General Consultation",
     ...hospitalKnowledge.services,
     ...hospitalKnowledge.specialistClinics,

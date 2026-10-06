@@ -12,6 +12,9 @@ import {
   isHumanSupportRequest,
   getServicePrice,
   CONVERSATION_MEMORY_MINUTES,
+  appointmentServiceOptions,
+  updateAppointmentConversation,
+  resetPatientSession,
 } from './aiBotService';
 import { searchKnowledgeBase } from '../knowledge/hospitalData';
 
@@ -906,6 +909,32 @@ test('parses booking details from patient request', () => {
   assert.equal(booking.ready, true);
   assert.equal(booking.department, 'Antenatal Clinic');
   assert.equal(booking.time, '09:00 AM');
+});
+
+test('puts Dermatology first in the appointment service list and accepts its label', () => {
+  assert.equal(appointmentServiceOptions[0], 'Dermatologist');
+  assert.equal(parseAppointmentRequest('Dermatology').department, 'Dermatologist');
+});
+
+test('appointment booking advances to confirmation only after service, date, and time are collected', () => {
+  const patientId = 'complete-appointment-confirmation-flow';
+  resetPatientSession(patientId);
+
+  const service = updateAppointmentConversation(patientId, 'Mary Wanjiku', 'Dermatology');
+  assert.equal(service.completed, false);
+  assert.equal(service.data?.department, 'Dermatologist');
+
+  const date = updateAppointmentConversation(patientId, 'Mary Wanjiku', 'tomorrow');
+  assert.equal(date.completed, false);
+  assert.ok(date.data?.date);
+
+  const time = updateAppointmentConversation(patientId, 'Mary Wanjiku', '10 am');
+  assert.equal(time.completed, true);
+  assert.equal(time.awaitingConfirmation, true);
+  assert.match(time.prompt, /Department: Dermatologist/);
+  assert.match(time.prompt, /Reply \*Yes\* to submit/);
+
+  resetPatientSession(patientId);
 });
 
 test('maps supported appointment aliases to Winston clinics and rejects unsupported services', () => {
