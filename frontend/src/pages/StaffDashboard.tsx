@@ -86,11 +86,11 @@ export const StaffDashboard: React.FC = () => {
       void navigator.serviceWorker?.ready.then((registration) => {
         void registration.showNotification('Winston Medical Centre update', {
           body,
-          tag: 'phadam-hospital-admin-update',
+          tag: 'winston-hospital-admin-update',
           icon: '/pwa-192.png',
         });
       }).catch(() => {
-        new Notification('Winston Medical Centre update', { body, tag: 'phadam-hospital-admin-update' });
+        new Notification('Winston Medical Centre update', { body, tag: 'winston-hospital-admin-update' });
       });
     }
   }, []);
@@ -237,7 +237,7 @@ export const StaffDashboard: React.FC = () => {
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('Patient needs your help', {
               body: 'A patient has been assigned to you. Open the chat and introduce yourself.',
-              tag: `phadam-assignment-${newlyAssigned[0].id}`,
+              tag: `winston-assignment-${newlyAssigned[0].id}`,
             });
           }
         }
@@ -814,10 +814,12 @@ export const StaffDashboard: React.FC = () => {
                 <div className="flex min-h-0 flex-1 flex-col">
                   <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-fuchsia-600 via-violet-600 to-blue-600 px-4 py-4 text-white md:rounded-t-3xl">
                     <div>
-                      <p className="text-lg font-black">Live queue</p>
+                      <p className="text-lg font-black">
+                        {currentUser?.role === 'SUPER_ADMIN' ? 'All patient chats' : 'Live queue'}
+                      </p>
                       <p className="text-xs text-white/75">
                         {chats.length} conversation
-                        {chats.length === 1 ? '' : 's'} waiting
+                        {chats.length === 1 ? '' : 's'} {currentUser?.role === 'SUPER_ADMIN' ? 'available' : 'waiting'}
                       </p>
                     </div>
 

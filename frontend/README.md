@@ -1,5 +1,5 @@
 git add .
-git commit -m "Update Phadam WhatsApp application"
+git commit -m "Update Winston Medical Centre application"
 git push origin main
 
 ##

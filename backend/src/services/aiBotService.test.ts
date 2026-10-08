@@ -80,6 +80,12 @@ test('returns every supplied clinic FAQ answer exactly as provided', () => {
   }
 });
 
+test('returns the exact consultation fee wording for the requested question', () => {
+  const reply = generateBotReply({ patientName: 'Mary', message: 'how much is consultation fee' });
+
+  assert.equal(reply, 'General consultation fee is 500/=\nAnd dermatologist consultation fee is 1000/=.');
+});
+
 test('uses the exact call-the-doctor fallback for questions outside the supplied FAQs', () => {
   const expected = 'Thank you for your question. For this enquiry, please call the doctor directly on 0708130100 or 0726244040.';
   for (const message of ['What is the weather in Nairobi?', 'What causes persistent dizziness?']) {

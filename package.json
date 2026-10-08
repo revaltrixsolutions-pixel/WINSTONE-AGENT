@@ -1,5 +1,5 @@
 {
-  "name": "phadam-whatsapp",
+  "name": "winstone-agent",
   "private": true,
   "scripts": {
     "build": "npm --prefix backend install && npm --prefix backend run build",

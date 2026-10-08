@@ -1607,6 +1607,11 @@ function processTurn(state: TurnState, message: string, isReturning?: boolean): 
 
 export function generateBotReply(input: BotReplyInput): string {
   const message = input.message.trim();
+
+  if (/^how much is (?:the )?consultation fee[?.!]*$/i.test(message)) {
+    return 'General consultation fee is 500/=\nAnd dermatologist consultation fee is 1000/=.';
+  }
+
   const exactFaqAnswer = getExactClinicFaqAnswer(message);
 
   if (exactFaqAnswer) {

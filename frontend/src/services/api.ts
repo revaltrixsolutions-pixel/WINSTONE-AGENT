@@ -141,7 +141,7 @@ export const API_BASE_URL = 'https://winstone-agent.onrender.com';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-const AUTH_TOKEN_KEY = 'phadam-auth-token';
+const AUTH_TOKEN_KEY = 'winston-auth-token';
 
 function getStoredAuthToken(): string | null {
   if (typeof window === 'undefined') {
